@@ -145,20 +145,20 @@ export default async function DashboardPage() {
 
         {evaluaciones && evaluaciones.length > 0 ? (
           <div className="grid gap-4">
-            {evaluaciones.map((eval) => (
-              <Card key={eval.id} hover>
+            {evaluaciones.map((evaluacion) => (
+              <Card key={evaluacion.id} hover>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <h3 className="font-semibold text-gray-900">
-                        {eval.tipo || 'Evaluación'}
+                        {evaluacion.tipo || 'Evaluación'}
                       </h3>
                       <p className="text-sm text-gray-600 mt-1">
-                        {eval.instrucciones?.substring(0, 100) || 'Sin descripción'}
+                        {evaluacion.instrucciones?.substring(0, 100) || 'Sin descripción'}
                       </p>
                     </div>
                     <span className="text-xs text-gray-500">
-                      {new Date(eval.created_at).toLocaleDateString('es-CL')}
+                      {new Date(evaluacion.created_at).toLocaleDateString('es-CL')}
                     </span>
                   </div>
                 </CardContent>
