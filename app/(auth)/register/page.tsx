@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { createClient } from '@/lib/supabase/client'
+import { isMissingSupabaseEnvError } from '@/lib/supabase/config'
 
 const ASIGNATURAS = [
   { value: 'matematica', label: 'Matemática' },
@@ -59,39 +60,49 @@ export default function RegisterPage() {
       return
     }
 
-    const supabase = createClient()
+    try {
+      const supabase = createClient()
 
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: formData.email,
-      password: formData.password,
-    })
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+      })
 
-    if (authError) {
-      setError(authError.message)
-      setLoading(false)
-      return
-    }
-
-    // Actualizar perfil con datos adicionales
-    if (authData.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          nombre: formData.nombre,
-          asignatura: formData.asignatura,
-          nivel: formData.nivel,
-        })
-        .eq('id', authData.user.id)
-
-      if (profileError) {
-        setError(profileError.message)
+      if (authError) {
+        setError(authError.message)
         setLoading(false)
         return
       }
-    }
 
-    router.push('/dashboard')
-    router.refresh()
+      // Actualizar perfil con datos adicionales
+      if (authData.user) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            nombre: formData.nombre,
+            asignatura: formData.asignatura,
+            nivel: formData.nivel,
+          })
+          .eq('id', authData.user.id)
+
+        if (profileError) {
+          setError(profileError.message)
+          setLoading(false)
+          return
+        }
+      }
+
+      router.push('/dashboard')
+      router.refresh()
+    } catch (error) {
+      if (isMissingSupabaseEnvError(error)) {
+        setError('Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY para crear una cuenta.')
+      } else {
+        setError('Error inesperado al crear la cuenta')
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {

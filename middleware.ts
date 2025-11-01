@@ -1,15 +1,20 @@
 import { createServerClient } from '@supabase/ssr'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getSupabaseConfig, isMissingSupabaseEnvError } from '@/lib/supabase/config'
+import type { Database } from '@/lib/supabase/types'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   })
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  let supabase: SupabaseClient<Database> | null = null
+
+  try {
+    const { url, anonKey } = getSupabaseConfig()
+
+    supabase = createServerClient<Database>(url, anonKey, {
       cookies: {
         getAll() {
           return request.cookies.getAll()
@@ -24,8 +29,19 @@ export async function middleware(request: NextRequest) {
           )
         },
       },
+    })
+  } catch (error) {
+    if (isMissingSupabaseEnvError(error)) {
+      console.error(error.message)
+      return supabaseResponse
     }
-  )
+
+    throw error
+  }
+
+  if (!supabase) {
+    return supabaseResponse
+  }
 
   const {
     data: { user },

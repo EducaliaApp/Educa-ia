@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { createClient } from '@/lib/supabase/client'
+import { isMissingSupabaseEnvError } from '@/lib/supabase/config'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -19,21 +20,31 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
 
-    const supabase = createClient()
+    try {
+      const supabase = createClient()
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (authError) {
-      setError(authError.message)
+      if (authError) {
+        setError(authError.message)
+        setLoading(false)
+        return
+      }
+
+      router.push('/dashboard')
+      router.refresh()
+    } catch (error) {
+      if (isMissingSupabaseEnvError(error)) {
+        setError('Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY para iniciar sesión.')
+      } else {
+        setError('Error inesperado al iniciar sesión')
+      }
+    } finally {
       setLoading(false)
-      return
     }
-
-    router.push('/dashboard')
-    router.refresh()
   }
 
   return (
