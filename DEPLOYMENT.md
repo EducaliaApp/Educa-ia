@@ -11,8 +11,11 @@
 ### 2. Configurar variables de entorno
 En la configuración del proyecto, agrega estas variables de entorno:
 
-**Variables públicas (prefijo STORAGE_):**
+**Variables públicas:**
 ```
+NEXT_PUBLIC_SUPABASE_URL=tu_supabase_url_aqui
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_supabase_anon_key_aqui
+# Opcional: conserva las STORAGE_ si ya las tienes creadas
 STORAGE_SUPABASE_URL=tu_supabase_url_aqui
 STORAGE_SUPABASE_ANON_KEY=tu_supabase_anon_key_aqui
 ```
@@ -46,8 +49,10 @@ vercel login
 ### 3. Configurar variables de entorno
 ```bash
 # Desde el directorio del proyecto
-vercel env add STORAGE_SUPABASE_URL
-vercel env add STORAGE_SUPABASE_ANON_KEY
+vercel env add NEXT_PUBLIC_SUPABASE_URL
+vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY
+vercel env add STORAGE_SUPABASE_URL # opcional
+vercel env add STORAGE_SUPABASE_ANON_KEY # opcional
 vercel env add SUPABASE_SERVICE_ROLE_KEY
 vercel env add OPENAI_API_KEY
 vercel env add RESEND_API_KEY
@@ -76,8 +81,8 @@ Antes de desplegar, asegúrate de haber configurado Supabase:
 ### 3. Obtener credenciales
 1. Ve a Settings → API
 2. Copia:
-   - `Project URL` → `STORAGE_SUPABASE_URL`
-   - `anon/public` key → `STORAGE_SUPABASE_ANON_KEY`
+   - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL` (o `STORAGE_SUPABASE_URL`)
+   - `anon/public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY` (o `STORAGE_SUPABASE_ANON_KEY`)
    - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY`
 
 ---

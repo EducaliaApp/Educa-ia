@@ -17,10 +17,14 @@ function formatEnvChoices(candidates: EnvCandidate[]) {
 
 const SUPABASE_URL_ENV_CANDIDATES: EnvCandidate[] = [
   { name: 'STORAGE_SUPABASE_URL', value: process.env.STORAGE_SUPABASE_URL },
+  { name: 'NEXT_PUBLIC_SUPABASE_URL', value: process.env.NEXT_PUBLIC_SUPABASE_URL },
+  { name: 'SUPABASE_URL', value: process.env.SUPABASE_URL },
 ]
 
 const SUPABASE_ANON_KEY_ENV_CANDIDATES: EnvCandidate[] = [
   { name: 'STORAGE_SUPABASE_ANON_KEY', value: process.env.STORAGE_SUPABASE_ANON_KEY },
+  { name: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', value: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY },
+  { name: 'SUPABASE_ANON_KEY', value: process.env.SUPABASE_ANON_KEY },
 ]
 
 const SUPABASE_URL_ENV_NAMES = SUPABASE_URL_ENV_CANDIDATES.map(({ name }) => name)

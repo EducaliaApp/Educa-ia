@@ -48,9 +48,11 @@ Crea un archivo `.env.local` en la raíz del proyecto con las siguientes variabl
 
 ```env
 # Supabase
-# Usa el prefijo STORAGE_ para las credenciales públicas
-STORAGE_SUPABASE_URL=tu_supabase_url
-STORAGE_SUPABASE_ANON_KEY=tu_supabase_anon_key
+# Usa las variables NEXT_PUBLIC_ provistas por Supabase (o STORAGE_ si ya las tienes)
+NEXT_PUBLIC_SUPABASE_URL=tu_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_supabase_anon_key
+STORAGE_SUPABASE_URL=tu_supabase_url (opcional)
+STORAGE_SUPABASE_ANON_KEY=tu_supabase_anon_key (opcional)
 SUPABASE_SERVICE_ROLE_KEY=tu_supabase_service_role_key
 
 # OpenAI
