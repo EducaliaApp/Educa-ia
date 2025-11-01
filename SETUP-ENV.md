@@ -5,9 +5,7 @@
 Copia tus variables existentes al archivo `.env.local` con estos nombres:
 
 ```bash
-# Variables de Supabase (usa el prefijo que tenga tu proyecto)
-NEXT_PUBLIC_SUPABASE_URL="[copia tu SUPABASE_URL]"
-NEXT_PUBLIC_SUPABASE_ANON_KEY="[copia tu SUPABASE_ANON_KEY]"
+# Variables de Supabase (usa el prefijo STORAGE_)
 STORAGE_SUPABASE_URL="[copia tu SUPABASE_URL]"
 STORAGE_SUPABASE_ANON_KEY="[copia tu SUPABASE_ANON_KEY]"
 SUPABASE_SERVICE_ROLE_KEY="[copia tu SUPABASE_SERVICE_ROLE_KEY]"
@@ -117,8 +115,6 @@ SELECT * FROM profiles;
 Cuando despliegues en Vercel, agrega estas variables de entorno:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=[tu valor]
-NEXT_PUBLIC_SUPABASE_ANON_KEY=[tu valor]
 STORAGE_SUPABASE_URL=[tu valor]
 STORAGE_SUPABASE_ANON_KEY=[tu valor]
 SUPABASE_SERVICE_ROLE_KEY=[tu valor]
@@ -140,8 +136,6 @@ RESEND_API_KEY=[tu valor - opcional]
 vercel login
 
 # Agregar variables
-vercel env add NEXT_PUBLIC_SUPABASE_URL production
-vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
 vercel env add STORAGE_SUPABASE_URL production
 vercel env add STORAGE_SUPABASE_ANON_KEY production
 vercel env add SUPABASE_SERVICE_ROLE_KEY production

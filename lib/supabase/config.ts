@@ -16,12 +16,10 @@ function formatEnvChoices(candidates: EnvCandidate[]) {
 }
 
 const SUPABASE_URL_ENV_CANDIDATES: EnvCandidate[] = [
-  { name: 'NEXT_PUBLIC_SUPABASE_URL', value: process.env.NEXT_PUBLIC_SUPABASE_URL },
   { name: 'STORAGE_SUPABASE_URL', value: process.env.STORAGE_SUPABASE_URL },
 ]
 
 const SUPABASE_ANON_KEY_ENV_CANDIDATES: EnvCandidate[] = [
-  { name: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', value: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY },
   { name: 'STORAGE_SUPABASE_ANON_KEY', value: process.env.STORAGE_SUPABASE_ANON_KEY },
 ]
 
