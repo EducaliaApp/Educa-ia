@@ -6,6 +6,7 @@ import { LayoutDashboard, FileText, ClipboardCheck, Settings, Crown, LogOut } fr
 import { cn } from '@/lib/utils'
 import Button from './ui/Button'
 import { createClient } from '@/lib/supabase/client'
+import { isMissingSupabaseEnvError } from '@/lib/supabase/config'
 import type { Profile } from '@/lib/supabase/types'
 
 interface SidebarProps {
@@ -24,10 +25,18 @@ export default function Sidebar({ profile }: SidebarProps) {
   const router = useRouter()
 
   const handleSignOut = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
+    try {
+      const supabase = createClient()
+      await supabase.auth.signOut()
+      router.push('/login')
+      router.refresh()
+    } catch (error) {
+      if (isMissingSupabaseEnvError(error)) {
+        console.error('No se puede cerrar sesión sin configurar Supabase.')
+      } else {
+        console.error('Error al cerrar sesión:', error)
+      }
+    }
   }
 
   const isPro = profile.plan === 'pro'

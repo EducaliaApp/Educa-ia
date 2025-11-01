@@ -15,11 +15,17 @@ En la configuración del proyecto, agrega estas variables de entorno:
 ```
 NEXT_PUBLIC_SUPABASE_URL=tu_supabase_url_aqui
 NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_supabase_anon_key_aqui
+SUPABASE_URL=tu_supabase_url_aqui
 ```
 
 **Variables secretas:**
 ```
-SUPABASE_SERVICE_ROLE_KEY=tu_supabase_service_role_key_aqui
+POSTGRES_URL=tu_postgres_url_aqui
+POSTGRES_PRISMA_URL=tu_postgres_prisma_url_aqui
+POSTGRES_URL_NON_POOLING=tu_postgres_url_non_pooling_aqui
+SUPABASE_JWT_SECRET=tu_supabase_jwt_secret_aqui
+POSTGRES_USER=tu_postgres_user_aqui
+POSTGRES_PASSWORD=tu_postgres_password_aqui
 OPENAI_API_KEY=tu_openai_api_key_aqui
 RESEND_API_KEY=tu_resend_api_key_aqui (opcional)
 ```
@@ -48,7 +54,13 @@ vercel login
 # Desde el directorio del proyecto
 vercel env add NEXT_PUBLIC_SUPABASE_URL
 vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY
-vercel env add SUPABASE_SERVICE_ROLE_KEY
+vercel env add SUPABASE_URL
+vercel env add POSTGRES_URL
+vercel env add POSTGRES_PRISMA_URL
+vercel env add POSTGRES_URL_NON_POOLING
+vercel env add SUPABASE_JWT_SECRET
+vercel env add POSTGRES_USER
+vercel env add POSTGRES_PASSWORD
 vercel env add OPENAI_API_KEY
 vercel env add RESEND_API_KEY
 ```
@@ -76,9 +88,15 @@ Antes de desplegar, asegúrate de haber configurado Supabase:
 ### 3. Obtener credenciales
 1. Ve a Settings → API
 2. Copia:
-   - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
+   - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL` y `SUPABASE_URL`
    - `anon/public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY`
+3. Luego, ve a Settings → Database → Connection string y copia:
+   - `Connection string (Pooler)` → `POSTGRES_URL`
+   - `Connection string (Prisma)` → `POSTGRES_PRISMA_URL`
+   - `Connection string (Non Pooling)` → `POSTGRES_URL_NON_POOLING`
+   - `JWT Secret` → `SUPABASE_JWT_SECRET`
+   - `DB user` → `POSTGRES_USER`
+   - `DB password` → `POSTGRES_PASSWORD`
 
 ---
 

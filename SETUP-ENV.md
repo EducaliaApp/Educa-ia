@@ -5,10 +5,18 @@
 Copia tus variables existentes al archivo `.env.local` con estos nombres:
 
 ```bash
-# Variables de Supabase (usa las que ya tienes)
-NEXT_PUBLIC_SUPABASE_URL="[copia tu SUPABASE_URL]"
-NEXT_PUBLIC_SUPABASE_ANON_KEY="[copia tu SUPABASE_ANON_KEY]"
-SUPABASE_SERVICE_ROLE_KEY="[copia tu SUPABASE_SERVICE_ROLE_KEY]"
+# Variables de Supabase de la nueva instancia
+NEXT_PUBLIC_SUPABASE_URL="[copia tu NEXT_PUBLIC_SUPABASE_URL]"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="[copia tu NEXT_PUBLIC_SUPABASE_ANON_KEY]"
+SUPABASE_URL="[copia tu SUPABASE_URL]"
+
+# Variables adicionales gestionadas por Supabase (solo referencia)
+POSTGRES_URL="[copia tu POSTGRES_URL]"
+POSTGRES_PRISMA_URL="[copia tu POSTGRES_PRISMA_URL]"
+POSTGRES_URL_NON_POOLING="[copia tu POSTGRES_URL_NON_POOLING]"
+SUPABASE_JWT_SECRET="[copia tu SUPABASE_JWT_SECRET]"
+POSTGRES_USER="[copia tu POSTGRES_USER]"
+POSTGRES_PASSWORD="[copia tu POSTGRES_PASSWORD]"
 
 # OpenAI (NECESITAS OBTENER ESTA)
 OPENAI_API_KEY="sk-..."
@@ -117,7 +125,13 @@ Cuando despliegues en Vercel, agrega estas variables de entorno:
 ```
 NEXT_PUBLIC_SUPABASE_URL=[tu valor]
 NEXT_PUBLIC_SUPABASE_ANON_KEY=[tu valor]
-SUPABASE_SERVICE_ROLE_KEY=[tu valor]
+SUPABASE_URL=[tu valor]
+POSTGRES_URL=[tu valor]
+POSTGRES_PRISMA_URL=[tu valor]
+POSTGRES_URL_NON_POOLING=[tu valor]
+SUPABASE_JWT_SECRET=[tu valor]
+POSTGRES_USER=[tu valor]
+POSTGRES_PASSWORD=[tu valor]
 OPENAI_API_KEY=[tu valor]
 RESEND_API_KEY=[tu valor - opcional]
 ```
@@ -126,7 +140,7 @@ RESEND_API_KEY=[tu valor - opcional]
 
 1. Ve a vercel.com
 2. Importa el proyecto
-3. En "Environment Variables", agrega las 4-5 variables
+3. En "Environment Variables", agrega las variables listadas
 4. Deploy!
 
 ### Desde la terminal:
@@ -138,7 +152,13 @@ vercel login
 # Agregar variables
 vercel env add NEXT_PUBLIC_SUPABASE_URL production
 vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
-vercel env add SUPABASE_SERVICE_ROLE_KEY production
+vercel env add SUPABASE_URL production
+vercel env add POSTGRES_URL production
+vercel env add POSTGRES_PRISMA_URL production
+vercel env add POSTGRES_URL_NON_POOLING production
+vercel env add SUPABASE_JWT_SECRET production
+vercel env add POSTGRES_USER production
+vercel env add POSTGRES_PASSWORD production
 vercel env add OPENAI_API_KEY production
 vercel env add RESEND_API_KEY production
 
