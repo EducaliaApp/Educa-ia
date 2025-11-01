@@ -5,13 +5,11 @@
 Copia tus variables existentes al archivo `.env.local` con estos nombres:
 
 ```bash
-# Variables de Supabase (usa el prefijo que tengas configurado)
-# Recomendado → NEXT_PUBLIC_ (se exponen automáticamente al navegador)
+# Variables de Supabase de la nueva instancia
 NEXT_PUBLIC_SUPABASE_URL="[copia tu SUPABASE_URL]"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="[copia tu SUPABASE_ANON_KEY]"
-# Alternativa → STORAGE_ (si ya las tenías creadas)
-STORAGE_SUPABASE_URL="[copia tu SUPABASE_URL]"
-STORAGE_SUPABASE_ANON_KEY="[copia tu SUPABASE_ANON_KEY]"
+SUPABASE_URL="[copia tu SUPABASE_URL]" # opcional para el servidor
+SUPABASE_ANON_KEY="[copia tu SUPABASE_ANON_KEY]" # opcional para el servidor
 SUPABASE_SERVICE_ROLE_KEY="[copia tu SUPABASE_SERVICE_ROLE_KEY]"
 
 # OpenAI (NECESITAS OBTENER ESTA)
@@ -121,8 +119,8 @@ Cuando despliegues en Vercel, agrega estas variables de entorno:
 ```
 NEXT_PUBLIC_SUPABASE_URL=[tu valor]
 NEXT_PUBLIC_SUPABASE_ANON_KEY=[tu valor]
-STORAGE_SUPABASE_URL=[tu valor - opcional]
-STORAGE_SUPABASE_ANON_KEY=[tu valor - opcional]
+SUPABASE_URL=[tu valor]
+SUPABASE_ANON_KEY=[tu valor]
 SUPABASE_SERVICE_ROLE_KEY=[tu valor]
 OPENAI_API_KEY=[tu valor]
 RESEND_API_KEY=[tu valor - opcional]
@@ -144,8 +142,8 @@ vercel login
 # Agregar variables
 vercel env add NEXT_PUBLIC_SUPABASE_URL production
 vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
-vercel env add STORAGE_SUPABASE_URL production # opcional
-vercel env add STORAGE_SUPABASE_ANON_KEY production # opcional
+vercel env add SUPABASE_URL production
+vercel env add SUPABASE_ANON_KEY production
 vercel env add SUPABASE_SERVICE_ROLE_KEY production
 vercel env add OPENAI_API_KEY production
 vercel env add RESEND_API_KEY production
