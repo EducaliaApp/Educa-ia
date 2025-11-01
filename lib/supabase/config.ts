@@ -5,17 +5,56 @@ export class MissingSupabaseEnvError extends Error {
   }
 }
 
-export function getSupabaseConfig() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+type EnvCandidate = { name: string; value?: string }
 
-  if (!url || !anonKey) {
+function pickFirstDefined(candidates: EnvCandidate[]) {
+  return candidates.find((candidate) => candidate.value)
+}
+
+function formatEnvChoices(candidates: EnvCandidate[]) {
+  return candidates.map((candidate) => candidate.name).join(' o ')
+}
+
+const SUPABASE_URL_ENV_CANDIDATES: EnvCandidate[] = [
+  { name: 'NEXT_PUBLIC_SUPABASE_URL', value: process.env.NEXT_PUBLIC_SUPABASE_URL },
+  { name: 'STORAGE_SUPABASE_URL', value: process.env.STORAGE_SUPABASE_URL },
+]
+
+const SUPABASE_ANON_KEY_ENV_CANDIDATES: EnvCandidate[] = [
+  { name: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', value: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY },
+  { name: 'STORAGE_SUPABASE_ANON_KEY', value: process.env.STORAGE_SUPABASE_ANON_KEY },
+]
+
+const SUPABASE_URL_ENV_NAMES = SUPABASE_URL_ENV_CANDIDATES.map(({ name }) => name)
+const SUPABASE_ANON_KEY_ENV_NAMES = SUPABASE_ANON_KEY_ENV_CANDIDATES.map(({ name }) => name)
+
+export const SUPABASE_ENV_GROUPS = [SUPABASE_URL_ENV_NAMES, SUPABASE_ANON_KEY_ENV_NAMES] as const
+const urlChoicesText = formatEnvChoices(SUPABASE_URL_ENV_CANDIDATES)
+const anonKeyChoicesText = formatEnvChoices(SUPABASE_ANON_KEY_ENV_CANDIDATES)
+
+export const SUPABASE_ENV_HINT = SUPABASE_ENV_GROUPS.map((group) => group.join(' o ')).join(' y ')
+
+export function getSupabaseConfig() {
+  const urlCandidate = pickFirstDefined(SUPABASE_URL_ENV_CANDIDATES)
+  const anonKeyCandidate = pickFirstDefined(SUPABASE_ANON_KEY_ENV_CANDIDATES)
+
+  const missing: string[] = []
+
+  if (!urlCandidate) {
+    missing.push(urlChoicesText)
+  }
+
+  if (!anonKeyCandidate) {
+    missing.push(anonKeyChoicesText)
+  }
+
+  if (missing.length > 0) {
     throw new MissingSupabaseEnvError(
-      'NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY deben estar configuradas para conectarse a Supabase.'
+      `Debes definir ${missing.join(' y ')} para conectar la aplicación a Supabase.`
     )
   }
 
-  return { url, anonKey }
+  return { url: urlCandidate!.value!, anonKey: anonKeyCandidate!.value! }
 }
 
 export function isMissingSupabaseEnvError(error: unknown): error is MissingSupabaseEnvError {
@@ -25,7 +64,9 @@ export function isMissingSupabaseEnvError(error: unknown): error is MissingSupab
 
   if (error && typeof error === 'object' && 'message' in error) {
     const message = String((error as { message?: string }).message)
-    return message.includes('NEXT_PUBLIC_SUPABASE_URL') && message.includes('NEXT_PUBLIC_SUPABASE_ANON_KEY')
+    const mentionsUrl = SUPABASE_URL_ENV_CANDIDATES.some(({ name }) => message.includes(name))
+    const mentionsKey = SUPABASE_ANON_KEY_ENV_CANDIDATES.some(({ name }) => message.includes(name))
+    return mentionsUrl && mentionsKey
   }
 
   return false

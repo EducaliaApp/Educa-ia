@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
-import { isMissingSupabaseEnvError } from '@/lib/supabase/config'
+import { SUPABASE_ENV_GROUPS, SUPABASE_ENV_HINT, isMissingSupabaseEnvError } from '@/lib/supabase/config'
 
 type ErrorProps = {
   error: Error & { digest?: string }
@@ -15,6 +15,7 @@ export default function GlobalError({ error }: ErrorProps) {
   }, [error])
 
   const missingSupabase = isMissingSupabaseEnvError(error)
+  const supabaseEnvGroups = SUPABASE_ENV_GROUPS
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-6 py-12 text-center">
@@ -24,10 +25,17 @@ export default function GlobalError({ error }: ErrorProps) {
           <>
             <p className="text-lg text-gray-700">
               Para usar la aplicación necesitas definir las variables de entorno{' '}
-              <code className="font-mono bg-gray-100 px-2 py-1 rounded">NEXT_PUBLIC_SUPABASE_URL</code> y{' '}
-              <code className="font-mono bg-gray-100 px-2 py-1 rounded">
-                NEXT_PUBLIC_SUPABASE_ANON_KEY
-              </code>{' '}
+              {supabaseEnvGroups.map((group, groupIndex) => (
+                <span key={group.join('-')}>
+                  {groupIndex > 0 && ' y '}
+                  {group.map((option, optionIndex) => (
+                    <span key={option}>
+                      {optionIndex > 0 && ' o '}
+                      <code className="font-mono bg-gray-100 px-2 py-1 rounded">{option}</code>
+                    </span>
+                  ))}
+                </span>
+              ))}{' '}
               con las credenciales de tu proyecto Supabase.
             </p>
             <p className="text-gray-600">

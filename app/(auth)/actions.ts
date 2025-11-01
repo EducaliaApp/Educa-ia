@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { isMissingSupabaseEnvError } from '@/lib/supabase/config'
+import { SUPABASE_ENV_HINT, isMissingSupabaseEnvError } from '@/lib/supabase/config'
 
 export async function login(formData: FormData) {
   try {
@@ -25,7 +25,7 @@ export async function login(formData: FormData) {
   } catch (error) {
     if (isMissingSupabaseEnvError(error)) {
       return {
-        error: 'Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY para iniciar sesión.',
+        error: `Configura ${SUPABASE_ENV_HINT} para iniciar sesión.`,
       }
     }
 
@@ -76,7 +76,7 @@ export async function signup(formData: FormData) {
   } catch (error) {
     if (isMissingSupabaseEnvError(error)) {
       return {
-        error: 'Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY para registrarte.',
+        error: `Configura ${SUPABASE_ENV_HINT} para registrarte.`,
       }
     }
 

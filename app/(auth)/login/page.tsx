@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { createClient } from '@/lib/supabase/client'
-import { isMissingSupabaseEnvError } from '@/lib/supabase/config'
+import { SUPABASE_ENV_HINT, isMissingSupabaseEnvError } from '@/lib/supabase/config'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -38,7 +38,7 @@ export default function LoginPage() {
       router.refresh()
     } catch (error) {
       if (isMissingSupabaseEnvError(error)) {
-        setError('Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY para iniciar sesión.')
+        setError(`Configura ${SUPABASE_ENV_HINT} para iniciar sesión.`)
       } else {
         setError('Error inesperado al iniciar sesión')
       }

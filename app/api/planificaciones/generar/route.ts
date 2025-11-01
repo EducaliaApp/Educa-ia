@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { isMissingSupabaseEnvError } from '@/lib/supabase/config'
+import { SUPABASE_ENV_HINT, isMissingSupabaseEnvError } from '@/lib/supabase/config'
 import OpenAI from 'openai'
 
 export async function POST(request: NextRequest) {
@@ -164,8 +164,7 @@ Responde en formato JSON con esta estructura exacta:
     if (isMissingSupabaseEnvError(error)) {
       return NextResponse.json(
         {
-          error:
-            'Servicio no disponible. Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY para continuar.',
+          error: `Servicio no disponible. Configura ${SUPABASE_ENV_HINT} para continuar.`,
         },
         { status: 500 }
       )

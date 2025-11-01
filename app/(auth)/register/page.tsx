@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { createClient } from '@/lib/supabase/client'
-import { isMissingSupabaseEnvError } from '@/lib/supabase/config'
+import { SUPABASE_ENV_HINT, isMissingSupabaseEnvError } from '@/lib/supabase/config'
 
 const ASIGNATURAS = [
   { value: 'matematica', label: 'Matemática' },
@@ -96,7 +96,7 @@ export default function RegisterPage() {
       router.refresh()
     } catch (error) {
       if (isMissingSupabaseEnvError(error)) {
-        setError('Configura NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY para crear una cuenta.')
+        setError(`Configura ${SUPABASE_ENV_HINT} para crear una cuenta.`)
       } else {
         setError('Error inesperado al crear la cuenta')
       }
