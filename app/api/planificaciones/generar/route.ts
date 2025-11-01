@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { SUPABASE_ENV_HINT, isMissingSupabaseEnvError } from '@/lib/supabase/config'
 import OpenAI from 'openai'
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,6 +46,18 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Validar que la API key de OpenAI esté configurada antes de intentar generar la planificación
+    const apiKey = process.env.OPENAI_API_KEY
+    if (!apiKey) {
+      console.error('OPENAI_API_KEY no está configurada en el entorno')
+      return NextResponse.json(
+        { error: 'Servicio de generación no disponible. Falta configurar OpenAI.' },
+        { status: 500 }
+      )
+    }
+
+    const openai = new OpenAI({ apiKey })
 
     // Generar planificación con OpenAI
     const prompt = `Eres un experto en planificación curricular chilena.
@@ -151,6 +160,16 @@ Responde en formato JSON con esta estructura exacta:
     return NextResponse.json({ planificacion })
   } catch (error) {
     console.error('Error al generar planificación:', error)
+
+    if (isMissingSupabaseEnvError(error)) {
+      return NextResponse.json(
+        {
+          error: `Servicio no disponible. Configura ${SUPABASE_ENV_HINT} para continuar.`,
+        },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json(
       { error: 'Error al generar planificación' },
       { status: 500 }
