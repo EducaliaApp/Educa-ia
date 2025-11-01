@@ -2,27 +2,5 @@
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
-  "framework": "nextjs",
-  "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": {
-      "type": "plain",
-      "value": ""
-    },
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": {
-      "type": "plain",
-      "value": ""
-    },
-    "SUPABASE_SERVICE_ROLE_KEY": {
-      "type": "secret",
-      "value": ""
-    },
-    "OPENAI_API_KEY": {
-      "type": "secret",
-      "value": ""
-    },
-    "RESEND_API_KEY": {
-      "type": "secret",
-      "value": ""
-    }
-  }
+  "framework": "nextjs"
 }

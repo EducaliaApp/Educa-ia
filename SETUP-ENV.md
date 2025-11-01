@@ -5,9 +5,12 @@
 Copia tus variables existentes al archivo `.env.local` con estos nombres:
 
 ```bash
-# Variables de Supabase (usa las que ya tienes)
+# Variables de Supabase de la nueva instancia
 NEXT_PUBLIC_SUPABASE_URL="[copia tu SUPABASE_URL]"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="[copia tu SUPABASE_ANON_KEY]"
+NEXT_PUBLIC_SITE_URL="https://tu-dominio.vercel.app" # URL pública donde se ejecuta la app
+SUPABASE_URL="[copia tu SUPABASE_URL]" # opcional para el servidor
+SUPABASE_ANON_KEY="[copia tu SUPABASE_ANON_KEY]" # opcional para el servidor
 SUPABASE_SERVICE_ROLE_KEY="[copia tu SUPABASE_SERVICE_ROLE_KEY]"
 
 # OpenAI (NECESITAS OBTENER ESTA)
@@ -117,6 +120,9 @@ Cuando despliegues en Vercel, agrega estas variables de entorno:
 ```
 NEXT_PUBLIC_SUPABASE_URL=[tu valor]
 NEXT_PUBLIC_SUPABASE_ANON_KEY=[tu valor]
+NEXT_PUBLIC_SITE_URL=[tu valor]
+SUPABASE_URL=[tu valor]
+SUPABASE_ANON_KEY=[tu valor]
 SUPABASE_SERVICE_ROLE_KEY=[tu valor]
 OPENAI_API_KEY=[tu valor]
 RESEND_API_KEY=[tu valor - opcional]
@@ -126,7 +132,7 @@ RESEND_API_KEY=[tu valor - opcional]
 
 1. Ve a vercel.com
 2. Importa el proyecto
-3. En "Environment Variables", agrega las 4-5 variables
+3. En "Environment Variables", agrega las variables listadas
 4. Deploy!
 
 ### Desde la terminal:
@@ -138,6 +144,9 @@ vercel login
 # Agregar variables
 vercel env add NEXT_PUBLIC_SUPABASE_URL production
 vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
+vercel env add NEXT_PUBLIC_SITE_URL production
+vercel env add SUPABASE_URL production
+vercel env add SUPABASE_ANON_KEY production
 vercel env add SUPABASE_SERVICE_ROLE_KEY production
 vercel env add OPENAI_API_KEY production
 vercel env add RESEND_API_KEY production
