@@ -49,11 +49,17 @@ Crea un archivo `.env.local` en la raíz del proyecto con las siguientes variabl
 ```env
 # Supabase
 # Copia estos valores desde la nueva instancia de Supabase
-NEXT_PUBLIC_SUPABASE_URL=tu_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_supabase_anon_key
-SUPABASE_URL=tu_supabase_url (opcional para el servidor)
-SUPABASE_ANON_KEY=tu_supabase_anon_key (opcional para el servidor)
-SUPABASE_SERVICE_ROLE_KEY=tu_supabase_service_role_key
+NEXT_PUBLIC_SUPABASE_URL=tu_next_public_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_next_public_supabase_anon_key
+SUPABASE_URL=tu_supabase_url
+
+# Variables adicionales gestionadas por Supabase (solo referencia)
+POSTGRES_URL=tu_postgres_url
+POSTGRES_PRISMA_URL=tu_postgres_prisma_url
+POSTGRES_URL_NON_POOLING=tu_postgres_url_non_pooling
+SUPABASE_JWT_SECRET=tu_supabase_jwt_secret
+POSTGRES_USER=tu_postgres_user
+POSTGRES_PASSWORD=tu_postgres_password
 
 # OpenAI
 OPENAI_API_KEY=tu_openai_api_key

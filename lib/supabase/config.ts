@@ -22,7 +22,6 @@ const SUPABASE_URL_ENV_CANDIDATES: EnvCandidate[] = [
 
 const SUPABASE_ANON_KEY_ENV_CANDIDATES: EnvCandidate[] = [
   { name: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', value: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY },
-  { name: 'SUPABASE_ANON_KEY', value: process.env.SUPABASE_ANON_KEY },
 ]
 
 const SUPABASE_URL_ENV_NAMES = SUPABASE_URL_ENV_CANDIDATES.map(({ name }) => name)
