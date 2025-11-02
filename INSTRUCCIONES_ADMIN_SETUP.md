@@ -4,6 +4,14 @@
 
 ---
 
+## ⚠️ IMPORTANTE: Script Correcto a Usar
+
+**USA ESTE ARCHIVO:** `supabase-admin-fix.sql` ✅
+
+**NO USES:** `supabase-admin-setup.sql` ❌ (causa error de recursión infinita)
+
+---
+
 ## ✅ **Paso 1: Ejecutar SQL en Supabase**
 
 ### 1.1 Ir a Supabase
@@ -11,11 +19,13 @@
 2. Selecciona tu proyecto ProfeFlow
 3. En el menú lateral, ve a **SQL Editor**
 
-### 1.2 Ejecutar el Script
+### 1.2 Ejecutar el Script CORRECTO
 1. Haz clic en **New Query**
-2. Copia **TODO** el contenido del archivo `supabase-admin-setup.sql` (ubicado en la raíz del proyecto)
+2. Copia **TODO** el contenido del archivo **`supabase-admin-fix.sql`** ✅
 3. Pégalo en el editor SQL
 4. Haz clic en **Run** (o presiona Ctrl+Enter / Cmd+Enter)
+
+**IMPORTANTE:** Usa `supabase-admin-fix.sql`, NO el archivo `supabase-admin-setup.sql`
 
 El script ya está configurado con tu email: **h.herrera@cloou.com**
 
@@ -57,7 +67,15 @@ npm run dev
 
 ## ❌ **Si algo no funciona:**
 
-### Problema 1: "No puedes acceder a /admin"
+### Problema 1: "infinite recursion detected in policy"
+**Causa:** Usaste el archivo incorrecto (`supabase-admin-setup.sql`)
+
+**Solución:**
+1. Ejecuta el archivo correcto: **`supabase-admin-fix.sql`** ✅
+2. Lee la guía completa: **`FIX_RECURSION_ERROR.md`**
+3. El nuevo script soluciona completamente este problema
+
+### Problema 2: "No puedes acceder a /admin"
 **Solución:**
 1. Verifica que ejecutaste el SQL correctamente
 2. Ejecuta esta query:
