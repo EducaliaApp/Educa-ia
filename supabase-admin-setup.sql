@@ -17,7 +17,7 @@ CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
 -- IMPORTANT: Replace [TU_EMAIL] with your actual email
 UPDATE profiles
 SET role = 'admin'
-WHERE email = '[TU_EMAIL]';
+WHERE email = 'h.herrera@cloou.com';
 
 -- 4. Drop existing RLS policies if they exist to avoid conflicts
 DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
