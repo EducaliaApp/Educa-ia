@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { SUPABASE_ENV_HINT, isMissingSupabaseEnvError } from '@/lib/supabase/config'
@@ -46,7 +47,12 @@ export async function signup(formData: FormData) {
     const asignatura = formData.get('asignatura') as string
     const nivel = formData.get('nivel') as string
 
-    const { data: authData, error } = await supabase.auth.signUp(data)
+    const { data: authData, error } = await supabase.auth.signUp({
+      ...data,
+      options: {
+        emailRedirectTo: getEmailRedirectTo(),
+      },
+    })
 
     if (error) {
       return { error: error.message }
@@ -82,6 +88,37 @@ export async function signup(formData: FormData) {
 
     throw error
   }
+}
+
+function getEmailRedirectTo() {
+  const explicitSiteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    process.env.SITE_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined)
+
+  if (explicitSiteUrl) {
+    return new URL('/login', explicitSiteUrl).toString()
+  }
+
+  const headerList = headers()
+  const origin = headerList.get('origin')
+
+  if (origin) {
+    return new URL('/login', origin).toString()
+  }
+
+  const protocol = headerList.get('x-forwarded-proto')
+  const host = headerList.get('x-forwarded-host') ?? headerList.get('host')
+
+  if (protocol && host) {
+    return new URL('/login', `${protocol}://${host}`).toString()
+  }
+
+  if (host) {
+    return new URL('/login', `https://${host}`).toString()
+  }
+
+  return 'http://localhost:3000/login'
 }
 
 export async function signout() {

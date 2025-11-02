@@ -15,7 +15,9 @@ En la configuración del proyecto, agrega estas variables de entorno:
 ```
 NEXT_PUBLIC_SUPABASE_URL=tu_supabase_url_aqui
 NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_supabase_anon_key_aqui
-SUPABASE_URL=tu_supabase_url_aqui
+NEXT_PUBLIC_SITE_URL=https://tu-dominio.vercel.app
+SUPABASE_URL=tu_supabase_url_aqui (opcional para el servidor)
+SUPABASE_ANON_KEY=tu_supabase_anon_key_aqui (opcional para el servidor)
 ```
 
 **Variables secretas:**
@@ -54,13 +56,10 @@ vercel login
 # Desde el directorio del proyecto
 vercel env add NEXT_PUBLIC_SUPABASE_URL
 vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY
+vercel env add NEXT_PUBLIC_SITE_URL
 vercel env add SUPABASE_URL
-vercel env add POSTGRES_URL
-vercel env add POSTGRES_PRISMA_URL
-vercel env add POSTGRES_URL_NON_POOLING
-vercel env add SUPABASE_JWT_SECRET
-vercel env add POSTGRES_USER
-vercel env add POSTGRES_PASSWORD
+vercel env add SUPABASE_ANON_KEY
+vercel env add SUPABASE_SERVICE_ROLE_KEY
 vercel env add OPENAI_API_KEY
 vercel env add RESEND_API_KEY
 ```
