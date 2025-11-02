@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { MetricsCard } from '@/components/admin/metrics-card'
-import { StatsChart } from '@/components/admin/stats-chart'
-import { UserTable } from '@/components/admin/user-table'
+import { DashboardCharts } from '@/components/admin/dashboard-charts'
+import { RecentUsersTable } from '@/components/admin/recent-users-table'
 import { Badge } from '@/components/ui/Badge'
 import { Users, TrendingUp, DollarSign, FileText } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
@@ -113,42 +113,12 @@ export default async function AdminDashboard() {
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Planificaciones Chart */}
-        <StatsChart
-          data={chartData}
-          type="line"
-          dataKey="value"
-          xAxisKey="name"
-          title="Planificaciones - Últimos 7 días"
-          height={300}
+        <DashboardCharts
+          chartData={chartData}
+          freeUsers={stats.free_users}
+          proUsers={stats.pro_users}
+          totalUsers={stats.total_users}
         />
-
-        {/* User Distribution */}
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <h3 className="text-white font-semibold mb-4">Distribución de Usuarios</h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
-                <span className="text-slate-400">Usuarios FREE</span>
-              </div>
-              <span className="text-white font-semibold">{stats.free_users}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-green-600 rounded-full"></div>
-                <span className="text-slate-400">Usuarios PRO</span>
-              </div>
-              <span className="text-white font-semibold">{stats.pro_users}</span>
-            </div>
-            <div className="pt-4 border-t border-slate-800">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 font-medium">Total</span>
-                <span className="text-white font-bold text-lg">{stats.total_users}</span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Top Users Table */}
@@ -217,13 +187,7 @@ export default async function AdminDashboard() {
       {/* Recent Users */}
       <div>
         <h2 className="text-xl font-bold text-white mb-4">Últimos 10 Usuarios Registrados</h2>
-        {recentUsers && recentUsers.length > 0 ? (
-          <UserTable users={recentUsers as any} />
-        ) : (
-          <div className="bg-slate-900 border border-slate-800 rounded-lg p-8">
-            <p className="text-slate-400 text-center">No hay usuarios recientes</p>
-          </div>
-        )}
+        <RecentUsersTable users={recentUsers || []} />
       </div>
     </div>
   )
