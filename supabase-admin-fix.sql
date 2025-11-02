@@ -1,3 +1,4 @@
+-- DEPRECATED: Usa el script supabase-admin-setup.sql actualizado
 -- ============================================
 -- FIX: Infinite Recursion in Profiles Policies
 -- ============================================

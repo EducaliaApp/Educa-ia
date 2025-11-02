@@ -1,3 +1,4 @@
+-- DEPRECATED: Usa el script supabase-admin-setup.sql actualizado
 -- ============================================
 -- FIX DEFINITIVO: Infinite Recursion Error
 -- ============================================

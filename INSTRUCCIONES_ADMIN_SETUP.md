@@ -6,9 +6,9 @@
 
 ## ⚠️ IMPORTANTE: Script Correcto a Usar
 
-**USA ESTE ARCHIVO:** `supabase-admin-fix.sql` ✅
+**USA ESTE ARCHIVO:** `supabase-admin-setup.sql` ✅ (versión sin recursión infinita)
 
-**NO USES:** `supabase-admin-setup.sql` ❌ (causa error de recursión infinita)
+**NO USES:** archivos antiguos como `SUPABASE_FINAL_FIX.sql`, `supabase-admin-fix.sql` o `supabase-admin-setup.sql` de versiones previas.
 
 ---
 
@@ -21,11 +21,11 @@
 
 ### 1.2 Ejecutar el Script CORRECTO
 1. Haz clic en **New Query**
-2. Copia **TODO** el contenido del archivo **`supabase-admin-fix.sql`** ✅
+2. Copia **TODO** el contenido del archivo **`supabase-admin-setup.sql`** ✅
 3. Pégalo en el editor SQL
 4. Haz clic en **Run** (o presiona Ctrl+Enter / Cmd+Enter)
 
-**IMPORTANTE:** Usa `supabase-admin-fix.sql`, NO el archivo `supabase-admin-setup.sql`
+> Este script limpia políticas anteriores, crea la función `is_admin()` con `SECURITY DEFINER` y evita el error de recursión infinita.
 
 El script ya está configurado con tu email: **h.herrera@cloou.com**
 
@@ -68,12 +68,12 @@ npm run dev
 ## ❌ **Si algo no funciona:**
 
 ### Problema 1: "infinite recursion detected in policy"
-**Causa:** Usaste el archivo incorrecto (`supabase-admin-setup.sql`)
+**Causa:** Se ejecutó un script antiguo.
 
 **Solución:**
-1. Ejecuta el archivo correcto: **`supabase-admin-fix.sql`** ✅
+1. Vuelve a ejecutar **`supabase-admin-setup.sql`** ✅
 2. Lee la guía completa: **`FIX_RECURSION_ERROR.md`**
-3. El nuevo script soluciona completamente este problema
+3. El script recrea todas las políticas correctas automáticamente
 
 ### Problema 2: "No puedes acceder a /admin"
 **Solución:**
@@ -88,12 +88,12 @@ npm run dev
    ```
 4. Cierra sesión y vuelve a iniciar sesión
 
-### Problema 2: "Error: Only admins can access this function"
+### Problema 3: "Error: Only admins can access this function"
 **Solución:**
 1. Asegúrate de que ejecutaste **TODO** el script SQL, no solo la parte del UPDATE
 2. El script crea funciones RPC que necesitan las políticas de seguridad
 
-### Problema 3: No hay datos en el dashboard
+### Problema 4: No hay datos en el dashboard
 **Solución:**
 Esto es normal si no tienes usuarios o planificaciones aún. El panel mostrará ceros y gráficos vacíos.
 
@@ -154,12 +154,12 @@ Esto es normal si no tienes usuarios o planificaciones aún. El panel mostrará 
 - Solo usuarios con `role = 'admin'` pueden acceder
 - Middleware verifica el role en cada request
 - Row Level Security (RLS) en Supabase
-- Todas las funciones RPC verifican que el usuario sea admin
+- Todas las funciones RPC verifican que el usuario sea admin mediante `is_admin()`
 - Redirección automática al dashboard si no eres admin
 
 ---
 
-## 📁 **Archivos Creados**
+## 📁 **Archivos Clave**
 
 ```
 app/(admin)/
@@ -175,7 +175,7 @@ components/admin/
 ├── stats-chart.tsx         # Gráficos
 └── user-table.tsx          # Tabla de usuarios
 
-supabase-admin-setup.sql    # Script de setup
+supabase-admin-setup.sql    # Script SQL definitivo
 ```
 
 ---
@@ -198,31 +198,3 @@ Una vez que el panel funcione, podrías considerar:
 
 4. **Auditoría**
    - Log de cambios de plan
-   - Historial de acciones de admin
-
-5. **Dashboard personalizable**
-   - Widgets arrastrables
-   - Guardar preferencias de visualización
-
----
-
-## 📞 **Soporte**
-
-Si tienes problemas o preguntas:
-
-1. Revisa la sección "Si algo no funciona" arriba
-2. Verifica la consola del navegador (F12) para errores
-3. Asegúrate de que todas las dependencias estén instaladas: `npm install`
-4. Limpia la caché de Next.js: `rm -rf .next && npm run dev`
-
----
-
-## ✨ **¡Listo!**
-
-Tu panel de administración está completo y listo para usar. Solo necesitas:
-
-1. ✅ Ejecutar el SQL en Supabase
-2. ✅ Iniciar sesión con h.herrera@cloou.com
-3. ✅ Ir a /admin
-
-**¡Disfruta tu nuevo panel de administración! 🎉**

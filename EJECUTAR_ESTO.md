@@ -16,10 +16,12 @@ infinite recursion detected in policy for relation "profiles"
 
 ### PASO 2: Copiar y Ejecutar
 
-1. Abre el archivo: **`SUPABASE_FINAL_FIX.sql`**
+1. Abre el archivo: **`supabase-admin-setup.sql`**
 2. Copia TODO el contenido (Ctrl+A, Ctrl+C)
 3. Pégalo en Supabase SQL Editor
 4. Click en **Run** (o Ctrl+Enter)
+
+> ℹ️ Este script ya incluye la función `is_admin()` con `SECURITY DEFINER` y recrea todas las políticas sin recursión. Si antes ejecutaste otro script, no importa: este limpia y vuelve a crear todo correctamente.
 
 ### PASO 3: Verificar
 
@@ -39,22 +41,23 @@ Deberías ver `role = 'admin'`
 ## 🔧 QUÉ HACE EL SCRIPT:
 
 - ✅ Elimina políticas problemáticas
-- ✅ Crea políticas simples (sin recursión)
-- ✅ Te hace admin
-- ✅ Crea funciones para el panel admin
+- ✅ Crea función `is_admin()` con `SECURITY DEFINER`
+- ✅ Reconstruye políticas para `profiles`, `planificaciones` y `evaluaciones`
+- ✅ Configura tus funciones RPC para admin panel
+- ✅ Te hace admin automáticamente
 
 ## ❓ ¿CUÁL ARCHIVO USO?
 
 | Archivo | ¿Usar? |
 |---------|--------|
-| **SUPABASE_FINAL_FIX.sql** | ✅ **SÍ - USA ESTE** |
-| supabase-admin-fix.sql | ❌ No |
-| supabase-admin-setup.sql | ❌ No |
-| supabase-recursion-fix-v2.sql | ❌ No |
+| **supabase-admin-setup.sql** | ✅ **SÍ - USA ESTE** |
+| SUPABASE_FINAL_FIX.sql | ❌ Obsoleto |
+| supabase-admin-fix.sql | ❌ Reemplazado |
+| supabase-recursion-fix-v2.sql | ❌ Reemplazado |
 
 ## 🎯 RESUMEN:
 
-**1 SOLO ARCHIVO:** `SUPABASE_FINAL_FIX.sql`
+**1 SOLO ARCHIVO:** `supabase-admin-setup.sql`
 
 **1 SOLO PASO:** Ejecutarlo en Supabase SQL Editor
 

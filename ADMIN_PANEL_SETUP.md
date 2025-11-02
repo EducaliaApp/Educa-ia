@@ -53,19 +53,11 @@ Se ha creado un panel de administración completo para ProfeFlow con las siguien
 1. Ve a tu proyecto en [Supabase](https://supabase.com)
 2. Navega a **SQL Editor**
 3. Abre el archivo `supabase-admin-setup.sql` (ubicado en la raíz del proyecto)
-4. **IMPORTANTE**: Reemplaza `[TU_EMAIL]` con tu email real en la línea 20:
+4. Copia TODO el contenido y ejecútalo tal como está (ya incluye tu email configurado)
+5. Verifica que funcionó ejecutando:
 
 ```sql
-UPDATE profiles
-SET role = 'admin'
-WHERE email = 'tu-email@ejemplo.com';  -- ← CAMBIA ESTO
-```
-
-5. Ejecuta el script completo
-6. Verifica que funcionó ejecutando:
-
-```sql
-SELECT id, email, nombre, role FROM profiles WHERE role = 'admin';
+SELECT id, email, nombre, role FROM profiles WHERE email = 'h.herrera@cloou.com';
 ```
 
 ### Paso 2: Instalar Dependencias
