@@ -45,5 +45,5 @@ export async function isUserAdmin(userId: string): Promise<boolean> {
     return false
   }
 
-  return data.role === 'admin'
+  return (data as any).role === 'admin'
 }
