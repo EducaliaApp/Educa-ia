@@ -71,7 +71,7 @@ CREATE POLICY "Admins can view all profiles"
 
 ### Paso 2: Ejecutar el Script de Fix
 
-1. Abre el archivo **`supabase-admin-fix.sql`** (en la raíz del proyecto)
+1. Abre el archivo **`supabase-admin-setup.sql`** (en la raíz del proyecto)
 2. Copia **TODO** el contenido del archivo
 3. Pégalo en el SQL Editor de Supabase
 4. Haz clic en **Run** (o presiona Ctrl/Cmd + Enter)
@@ -147,12 +147,13 @@ WHERE email = 'h.herrera@cloou.com';
 
 ## 🔄 Diferencia Entre Scripts
 
-### ❌ Script Anterior (`supabase-admin-setup.sql`)
+### ❌ Scripts Anteriores (obsoletos)
+- Versiones antiguas de los scripts (`SUPABASE_FINAL_FIX.sql`, `supabase-admin-fix.sql`)
 - Políticas con recursión
-- Causa error "infinite recursion"
-- **No usar este archivo**
+- Causan el error "infinite recursion"
+- **No usar ninguno de esos archivos**
 
-### ✅ Script Nuevo (`supabase-admin-fix.sql`)
+### ✅ Script Actual (`supabase-admin-setup.sql`)
 - Función `is_admin()` con SECURITY DEFINER
 - Políticas sin recursión
 - **Usar este archivo**
@@ -223,7 +224,7 @@ GRANT EXECUTE ON FUNCTION is_admin() TO authenticated;
 ### Error Persiste: "infinite recursion"
 
 **Solución:**
-1. Verifica que ejecutaste **TODO** el script `supabase-admin-fix.sql`
+1. Verifica que ejecutaste **TODO** el script `supabase-admin-setup.sql`
 2. Verifica que las políticas antiguas fueron eliminadas:
 ```sql
 -- No debe retornar nada
@@ -280,7 +281,7 @@ $$;
 
 Después de ejecutar el fix, verifica:
 
-- [ ] Script `supabase-admin-fix.sql` ejecutado sin errores
+- [ ] Script `supabase-admin-setup.sql` ejecutado sin errores
 - [ ] Usuario `h.herrera@cloou.com` tiene `role = 'admin'`
 - [ ] Función `is_admin()` existe y retorna `true` para admin
 - [ ] No hay error de "infinite recursion" al registrarse
@@ -307,5 +308,5 @@ Después de aplicar el fix:
 
 **Fecha:** 2025-11-02
 **Estado:** ✅ Fix Verificado
-**Archivo a usar:** `supabase-admin-fix.sql`
-**Archivo anterior (no usar):** `supabase-admin-setup.sql`
+**Archivo a usar:** `supabase-admin-setup.sql`
+**Archivos anteriores (no usar):** `SUPABASE_FINAL_FIX.sql`, `supabase-admin-fix.sql`
