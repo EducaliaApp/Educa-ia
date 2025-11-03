@@ -94,28 +94,28 @@ function getEmailRedirectTo() {
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined)
 
   if (explicitSiteUrl) {
-    return new URL('/login', explicitSiteUrl).toString()
+    return new URL('/register/email-confirmed', explicitSiteUrl).toString()
   }
 
   const headerList = headers()
   const origin = headerList.get('origin')
 
   if (origin) {
-    return new URL('/login', origin).toString()
+    return new URL('/register/email-confirmed', origin).toString()
   }
 
   const protocol = headerList.get('x-forwarded-proto')
   const host = headerList.get('x-forwarded-host') ?? headerList.get('host')
 
   if (protocol && host) {
-    return new URL('/login', `${protocol}://${host}`).toString()
+    return new URL('/register/email-confirmed', `${protocol}://${host}`).toString()
   }
 
   if (host) {
-    return new URL('/login', `https://${host}`).toString()
+    return new URL('/register/email-confirmed', `https://${host}`).toString()
   }
 
-  return 'http://localhost:3000/login'
+  return 'http://localhost:3000/register/email-confirmed'
 }
 
 export async function signout() {
