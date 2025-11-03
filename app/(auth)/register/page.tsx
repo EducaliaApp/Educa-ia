@@ -81,8 +81,7 @@ export default function RegisterPage() {
         return
       }
 
-      router.push('/dashboard')
-      router.refresh()
+      router.push(`/register/verify-email?email=${encodeURIComponent(formData.email)}`)
     } catch (error) {
       if (isMissingSupabaseEnvError(error)) {
         setError(`Configura ${SUPABASE_ENV_HINT} para crear una cuenta.`)

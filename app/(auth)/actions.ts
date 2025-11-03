@@ -72,8 +72,10 @@ export async function signup(formData: FormData) {
       }
     }
 
+    const searchParams = new URLSearchParams({ email: credentials.email })
+
     revalidatePath('/', 'layout')
-    redirect('/dashboard')
+    redirect(`/register/verify-email?${searchParams.toString()}`)
   } catch (error) {
     if (isMissingSupabaseEnvError(error)) {
       return {
