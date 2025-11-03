@@ -19,14 +19,50 @@ export default async function DashboardLayout({
   }
 
   // Obtener perfil del usuario
-  const { data: profile } = await supabase
+  const {
+    data: profile,
+    error: profileError,
+  } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
 
-  if (!profile) {
-    redirect('/login')
+  if (profileError) {
+    await supabase.auth.signOut()
+    redirect('/onboarding?status=profile-error')
+  }
+
+  let ensuredProfile = profile
+
+  if (!ensuredProfile) {
+    const primaryEmail =
+      typeof user.email === 'string' && user.email.length > 0 ? user.email : null
+    const metadataEmail =
+      typeof user.user_metadata?.email === 'string'
+        ? user.user_metadata.email
+        : null
+
+    const profilePayload = {
+      id: user.id,
+      email: primaryEmail ?? metadataEmail,
+    }
+
+    const {
+      data: newProfile,
+      error: upsertError,
+    } = await supabase
+      .from('profiles')
+      .upsert([profilePayload], { onConflict: 'id' })
+      .select()
+      .single()
+
+    if (upsertError || !newProfile) {
+      await supabase.auth.signOut()
+      redirect('/onboarding?status=missing-profile')
+    }
+
+    ensuredProfile = newProfile
   }
 
   return (
@@ -34,7 +70,7 @@ export default async function DashboardLayout({
       <div className="flex h-screen overflow-hidden bg-gray-50">
         {/* Sidebar */}
         <aside className="hidden md:flex md:flex-col md:w-64 lg:w-72">
-          <Sidebar profile={profile} />
+          <Sidebar profile={ensuredProfile} />
         </aside>
 
         {/* Main content */}
