@@ -5,6 +5,7 @@ import type { Database, Profile } from './types'
 type AdminClient = ReturnType<typeof createAdminClient>
 type ProfileRow = Database['public']['Tables']['profiles']['Row']
 type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
+type ProfileUpdate = Database['public']['Tables']['profiles']['Update']
 
 function buildProfilePayload(user: User): ProfileInsert {
   const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
@@ -58,6 +59,54 @@ export async function ensureProfileForUser(user: User): Promise<Profile> {
   const existingProfile = await fetchProfileById(adminClient, user.id)
 
   if (existingProfile) {
+    const updatePayload: ProfileUpdate = {}
+
+    if (
+      profilePayload.email !== undefined &&
+      profilePayload.email !== existingProfile.email
+    ) {
+      updatePayload.email = profilePayload.email
+    }
+
+    if (
+      profilePayload.nombre !== undefined &&
+      profilePayload.nombre !== existingProfile.nombre
+    ) {
+      updatePayload.nombre = profilePayload.nombre
+    }
+
+    if (
+      profilePayload.asignatura !== undefined &&
+      profilePayload.asignatura !== existingProfile.asignatura
+    ) {
+      updatePayload.asignatura = profilePayload.asignatura
+    }
+
+    if (
+      profilePayload.nivel !== undefined &&
+      profilePayload.nivel !== existingProfile.nivel
+    ) {
+      updatePayload.nivel = profilePayload.nivel
+    }
+
+    if (Object.keys(updatePayload).length > 0) {
+      const { error: updateError } = await (adminClient.from('profiles') as any)
+        .update(updatePayload)
+        .eq('id', user.id)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      const refreshedProfile = await fetchProfileById(adminClient, user.id)
+
+      if (!refreshedProfile) {
+        throw new Error('Profile was not found after update')
+      }
+
+      return mergeProfile(refreshedProfile, profilePayload)
+    }
+
     return mergeProfile(existingProfile, profilePayload)
   }
 
