@@ -87,8 +87,22 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <div className="mt-6 text-center">
-          <p className="text-gray-600">
+        <div className="mt-6 space-y-3 text-center text-sm text-gray-600">
+          <p>
+            ¿Olvidaste tu contraseña?{' '}
+            <Link href="/forgot-password" className="text-primary hover:underline font-medium">
+              Recupérala aquí
+            </Link>
+            .
+          </p>
+          <p>
+            ¿Prefieres un enlace mágico?{' '}
+            <Link href="/magic-link" className="text-primary hover:underline font-medium">
+              Solicítalo aquí
+            </Link>
+            .
+          </p>
+          <p>
             ¿No tienes cuenta?{' '}
             <Link href="/register" className="text-primary hover:underline font-medium">
               Regístrate gratis
