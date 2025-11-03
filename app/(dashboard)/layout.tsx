@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { ensureProfileForUser } from '@/lib/supabase/profiles'
+import type { Profile } from '@/lib/supabase/types'
 import Sidebar from '@/components/Sidebar'
 import { ToastProvider } from '@/components/ui/Toast'
 
@@ -20,7 +22,7 @@ export default async function DashboardLayout({
 
   // Obtener perfil del usuario
   const {
-    data: profile,
+    data: profileData,
     error: profileError,
   } = await supabase
     .from('profiles')
@@ -29,42 +31,26 @@ export default async function DashboardLayout({
     .maybeSingle()
 
   if (profileError) {
+    console.error('Error fetching profile for dashboard layout', profileError)
     await supabase.auth.signOut()
     redirect('/onboarding?status=profile-error')
   }
 
+  let profile: Profile | null = profileData as Profile | null
+
   if (!profile) {
-    const primaryEmail =
-      typeof user.email === 'string' && user.email.length > 0 ? user.email : null
-    const metadataEmail =
-      typeof user.user_metadata?.email === 'string'
-        ? user.user_metadata.email
-        : null
-
-    const metadata = user.user_metadata ?? {}
-    const nombre = typeof metadata.nombre === 'string' ? metadata.nombre : null
-    const asignatura = typeof metadata.asignatura === 'string' ? metadata.asignatura : null
-    const nivel = typeof metadata.nivel === 'string' ? metadata.nivel : null
-
-    const profilePayload = {
-      id: user.id,
-      email: primaryEmail ?? metadataEmail,
-      nombre: nombre ?? undefined,
-      asignatura: asignatura ?? undefined,
-      nivel: nivel ?? undefined,
-    }
-
-    const { error: upsertError } = await supabase
-      .from('profiles')
-      .upsert([profilePayload], { onConflict: 'id' })
-
-    if (upsertError) {
+    try {
+      profile = await ensureProfileForUser(user)
+    } catch (error) {
+      console.error('Failed to auto-provision profile', error)
       await supabase.auth.signOut()
       redirect('/onboarding?status=profile-error')
     }
+  }
 
+  if (!profile) {
     await supabase.auth.signOut()
-    redirect('/onboarding?status=profile-created')
+    redirect('/onboarding?status=profile-error')
   }
 
   return (

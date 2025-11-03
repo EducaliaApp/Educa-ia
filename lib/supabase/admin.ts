@@ -20,7 +20,7 @@ export function createAdminClient() {
     )
   }
 
-  return createClient<Database>(url, serviceRoleKey, {
+  return createClient<Database, 'public'>(url, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,

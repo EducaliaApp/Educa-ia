@@ -120,6 +120,7 @@ export default function RegisterPage() {
             value={formData.nombre}
             onChange={handleChange}
             required
+            autoComplete="name"
           />
 
           <Input
@@ -130,6 +131,7 @@ export default function RegisterPage() {
             value={formData.email}
             onChange={handleChange}
             required
+            autoComplete="email"
           />
 
           <Input
@@ -141,6 +143,7 @@ export default function RegisterPage() {
             onChange={handleChange}
             required
             minLength={6}
+            autoComplete="new-password"
           />
 
           <Select

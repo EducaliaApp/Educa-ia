@@ -5,17 +5,18 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { SUPABASE_ENV_HINT, isMissingSupabaseEnvError } from '@/lib/supabase/config'
+import { ensureProfileForUser } from '@/lib/supabase/profiles'
 
 export async function login(formData: FormData) {
   try {
     const supabase = await createClient()
 
-    const data = {
+    const credentials = {
       email: formData.get('email') as string,
       password: formData.get('password') as string,
     }
 
-    const { error } = await supabase.auth.signInWithPassword(data)
+    const { error } = await supabase.auth.signInWithPassword(credentials)
 
     if (error) {
       return { error: error.message }
@@ -38,7 +39,7 @@ export async function signup(formData: FormData) {
   try {
     const supabase = await createClient()
 
-    const data = {
+    const credentials = {
       email: formData.get('email') as string,
       password: formData.get('password') as string,
     }
@@ -47,8 +48,8 @@ export async function signup(formData: FormData) {
     const asignatura = formData.get('asignatura') as string
     const nivel = formData.get('nivel') as string
 
-    const { error } = await supabase.auth.signUp({
-      ...data,
+    const { data: signUpData, error } = await supabase.auth.signUp({
+      ...credentials,
       options: {
         emailRedirectTo: getEmailRedirectTo(),
         data: {
@@ -61,6 +62,14 @@ export async function signup(formData: FormData) {
 
     if (error) {
       return { error: error.message }
+    }
+
+    if (signUpData.user) {
+      try {
+        await ensureProfileForUser(signUpData.user)
+      } catch (profileError) {
+        console.error('Error ensuring profile during signup action', profileError)
+      }
     }
 
     revalidatePath('/', 'layout')
