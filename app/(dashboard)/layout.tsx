@@ -33,9 +33,7 @@ export default async function DashboardLayout({
     redirect('/onboarding?status=profile-error')
   }
 
-  let ensuredProfile = profile
-
-  if (!ensuredProfile) {
+  if (!profile) {
     const primaryEmail =
       typeof user.email === 'string' && user.email.length > 0 ? user.email : null
     const metadataEmail =
@@ -48,21 +46,17 @@ export default async function DashboardLayout({
       email: primaryEmail ?? metadataEmail,
     }
 
-    const {
-      data: newProfile,
-      error: upsertError,
-    } = await supabase
+    const { error: upsertError } = await supabase
       .from('profiles')
       .upsert([profilePayload], { onConflict: 'id' })
-      .select()
-      .single()
 
-    if (upsertError || !newProfile) {
+    if (upsertError) {
       await supabase.auth.signOut()
-      redirect('/onboarding?status=missing-profile')
+      redirect('/onboarding?status=profile-error')
     }
 
-    ensuredProfile = newProfile
+    await supabase.auth.signOut()
+    redirect('/onboarding?status=profile-created')
   }
 
   return (
@@ -70,7 +64,7 @@ export default async function DashboardLayout({
       <div className="flex h-screen overflow-hidden bg-gray-50">
         {/* Sidebar */}
         <aside className="hidden md:flex md:flex-col md:w-64 lg:w-72">
-          <Sidebar profile={ensuredProfile} />
+          <Sidebar profile={profile} />
         </aside>
 
         {/* Main content */}
