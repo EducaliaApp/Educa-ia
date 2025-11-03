@@ -27,15 +27,18 @@ export async function ensureProfileForUser(user: User): Promise<Profile> {
 
   const profilePayload = buildProfilePayload(user)
 
-  const { error: upsertError } = await (adminClient.from('profiles') as any).upsert(profilePayload, {
-    onConflict: 'id',
-  })
+  const { error: upsertError } = await adminClient
+    .from<Database['public']['Tables']['profiles']['Row']>('profiles')
+    .upsert(profilePayload, {
+      onConflict: 'id',
+    })
 
   if (upsertError) {
     throw upsertError
   }
 
-  const { data: profile, error: fetchError } = await (adminClient.from('profiles') as any)
+  const { data: profile, error: fetchError } = await adminClient
+    .from<Database['public']['Tables']['profiles']['Row']>('profiles')
     .select('*')
     .eq('id', user.id)
     .maybeSingle()
