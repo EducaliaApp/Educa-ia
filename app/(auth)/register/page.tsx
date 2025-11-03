@@ -66,30 +66,19 @@ export default function RegisterPage() {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
+        options: {
+          data: {
+            nombre: formData.nombre,
+            asignatura: formData.asignatura,
+            nivel: formData.nivel,
+          },
+        },
       })
 
       if (authError) {
         setError(authError.message)
         setLoading(false)
         return
-      }
-
-      // Actualizar perfil con datos adicionales
-      if (authData.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            nombre: formData.nombre,
-            asignatura: formData.asignatura,
-            nivel: formData.nivel,
-          })
-          .eq('id', authData.user.id)
-
-        if (profileError) {
-          setError(profileError.message)
-          setLoading(false)
-          return
-        }
       }
 
       router.push('/dashboard')

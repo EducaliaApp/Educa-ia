@@ -47,34 +47,20 @@ export async function signup(formData: FormData) {
     const asignatura = formData.get('asignatura') as string
     const nivel = formData.get('nivel') as string
 
-    const { data: authData, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       ...data,
       options: {
         emailRedirectTo: getEmailRedirectTo(),
+        data: {
+          nombre,
+          asignatura,
+          nivel,
+        },
       },
     })
 
     if (error) {
       return { error: error.message }
-    }
-
-    // Actualizar perfil con datos adicionales
-    if (authData.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          nombre,
-          asignatura,
-          nivel,
-        })
-        .eq('id', authData.user.id)
-
-      if (profileError) {
-        return { error: profileError.message }
-      }
-
-      // Aquí se enviaría el email de bienvenida con Resend
-      // await sendWelcomeEmail(data.email, nombre)
     }
 
     revalidatePath('/', 'layout')

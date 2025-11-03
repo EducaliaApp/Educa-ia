@@ -41,9 +41,17 @@ export default async function DashboardLayout({
         ? user.user_metadata.email
         : null
 
+    const metadata = user.user_metadata ?? {}
+    const nombre = typeof metadata.nombre === 'string' ? metadata.nombre : null
+    const asignatura = typeof metadata.asignatura === 'string' ? metadata.asignatura : null
+    const nivel = typeof metadata.nivel === 'string' ? metadata.nivel : null
+
     const profilePayload = {
       id: user.id,
       email: primaryEmail ?? metadataEmail,
+      nombre: nombre ?? undefined,
+      asignatura: asignatura ?? undefined,
+      nivel: nivel ?? undefined,
     }
 
     const { error: upsertError } = await supabase
