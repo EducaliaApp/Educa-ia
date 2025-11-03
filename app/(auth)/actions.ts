@@ -5,17 +5,18 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { SUPABASE_ENV_HINT, isMissingSupabaseEnvError } from '@/lib/supabase/config'
+import { ensureProfileForUser } from '@/lib/supabase/profiles'
 
 export async function login(formData: FormData) {
   try {
     const supabase = await createClient()
 
-    const data = {
+    const credentials = {
       email: formData.get('email') as string,
       password: formData.get('password') as string,
     }
 
-    const { error } = await supabase.auth.signInWithPassword(data)
+    const { error } = await supabase.auth.signInWithPassword(credentials)
 
     if (error) {
       return { error: error.message }
@@ -38,7 +39,7 @@ export async function signup(formData: FormData) {
   try {
     const supabase = await createClient()
 
-    const data = {
+    const credentials = {
       email: formData.get('email') as string,
       password: formData.get('password') as string,
     }
@@ -47,10 +48,15 @@ export async function signup(formData: FormData) {
     const asignatura = formData.get('asignatura') as string
     const nivel = formData.get('nivel') as string
 
-    const { data: authData, error } = await supabase.auth.signUp({
-      ...data,
+    const { data: signUpData, error } = await supabase.auth.signUp({
+      ...credentials,
       options: {
         emailRedirectTo: getEmailRedirectTo(),
+        data: {
+          nombre,
+          asignatura,
+          nivel,
+        },
       },
     })
 
@@ -58,23 +64,12 @@ export async function signup(formData: FormData) {
       return { error: error.message }
     }
 
-    // Actualizar perfil con datos adicionales
-    if (authData.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          nombre,
-          asignatura,
-          nivel,
-        })
-        .eq('id', authData.user.id)
-
-      if (profileError) {
-        return { error: profileError.message }
+    if (signUpData.user) {
+      try {
+        await ensureProfileForUser(signUpData.user)
+      } catch (profileError) {
+        console.error('Error ensuring profile during signup action', profileError)
       }
-
-      // Aquí se enviaría el email de bienvenida con Resend
-      // await sendWelcomeEmail(data.email, nombre)
     }
 
     revalidatePath('/', 'layout')
