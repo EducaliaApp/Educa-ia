@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Plus, ClipboardCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import type { Evaluacion } from '@/lib/supabase/types'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 
@@ -21,6 +22,8 @@ export default async function EvaluacionesPage() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
+  const evaluacionesList = (evaluaciones ?? []) as Evaluacion[]
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -38,9 +41,9 @@ export default async function EvaluacionesPage() {
         </Link>
       </div>
 
-      {evaluaciones && evaluaciones.length > 0 ? (
+      {evaluacionesList.length > 0 ? (
         <div className="grid gap-4">
-          {evaluaciones.map((evaluacion) => {
+          {evaluacionesList.map((evaluacion) => {
             const feedback = evaluacion.feedback as any
             return (
               <Card key={evaluacion.id} hover>
