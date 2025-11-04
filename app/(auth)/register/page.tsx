@@ -102,7 +102,7 @@ export default function RegisterPage() {
 
     try {
       const supabase = createClient()
-      const redirectTo = getAuthCallbackUrl()
+      const redirectTo = getAuthCallbackUrl('/dashboard')
 
       const { data, error: signInError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
