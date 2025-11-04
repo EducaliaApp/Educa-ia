@@ -64,12 +64,12 @@ const buildNavigation = (
     name: 'Inicio',
     icon: Home,
     href: '/dashboard',
-    isEnabled: flags.inicio,
+    isEnabled: flags.menuItemInicio,
   },
   {
     name: 'Planifica',
     icon: BookOpen,
-    isEnabled: flags.planifica,
+    isEnabled: flags.menuItemPlanifica,
     items: [
       {
         name: 'Crear Planificación',
@@ -86,7 +86,7 @@ const buildNavigation = (
   {
     name: 'Evalúa',
     icon: ClipboardList,
-    isEnabled: flags.evalua,
+    isEnabled: flags.menuItemEvalua,
     items: [
       {
         name: 'Crear Evaluaciones',
@@ -108,7 +108,7 @@ const buildNavigation = (
   {
     name: 'Mi Carrera',
     icon: GraduationCap,
-    isEnabled: flags.miCarrera,
+    isEnabled: flags.menuItemMiCarrera,
     items: [
       {
         name: 'Portafolio Docente',
@@ -156,7 +156,7 @@ const buildNavigation = (
   {
     name: 'Empleo',
     icon: Briefcase,
-    isEnabled: flags.empleo,
+    isEnabled: flags.menuItemEmpleo,
     items: [
       {
         name: 'Empleos para ti',
@@ -183,7 +183,7 @@ const buildNavigation = (
   {
     name: 'Salud',
     icon: Heart,
-    isEnabled: flags.salud,
+    isEnabled: flags.menuItemSalud,
     items: [
       {
         name: '¿Necesitas Charlar?',

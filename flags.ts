@@ -27,46 +27,53 @@ const hypertuneAdapter = createHypertuneAdapter<RootFlagValues, Context>({
   identify,
 })
 
-export const roadmapInicioFlag = flag(
-  hypertuneAdapter.declarations.roadmapInicio,
+export const menuItemInicioFlag = flag(
+  hypertuneAdapter.declarations.menuItemInicio,
 )
 
-export const roadmapPlanificaFlag = flag(
-  hypertuneAdapter.declarations.roadmapPlanifica,
+export const menuItemPlanificaFlag = flag(
+  hypertuneAdapter.declarations.menuItemPlanifica,
 )
 
-export const roadmapEvaluaFlag = flag(
-  hypertuneAdapter.declarations.roadmapEvalua,
+export const menuItemEvaluaFlag = flag(
+  hypertuneAdapter.declarations.menuItemEvalua,
 )
 
-export const roadmapMiCarreraFlag = flag(
-  hypertuneAdapter.declarations.roadmapMiCarrera,
+export const menuItemMiCarreraFlag = flag(
+  hypertuneAdapter.declarations.menuItemMiCarrera,
 )
 
-export const roadmapEmpleoFlag = flag(
-  hypertuneAdapter.declarations.roadmapEmpleo,
+export const menuItemEmpleoFlag = flag(
+  hypertuneAdapter.declarations.menuItemEmpleo,
 )
 
-export const roadmapSaludFlag = flag(
-  hypertuneAdapter.declarations.roadmapSalud,
+export const menuItemSaludFlag = flag(
+  hypertuneAdapter.declarations.menuItemSalud,
 )
 
 export const getRoadmapCategoryFlags = async (): Promise<RoadmapCategoryFlags> => {
-  const [inicio, planifica, evalua, miCarrera, empleo, salud] = await evaluate([
-    roadmapInicioFlag,
-    roadmapPlanificaFlag,
-    roadmapEvaluaFlag,
-    roadmapMiCarreraFlag,
-    roadmapEmpleoFlag,
-    roadmapSaludFlag,
+  const [
+    menuItemInicio,
+    menuItemPlanifica,
+    menuItemEvalua,
+    menuItemMiCarrera,
+    menuItemEmpleo,
+    menuItemSalud,
+  ] = await evaluate([
+    menuItemInicioFlag,
+    menuItemPlanificaFlag,
+    menuItemEvaluaFlag,
+    menuItemMiCarreraFlag,
+    menuItemEmpleoFlag,
+    menuItemSaludFlag,
   ])
 
   return {
-    inicio,
-    planifica,
-    evalua,
-    miCarrera,
-    empleo,
-    salud,
+    menuItemInicio,
+    menuItemPlanifica,
+    menuItemEvalua,
+    menuItemMiCarrera,
+    menuItemEmpleo,
+    menuItemSalud,
   }
 }

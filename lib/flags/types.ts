@@ -1,8 +1,8 @@
 export type RoadmapCategoryFlags = {
-  inicio: boolean
-  planifica: boolean
-  evalua: boolean
-  miCarrera: boolean
-  empleo: boolean
-  salud: boolean
+  menuItemInicio: boolean
+  menuItemPlanifica: boolean
+  menuItemEvalua: boolean
+  menuItemMiCarrera: boolean
+  menuItemEmpleo: boolean
+  menuItemSalud: boolean
 }

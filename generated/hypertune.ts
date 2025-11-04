@@ -8,12 +8,12 @@ export type Context = {
 }
 
 export type RootFlagValues = {
-  roadmapInicio: boolean
-  roadmapPlanifica: boolean
-  roadmapEvalua: boolean
-  roadmapMiCarrera: boolean
-  roadmapEmpleo: boolean
-  roadmapSalud: boolean
+  menuItemInicio: boolean
+  menuItemPlanifica: boolean
+  menuItemEvalua: boolean
+  menuItemMiCarrera: boolean
+  menuItemEmpleo: boolean
+  menuItemSalud: boolean
 }
 
 type FlagDefinition = {
@@ -28,21 +28,21 @@ type CreateSourceOptions = {
 }
 
 const defaultFlagValues: RootFlagValues = {
-  roadmapInicio: true,
-  roadmapPlanifica: true,
-  roadmapEvalua: true,
-  roadmapMiCarrera: true,
-  roadmapEmpleo: true,
-  roadmapSalud: true,
+  menuItemInicio: true,
+  menuItemPlanifica: true,
+  menuItemEvalua: true,
+  menuItemMiCarrera: true,
+  menuItemEmpleo: true,
+  menuItemSalud: true,
 }
 
 const envFlagKeyMap: Record<keyof RootFlagValues, string> = {
-  roadmapInicio: 'NEXT_PUBLIC_FEATURE_INICIO',
-  roadmapPlanifica: 'NEXT_PUBLIC_FEATURE_PLANIFICA',
-  roadmapEvalua: 'NEXT_PUBLIC_FEATURE_EVALUA',
-  roadmapMiCarrera: 'NEXT_PUBLIC_FEATURE_MI_CARRERA',
-  roadmapEmpleo: 'NEXT_PUBLIC_FEATURE_EMPLEO',
-  roadmapSalud: 'NEXT_PUBLIC_FEATURE_SALUD',
+  menuItemInicio: 'NEXT_PUBLIC_FEATURE_MENU_ITEM_INICIO',
+  menuItemPlanifica: 'NEXT_PUBLIC_FEATURE_MENU_ITEM_PLANIFICA',
+  menuItemEvalua: 'NEXT_PUBLIC_FEATURE_MENU_ITEM_EVALUA',
+  menuItemMiCarrera: 'NEXT_PUBLIC_FEATURE_MENU_ITEM_MI_CARRERA',
+  menuItemEmpleo: 'NEXT_PUBLIC_FEATURE_MENU_ITEM_EMPLEO',
+  menuItemSalud: 'NEXT_PUBLIC_FEATURE_MENU_ITEM_SALUD',
 }
 
 const parseBooleanEnv = (value?: string | null): boolean | undefined => {
@@ -85,24 +85,24 @@ export const vercelFlagDefinitions: Record<
   keyof RootFlagValues,
   FlagDefinition
 > = {
-  roadmapInicio: {
-    description: 'Controla la visibilidad de la categoría "Inicio" en la barra lateral.',
+  menuItemInicio: {
+    description: 'Controla la visibilidad del ítem de menú "Inicio" en la barra lateral.',
   },
-  roadmapPlanifica: {
+  menuItemPlanifica: {
     description:
       'Activa la categoría "Planifica" del roadmap para los usuarios del panel.',
   },
-  roadmapEvalua: {
+  menuItemEvalua: {
     description:
       'Permite mostrar las herramientas de evaluación dentro del dashboard.',
   },
-  roadmapMiCarrera: {
+  menuItemMiCarrera: {
     description: 'Gestiona el acceso a la categoría "Mi Carrera".',
   },
-  roadmapEmpleo: {
+  menuItemEmpleo: {
     description: 'Habilita las funcionalidades relacionadas con empleo.',
   },
-  roadmapSalud: {
+  menuItemSalud: {
     description: 'Expone las herramientas de bienestar y salud.',
   },
 }
