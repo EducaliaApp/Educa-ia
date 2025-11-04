@@ -288,11 +288,13 @@ export default function SettingsPage() {
           <div className="flex justify-between py-2 border-b">
             <span className="text-gray-600">Cuenta creada</span>
             <span className="font-medium">
-              {new Date(profile?.created_at).toLocaleDateString('es-CL', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
+              {profile?.created_at
+                ? new Date(profile.created_at).toLocaleDateString('es-CL', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })
+                : '—'}
             </span>
           </div>
           <div className="flex justify-between py-2 border-b">
