@@ -14,6 +14,12 @@ export default function AuthCallbackClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const queryString = useMemo(() => searchParams.toString(), [searchParams])
+  const nextPath = useMemo(() => {
+    const params = new URLSearchParams(queryString)
+    const requestedPath = params.get('next') ?? '/dashboard'
+
+    return requestedPath.startsWith('/') ? requestedPath : `/${requestedPath}`
+  }, [queryString])
   const [status, setStatus] = useState<CallbackStatus>('loading')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('Validando enlace de autenticación...')
@@ -69,7 +75,7 @@ export default function AuthCallbackClient() {
         setError('')
         setStatus('success')
         setMessage('Autenticación exitosa. Redirigiendo a tu panel...')
-        router.replace('/dashboard')
+        router.replace(nextPath)
         router.refresh()
       } catch (error) {
         if (isMissingSupabaseEnvError(error)) {
@@ -83,7 +89,7 @@ export default function AuthCallbackClient() {
     }
 
     handleAuth()
-  }, [queryString, router])
+  }, [nextPath, queryString, router])
 
   const handlePasswordUpdate = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -113,7 +119,7 @@ export default function AuthCallbackClient() {
 
       setStatus('success')
       setMessage('Tu contraseña se actualizó correctamente. Redirigiendo...')
-      router.replace('/dashboard')
+      router.replace(nextPath)
       router.refresh()
     } catch (error) {
       if (isMissingSupabaseEnvError(error)) {

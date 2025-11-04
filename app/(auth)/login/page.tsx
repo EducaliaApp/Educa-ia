@@ -1,56 +1,86 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
+import GoogleIcon from '@/components/icons/GoogleIcon'
 import { createClient } from '@/lib/supabase/client'
 import { SUPABASE_ENV_HINT, isMissingSupabaseEnvError } from '@/lib/supabase/config'
+import { getAuthCallbackUrl } from '@/lib/supabase/urls'
+import { storeLoginPayload } from '@/lib/auth/login-storage'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const router = useRouter()
+
+  useEffect(() => {
+    router.prefetch('/login/loading')
+  }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
+    const stored = storeLoginPayload({ email, password })
+
+    if (!stored) {
+      setError('No pudimos preparar tu inicio de sesión. Vuelve a intentarlo.')
+      setLoading(false)
+      return
+    }
+
+    router.push('/login/loading')
+  }
+
+  const handleGoogleSignIn = async () => {
+    setError('')
+    setGoogleLoading(true)
+
     try {
+      const redirectTo = getAuthCallbackUrl('/dashboard')
+
       const supabase = createClient()
 
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const { data, error: signInError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          queryParams: {
+            prompt: 'select_account',
+          },
+        },
       })
 
-      if (authError) {
-        setError(authError.message)
-        setLoading(false)
+      if (signInError) {
+        setError(signInError.message)
         return
       }
 
-      router.push('/dashboard')
-      router.refresh()
+      if (data?.url) {
+        window.location.href = data.url
+      }
     } catch (error) {
       if (isMissingSupabaseEnvError(error)) {
-        setError(`Configura ${SUPABASE_ENV_HINT} para iniciar sesión.`)
+        setError(`Configura ${SUPABASE_ENV_HINT} para iniciar sesión con Google.`)
       } else {
-        setError('Error inesperado al iniciar sesión')
+        setError('Error inesperado al conectar con Google')
       }
     } finally {
-      setLoading(false)
+      setGoogleLoading(false)
     }
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50 p-4">
       <div className="relative bg-white rounded-lg shadow-xl p-8 w-full max-w-md overflow-hidden">
-        {loading && (
+        {googleLoading && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-white/90 backdrop-blur-sm">
             <div className="relative flex items-center justify-center">
               <div className="h-16 w-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
@@ -66,7 +96,7 @@ export default function LoginPage() {
           <p className="text-gray-600 mt-2">Inicia sesión en tu cuenta</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4" aria-busy={loading}>
+        <form onSubmit={handleSubmit} className="space-y-4" aria-busy={loading || googleLoading}>
           <Input
             type="email"
             label="Email"
@@ -93,10 +123,32 @@ export default function LoginPage() {
             </div>
           )}
 
-          <Button type="submit" className="w-full" loading={loading}>
+          <Button type="submit" className="w-full" loading={loading} disabled={googleLoading || loading}>
             Iniciar Sesión
           </Button>
         </form>
+
+        <div className="mt-6 space-y-4">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center" aria-hidden="true">
+              <span className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-white px-2 text-gray-500">O continúa con</span>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full gap-2"
+            onClick={handleGoogleSignIn}
+            loading={googleLoading}
+            disabled={loading}
+          >
+            <GoogleIcon className="h-5 w-5" />
+            Google
+          </Button>
+        </div>
 
         <div className="mt-6 space-y-3 text-center text-sm text-gray-600">
           <p>
