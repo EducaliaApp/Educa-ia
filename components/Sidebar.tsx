@@ -2,7 +2,33 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, FileText, ClipboardCheck, Settings, Crown, LogOut } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import {
+  Home,
+  BookOpen,
+  ClipboardList,
+  GraduationCap,
+  Briefcase,
+  Heart,
+  FilePlus,
+  Files,
+  CheckCircle2,
+  BarChart3,
+  FolderOpen,
+  Target,
+  Award,
+  Medal,
+  Upload,
+  ShieldCheck,
+  Settings,
+  BookmarkCheck,
+  MessageCircle,
+  Users,
+  CalendarDays,
+  ListChecks,
+  Crown,
+  LogOut,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Button from './ui/Button'
 import { createClient } from '@/lib/supabase/client'
@@ -13,16 +39,254 @@ interface SidebarProps {
   profile: Profile
 }
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Planificaciones', href: '/dashboard/planificaciones', icon: FileText },
-  { name: 'Evaluaciones', href: '/dashboard/evaluaciones', icon: ClipboardCheck },
-  { name: 'Mi Cuenta', href: '/dashboard/settings', icon: Settings },
+interface NavigationLink {
+  name: string
+  icon: LucideIcon
+  href?: string
+  disabled?: boolean
+  children?: NavigationLink[]
+}
+
+interface NavigationSection {
+  name: string
+  icon: LucideIcon
+  href?: string
+  isEnabled: boolean
+  items?: NavigationLink[]
+}
+
+const parseFeatureFlag = (value?: string) => {
+  if (value === undefined) {
+    return true
+  }
+
+  return value.toLowerCase() === 'true'
+}
+
+const featureFlags = {
+  inicio: parseFeatureFlag(process.env.NEXT_PUBLIC_FEATURE_INICIO),
+  planifica: parseFeatureFlag(process.env.NEXT_PUBLIC_FEATURE_PLANIFICA),
+  evalua: parseFeatureFlag(process.env.NEXT_PUBLIC_FEATURE_EVALUA),
+  miCarrera: parseFeatureFlag(process.env.NEXT_PUBLIC_FEATURE_MI_CARRERA),
+  empleo: parseFeatureFlag(process.env.NEXT_PUBLIC_FEATURE_EMPLEO),
+  salud: parseFeatureFlag(process.env.NEXT_PUBLIC_FEATURE_SALUD),
+}
+
+const navigation: NavigationSection[] = [
+  {
+    name: 'Inicio',
+    icon: Home,
+    href: '/dashboard',
+    isEnabled: featureFlags.inicio,
+  },
+  {
+    name: 'Planifica',
+    icon: BookOpen,
+    isEnabled: featureFlags.planifica,
+    items: [
+      {
+        name: 'Crear Planificación',
+        href: '/dashboard/planificaciones/nueva',
+        icon: FilePlus,
+      },
+      {
+        name: 'Mis Planificaciones',
+        href: '/dashboard/planificaciones',
+        icon: Files,
+      },
+    ],
+  },
+  {
+    name: 'Evalúa',
+    icon: ClipboardList,
+    isEnabled: featureFlags.evalua,
+    items: [
+      {
+        name: 'Crear Evaluaciones',
+        href: '/dashboard/evaluaciones/nueva',
+        icon: FilePlus,
+      },
+      {
+        name: 'Corregir y Retroalimentar',
+        href: '/dashboard/evaluaciones',
+        icon: CheckCircle2,
+      },
+      {
+        name: 'Análisis de Resultados',
+        icon: BarChart3,
+        disabled: true,
+      },
+    ],
+  },
+  {
+    name: 'Mi Carrera',
+    icon: GraduationCap,
+    isEnabled: featureFlags.miCarrera,
+    items: [
+      {
+        name: 'Portafolio Docente',
+        icon: FolderOpen,
+        disabled: true,
+      },
+      {
+        name: 'Evaluación Docente',
+        icon: Target,
+        disabled: true,
+      },
+      {
+        name: 'Mis Certificados',
+        icon: Award,
+        children: [
+          {
+            name: 'Obtenidos',
+            icon: Medal,
+            disabled: true,
+          },
+          {
+            name: 'Cargados',
+            icon: Upload,
+            disabled: true,
+          },
+          {
+            name: 'Verificar Certificados',
+            icon: ShieldCheck,
+            disabled: true,
+          },
+        ],
+      },
+      {
+        name: 'Mi Perfil de Competencias',
+        icon: BarChart3,
+        disabled: true,
+      },
+      {
+        name: 'Configuración de Cuenta',
+        href: '/dashboard/settings',
+        icon: Settings,
+      },
+    ],
+  },
+  {
+    name: 'Empleo',
+    icon: Briefcase,
+    isEnabled: featureFlags.empleo,
+    items: [
+      {
+        name: 'Empleos para ti',
+        icon: Briefcase,
+        disabled: true,
+      },
+      {
+        name: 'Mis Postulaciones',
+        icon: ListChecks,
+        disabled: true,
+      },
+      {
+        name: 'Siguiendo',
+        icon: BookmarkCheck,
+        disabled: true,
+      },
+      {
+        name: 'Eventos',
+        icon: CalendarDays,
+        disabled: true,
+      },
+    ],
+  },
+  {
+    name: 'Salud',
+    icon: Heart,
+    isEnabled: featureFlags.salud,
+    items: [
+      {
+        name: '¿Necesitas Charlar?',
+        icon: MessageCircle,
+        disabled: true,
+      },
+      {
+        name: 'Profesionales de salud',
+        icon: Users,
+        disabled: true,
+      },
+      {
+        name: 'Eventos',
+        icon: CalendarDays,
+        disabled: true,
+      },
+    ],
+  },
 ]
 
 export default function Sidebar({ profile }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
+
+  const matchesPath = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`)
+
+  const isLinkActive = (link: NavigationLink): boolean => {
+    if (!link.disabled && link.href && matchesPath(link.href)) {
+      return true
+    }
+
+    if (link.children) {
+      return link.children.some(isLinkActive)
+    }
+
+    return false
+  }
+
+  const renderLinks = (links: NavigationLink[], depth = 0) =>
+    links.map((link) => {
+      const linkIsActive = isLinkActive(link)
+      const hasChildren = Boolean(link.children?.length)
+      const isInteractive = Boolean(link.href) && !link.disabled
+      const paddingClasses = depth === 0 ? 'pl-11 pr-3' : 'pl-16 pr-3'
+      const stateClasses = link.disabled
+        ? 'text-gray-400 cursor-not-allowed'
+        : linkIsActive
+        ? 'bg-primary text-white'
+        : isInteractive
+        ? 'text-gray-600 hover:bg-gray-100'
+        : 'text-gray-500'
+      const interactiveClasses = isInteractive ? 'transition-colors' : ''
+
+      const content = link.href && !link.disabled ? (
+        <Link
+          href={link.href}
+          className={cn(
+            'flex items-center gap-3 py-2 rounded-lg text-sm font-medium',
+            paddingClasses,
+            interactiveClasses,
+            stateClasses
+          )}
+        >
+          <link.icon className="h-4 w-4" />
+          <span>{link.name}</span>
+        </Link>
+      ) : (
+        <div
+          className={cn(
+            'flex items-center gap-3 py-2 rounded-lg text-sm font-medium',
+            paddingClasses,
+            interactiveClasses,
+            stateClasses
+          )}
+        >
+          <link.icon className="h-4 w-4" />
+          <span>{link.name}</span>
+        </div>
+      )
+
+      return (
+        <div key={link.name} className="space-y-1">
+          {content}
+          {hasChildren && (
+            <div className="space-y-1">{renderLinks(link.children!, depth + 1)}</div>
+          )}
+        </div>
+      )
+    })
 
   const handleSignOut = async () => {
     try {
@@ -55,23 +319,48 @@ export default function Sidebar({ profile }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 space-y-1">
-        {navigation.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+      <nav className="flex-1 px-4 py-2 space-y-4 overflow-y-auto">
+        {navigation.map((section) => {
+          if (!section.isEnabled) {
+            return null
+          }
+
+          const hasItems = Boolean(section.items?.length)
+          const sectionIsActive = hasItems
+            ? section.items!.some(isLinkActive)
+            : section.href
+            ? matchesPath(section.href)
+            : false
+
+          if (!hasItems && section.href) {
+            return (
+              <Link
+                key={section.name}
+                href={section.href}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-gray-700 hover:bg-gray-100',
+                  sectionIsActive && 'bg-primary text-white'
+                )}
+              >
+                <section.icon className="h-5 w-5" />
+                <span className="font-medium">{section.name}</span>
+              </Link>
+            )
+          }
+
           return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
-                isActive
-                  ? 'bg-primary text-white'
-                  : 'text-gray-700 hover:bg-gray-100'
-              )}
-            >
-              <item.icon className="h-5 w-5" />
-              <span className="font-medium">{item.name}</span>
-            </Link>
+            <div key={section.name} className="space-y-2">
+              <div
+                className={cn(
+                  'flex items-center gap-3 px-4 text-xs font-semibold uppercase tracking-wide text-gray-500',
+                  sectionIsActive && 'text-primary'
+                )}
+              >
+                <section.icon className="h-4 w-4" />
+                <span>{section.name}</span>
+              </div>
+              {section.items && <div className="space-y-1">{renderLinks(section.items)}</div>}
+            </div>
           )
         })}
       </nav>
