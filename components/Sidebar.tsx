@@ -34,9 +34,11 @@ import Button from './ui/Button'
 import { createClient } from '@/lib/supabase/client'
 import { isMissingSupabaseEnvError } from '@/lib/supabase/config'
 import type { Profile } from '@/lib/supabase/types'
+import type { RoadmapCategoryFlags } from '@/lib/flags/types'
 
 interface SidebarProps {
   profile: Profile
+  flags: RoadmapCategoryFlags
 }
 
 interface NavigationLink {
@@ -55,34 +57,19 @@ interface NavigationSection {
   items?: NavigationLink[]
 }
 
-const parseFeatureFlag = (value?: string) => {
-  if (value === undefined) {
-    return true
-  }
-
-  return value.toLowerCase() === 'true'
-}
-
-const featureFlags = {
-  inicio: parseFeatureFlag(process.env.NEXT_PUBLIC_FEATURE_INICIO),
-  planifica: parseFeatureFlag(process.env.NEXT_PUBLIC_FEATURE_PLANIFICA),
-  evalua: parseFeatureFlag(process.env.NEXT_PUBLIC_FEATURE_EVALUA),
-  miCarrera: parseFeatureFlag(process.env.NEXT_PUBLIC_FEATURE_MI_CARRERA),
-  empleo: parseFeatureFlag(process.env.NEXT_PUBLIC_FEATURE_EMPLEO),
-  salud: parseFeatureFlag(process.env.NEXT_PUBLIC_FEATURE_SALUD),
-}
-
-const navigation: NavigationSection[] = [
+const buildNavigation = (
+  flags: RoadmapCategoryFlags,
+): NavigationSection[] => [
   {
     name: 'Inicio',
     icon: Home,
     href: '/dashboard',
-    isEnabled: featureFlags.inicio,
+    isEnabled: flags.inicio,
   },
   {
     name: 'Planifica',
     icon: BookOpen,
-    isEnabled: featureFlags.planifica,
+    isEnabled: flags.planifica,
     items: [
       {
         name: 'Crear Planificación',
@@ -99,7 +86,7 @@ const navigation: NavigationSection[] = [
   {
     name: 'Evalúa',
     icon: ClipboardList,
-    isEnabled: featureFlags.evalua,
+    isEnabled: flags.evalua,
     items: [
       {
         name: 'Crear Evaluaciones',
@@ -121,7 +108,7 @@ const navigation: NavigationSection[] = [
   {
     name: 'Mi Carrera',
     icon: GraduationCap,
-    isEnabled: featureFlags.miCarrera,
+    isEnabled: flags.miCarrera,
     items: [
       {
         name: 'Portafolio Docente',
@@ -169,7 +156,7 @@ const navigation: NavigationSection[] = [
   {
     name: 'Empleo',
     icon: Briefcase,
-    isEnabled: featureFlags.empleo,
+    isEnabled: flags.empleo,
     items: [
       {
         name: 'Empleos para ti',
@@ -196,7 +183,7 @@ const navigation: NavigationSection[] = [
   {
     name: 'Salud',
     icon: Heart,
-    isEnabled: featureFlags.salud,
+    isEnabled: flags.salud,
     items: [
       {
         name: '¿Necesitas Charlar?',
@@ -217,9 +204,10 @@ const navigation: NavigationSection[] = [
   },
 ]
 
-export default function Sidebar({ profile }: SidebarProps) {
+export default function Sidebar({ profile, flags }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
+  const navigation = buildNavigation(flags)
 
   const matchesPath = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`)
