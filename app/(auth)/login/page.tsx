@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Button from '@/components/ui/Button'
@@ -9,6 +9,7 @@ import GoogleIcon from '@/components/icons/GoogleIcon'
 import { createClient } from '@/lib/supabase/client'
 import { SUPABASE_ENV_HINT, isMissingSupabaseEnvError } from '@/lib/supabase/config'
 import { getAuthCallbackUrl } from '@/lib/supabase/urls'
+import { storeLoginPayload } from '@/lib/auth/login-storage'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -18,36 +19,24 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const router = useRouter()
 
+  useEffect(() => {
+    router.prefetch('/login/loading')
+  }, [router])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
-    try {
-      const supabase = createClient()
+    const stored = storeLoginPayload({ email, password })
 
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (authError) {
-        setError(authError.message)
-        setLoading(false)
-        return
-      }
-
-      router.push('/dashboard')
-      router.refresh()
-    } catch (error) {
-      if (isMissingSupabaseEnvError(error)) {
-        setError(`Configura ${SUPABASE_ENV_HINT} para iniciar sesión.`)
-      } else {
-        setError('Error inesperado al iniciar sesión')
-      }
-    } finally {
+    if (!stored) {
+      setError('No pudimos preparar tu inicio de sesión. Vuelve a intentarlo.')
       setLoading(false)
+      return
     }
+
+    router.push('/login/loading')
   }
 
   const handleGoogleSignIn = async () => {
@@ -55,8 +44,9 @@ export default function LoginPage() {
     setGoogleLoading(true)
 
     try {
-      const supabase = createClient()
       const redirectTo = getAuthCallbackUrl('/dashboard')
+
+      const supabase = createClient()
 
       const { data, error: signInError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -90,7 +80,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50 p-4">
       <div className="relative bg-white rounded-lg shadow-xl p-8 w-full max-w-md overflow-hidden">
-        {(loading || googleLoading) && (
+        {googleLoading && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-white/90 backdrop-blur-sm">
             <div className="relative flex items-center justify-center">
               <div className="h-16 w-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
@@ -133,7 +123,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <Button type="submit" className="w-full" loading={loading} disabled={googleLoading}>
+          <Button type="submit" className="w-full" loading={loading} disabled={googleLoading || loading}>
             Iniciar Sesión
           </Button>
         </form>
