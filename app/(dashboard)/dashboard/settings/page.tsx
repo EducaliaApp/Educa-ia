@@ -9,7 +9,7 @@ import Select from '@/components/ui/Select'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import Loading from '@/components/ui/Loading'
 import { useToast } from '@/components/ui/Toast'
-import { createClient } from '@/lib/supabase/client'
+import type { Profile } from '@/lib/supabase/types'
 
 const ASIGNATURAS = [
   { value: 'matematica', label: 'Matemática' },
@@ -39,13 +39,61 @@ const NIVELES = [
   { value: '4_medio', label: '4° Medio' },
 ]
 
+type UpdateProfilePayload = {
+  nombre: string
+  asignatura: string
+  nivel: string
+}
+
+type ApiProfileResponse = {
+  profile: Profile
+}
+
+type ApiErrorResponse = {
+  error: string
+}
+
+async function fetchProfileFromApi(): Promise<ApiProfileResponse> {
+  const response = await fetch('/api/profile', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as ApiErrorResponse | null
+    const message = data?.error ?? 'Error al cargar perfil'
+    throw new Error(message)
+  }
+
+  return (await response.json()) as ApiProfileResponse
+}
+
+async function updateProfileThroughApi(payload: UpdateProfilePayload): Promise<ApiProfileResponse> {
+  const response = await fetch('/api/profile', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as ApiErrorResponse | null
+    const message = data?.error ?? 'Error al actualizar perfil'
+    throw new Error(message)
+  }
+
+  return (await response.json()) as ApiProfileResponse
+}
+
 export default function SettingsPage() {
   const { showToast } = useToast()
-  const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [profile, setProfile] = useState<any>(null)
-  const [formData, setFormData] = useState({
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [formData, setFormData] = useState<UpdateProfilePayload>({
     nombre: '',
     asignatura: '',
     nivel: '',
@@ -56,23 +104,16 @@ export default function SettingsPage() {
   }, [])
 
   const loadProfile = async () => {
+    setLoading(true)
+
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      const { profile } = await fetchProfileFromApi()
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      if (error) throw error
-
-      setProfile(data)
+      setProfile(profile)
       setFormData({
-        nombre: data.nombre || '',
-        asignatura: data.asignatura || '',
-        nivel: data.nivel || '',
+        nombre: profile.nombre ?? '',
+        asignatura: profile.asignatura ?? '',
+        nivel: profile.nivel ?? '',
       })
     } catch (error) {
       console.error('Error al cargar perfil:', error)
@@ -94,22 +135,19 @@ export default function SettingsPage() {
     setSaving(true)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('No autenticado')
+      const { profile: updatedProfile } = await updateProfileThroughApi({
+        nombre: formData.nombre,
+        asignatura: formData.asignatura,
+        nivel: formData.nivel,
+      })
 
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          nombre: formData.nombre,
-          asignatura: formData.asignatura,
-          nivel: formData.nivel,
-        })
-        .eq('id', user.id)
-
-      if (error) throw error
-
+      setProfile(updatedProfile)
+      setFormData({
+        nombre: updatedProfile.nombre ?? '',
+        asignatura: updatedProfile.asignatura ?? '',
+        nivel: updatedProfile.nivel ?? '',
+      })
       showToast('Perfil actualizado con éxito', 'success')
-      await loadProfile()
     } catch (error: any) {
       showToast(error.message || 'Error al actualizar perfil', 'error')
     } finally {
