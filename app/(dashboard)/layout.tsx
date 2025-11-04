@@ -4,6 +4,7 @@ import { ensureProfileForUser } from '@/lib/supabase/profiles'
 import type { Profile } from '@/lib/supabase/types'
 import Sidebar from '@/components/Sidebar'
 import { ToastProvider } from '@/components/ui/Toast'
+import { getRoadmapCategoryFlags } from '@/flags'
 
 export default async function DashboardLayout({
   children,
@@ -36,13 +37,14 @@ export default async function DashboardLayout({
   }
 
   const resolvedProfile = profile as Profile
+  const roadmapFlags = await getRoadmapCategoryFlags()
 
   return (
     <ToastProvider>
       <div className="flex h-screen overflow-hidden bg-gray-50">
         {/* Sidebar */}
         <aside className="hidden md:flex md:flex-col md:w-64 lg:w-72">
-          <Sidebar profile={resolvedProfile} />
+          <Sidebar profile={resolvedProfile} flags={roadmapFlags} />
         </aside>
 
         {/* Main content */}
