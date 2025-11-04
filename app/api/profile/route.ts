@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ensureProfileForUser, getProfileById } from '@/lib/supabase/profiles'
 
+export const dynamic = 'force-dynamic'
+
 const updateProfileSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
   asignatura: z.string().trim().min(1, 'La asignatura es obligatoria'),
@@ -69,8 +71,9 @@ export async function PUT(request: Request) {
 
     await ensureProfileForUser(user)
 
-    const { error: updateError } = await adminClient
-      .from('profiles')
+    const profilesQuery = adminClient.from('profiles') as any
+
+    const { error: updateError } = await profilesQuery
       .update({
         nombre: parsed.data.nombre,
         asignatura: parsed.data.asignatura,

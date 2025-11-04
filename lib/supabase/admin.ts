@@ -9,7 +9,7 @@ import type { Database } from './types'
  *
  * SECURITY: Never expose this client to the frontend!
  */
-export function createAdminClient(): SupabaseClient<Database, 'public'> {
+export function createAdminClient(): SupabaseClient<Database> {
   const { url } = getSupabaseConfig()
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -20,7 +20,7 @@ export function createAdminClient(): SupabaseClient<Database, 'public'> {
     )
   }
 
-  return createClient<Database, 'public'>(url, serviceRoleKey, {
+  return createClient<Database>(url, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
