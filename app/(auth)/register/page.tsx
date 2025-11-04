@@ -66,6 +66,13 @@ export default function RegisterPage() {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
+        options: {
+          data: {
+            nombre: formData.nombre,
+            asignatura: formData.asignatura,
+            nivel: formData.nivel,
+          },
+        },
       })
 
       if (authError) {
@@ -74,26 +81,7 @@ export default function RegisterPage() {
         return
       }
 
-      // Actualizar perfil con datos adicionales
-      if (authData.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            nombre: formData.nombre,
-            asignatura: formData.asignatura,
-            nivel: formData.nivel,
-          })
-          .eq('id', authData.user.id)
-
-        if (profileError) {
-          setError(profileError.message)
-          setLoading(false)
-          return
-        }
-      }
-
-      router.push('/dashboard')
-      router.refresh()
+      router.push(`/register/verify-email?email=${encodeURIComponent(formData.email)}`)
     } catch (error) {
       if (isMissingSupabaseEnvError(error)) {
         setError(`Configura ${SUPABASE_ENV_HINT} para crear una cuenta.`)
@@ -131,6 +119,7 @@ export default function RegisterPage() {
             value={formData.nombre}
             onChange={handleChange}
             required
+            autoComplete="name"
           />
 
           <Input
@@ -141,6 +130,7 @@ export default function RegisterPage() {
             value={formData.email}
             onChange={handleChange}
             required
+            autoComplete="email"
           />
 
           <Input
@@ -152,6 +142,7 @@ export default function RegisterPage() {
             onChange={handleChange}
             required
             minLength={6}
+            autoComplete="new-password"
           />
 
           <Select

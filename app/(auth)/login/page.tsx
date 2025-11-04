@@ -49,7 +49,16 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
+      <div className="relative bg-white rounded-lg shadow-xl p-8 w-full max-w-md overflow-hidden">
+        {loading && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-white/90 backdrop-blur-sm">
+            <div className="relative flex items-center justify-center">
+              <div className="h-16 w-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+              <span className="sr-only">Autenticando…</span>
+            </div>
+            <p className="text-primary font-medium animate-pulse">Validando tus credenciales…</p>
+          </div>
+        )}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">
             Profe<span className="text-primary">Flow</span>
@@ -57,7 +66,7 @@ export default function LoginPage() {
           <p className="text-gray-600 mt-2">Inicia sesión en tu cuenta</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" aria-busy={loading}>
           <Input
             type="email"
             label="Email"
@@ -65,6 +74,7 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            autoComplete="email"
           />
 
           <Input
@@ -74,6 +84,7 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            autoComplete="current-password"
           />
 
           {error && (
