@@ -15,19 +15,39 @@ SELECT cron.schedule(
   $$
 );
 
--- Job para procesar documentos pendientes
+-- Job para procesamiento en lote
 SELECT cron.schedule(
-  'procesar-documentos-pendientes',
-  '*/30 * * * *', -- Cada 30 minutos
+  'procesar-lote-documentos',
+  '*/15 * * * *', -- Cada 15 minutos
   $$
   SELECT
     net.http_post(
-      url := 'https://[TU-PROJECT].supabase.co/functions/v1/procesar-documento',
+      url := 'https://[TU-PROJECT].supabase.co/functions/v1/procesar-lote',
       headers := '{"Content-Type": "application/json", "Authorization": "Bearer ' || current_setting('app.service_role_key') || '"}'::jsonb,
-      body := jsonb_build_object('documento_id', d.id)
-    )
-  FROM documentos_oficiales d
-  WHERE d.procesado = FALSE
-  LIMIT 5;
+      body := '{"limite": 5}'::jsonb
+    ) as request_id;
+  $$
+);
+
+-- Job para auto-healing
+SELECT cron.schedule(
+  'auto-healing-sistema',
+  '0 */2 * * *', -- Cada 2 horas
+  $$
+  SELECT
+    net.http_post(
+      url := 'https://[TU-PROJECT].supabase.co/functions/v1/auto-healing',
+      headers := '{"Content-Type": "application/json", "Authorization": "Bearer ' || current_setting('app.service_role_key') || '"}'::jsonb,
+      body := '{}'::jsonb
+    ) as request_id;
+  $$
+);
+
+-- Job para limpieza de datos antiguos
+SELECT cron.schedule(
+  'limpiar-datos-antiguos',
+  '0 2 * * 0', -- Domingos a las 2 AM
+  $$
+  SELECT limpiar_datos_antiguos();
   $$
 );
