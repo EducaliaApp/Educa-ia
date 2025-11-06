@@ -132,28 +132,28 @@ export default async function AdminDashboard() {
           value={totalPlanificaciones?.length || 0}
           subtitle="Desde el inicio"
           icon={FileText}
-          iconColor="indigo"
+          iconColor="purple"
         />
         <MetricsCard
           title="Planificaciones Hoy"
           value={stats.planificaciones_today}
           subtitle="Generadas hoy"
           icon={Calendar}
-          iconColor="cyan"
+          iconColor="blue"
         />
         <MetricsCard
           title="Este Mes"
           value={planificacionesThisMonth?.length || 0}
           subtitle="Planificaciones del mes"
           icon={BookOpen}
-          iconColor="emerald"
+          iconColor="green"
         />
         <MetricsCard
           title="Total Evaluaciones"
           value={totalEvaluaciones?.length || 0}
           subtitle="Desde el inicio"
           icon={Star}
-          iconColor="amber"
+          iconColor="orange"
         />
       </div>
 
