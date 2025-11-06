@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "admin:create": "node scripts/create-admin.js",
+    "admin:create-sql": "node scripts/create-admin-sql.js",
+    "admin:setup": "echo 'Ejecuta el contenido de sql/admin/supabase-admin-setup.sql en Supabase SQL Editor'",
+    "flags:test": "node scripts/test-flags.js"
   },
   "dependencies": {
     "@flags-sdk/hypertune": "^0.3.1",

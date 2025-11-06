@@ -232,6 +232,14 @@ npm run start        # Ejecuta la aplicación en producción
 
 # Calidad de código
 npm run lint         # Ejecuta ESLint para revisar el código
+
+# Administración
+npm run admin:create     # Crear usuario administrador (requiere .env.local)
+npm run admin:create-sql # Generar SQL para crear admin manualmente
+npm run admin:setup      # Instrucciones para configurar políticas RLS
+
+# Feature Flags
+npm run flags:test       # Probar estado de feature flags
 ```
 
 ## 🔧 Configuración de Desarrollo

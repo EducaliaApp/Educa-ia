@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, FileText, BarChart3, ArrowLeft, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, FileText, BarChart3, Settings, ArrowLeft, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
@@ -31,6 +31,11 @@ const navItems: NavItem[] = [
     name: 'Analytics',
     href: '/admin/analytics',
     icon: BarChart3,
+  },
+  {
+    name: 'Sistema',
+    href: '/admin/system',
+    icon: Settings,
   },
 ]
 

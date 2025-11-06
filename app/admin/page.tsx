@@ -3,7 +3,7 @@ import { MetricsCard } from '@/components/admin/metrics-card'
 import { DashboardCharts } from '@/components/admin/dashboard-charts'
 import { RecentUsersTable } from '@/components/admin/recent-users-table'
 import { Badge } from '@/components/ui/Badge'
-import { Users, TrendingUp, DollarSign, FileText } from 'lucide-react'
+import { Users, TrendingUp, DollarSign, FileText, Activity, Calendar, BookOpen, Star } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 interface UserStats {
@@ -46,6 +46,20 @@ export default async function AdminDashboard() {
     planificaciones_today: 0,
     active_users_7d: 0,
   }
+
+  // Get additional metrics
+  const { data: totalPlanificaciones } = await supabase
+    .from('planificaciones')
+    .select('id', { count: 'exact' })
+  
+  const { data: totalEvaluaciones } = await supabase
+    .from('evaluaciones')
+    .select('id', { count: 'exact' })
+
+  const { data: planificacionesThisMonth } = await supabase
+    .from('planificaciones')
+    .select('id', { count: 'exact' })
+    .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString())
 
   // Get top users
   const { data: topUsers } = await supabase.rpc('get_top_users', { limit_count: 10 })
@@ -103,11 +117,43 @@ export default async function AdminDashboard() {
           iconColor="purple"
         />
         <MetricsCard
+          title="Usuarios Activos"
+          value={stats.active_users_7d}
+          subtitle="Últimos 7 días"
+          icon={Activity}
+          iconColor="orange"
+        />
+      </div>
+
+      {/* Secondary Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <MetricsCard
+          title="Total Planificaciones"
+          value={totalPlanificaciones?.length || 0}
+          subtitle="Desde el inicio"
+          icon={FileText}
+          iconColor="indigo"
+        />
+        <MetricsCard
           title="Planificaciones Hoy"
           value={stats.planificaciones_today}
-          subtitle={`${stats.active_users_7d} usuarios activos (7d)`}
-          icon={FileText}
-          iconColor="orange"
+          subtitle="Generadas hoy"
+          icon={Calendar}
+          iconColor="cyan"
+        />
+        <MetricsCard
+          title="Este Mes"
+          value={planificacionesThisMonth?.length || 0}
+          subtitle="Planificaciones del mes"
+          icon={BookOpen}
+          iconColor="emerald"
+        />
+        <MetricsCard
+          title="Total Evaluaciones"
+          value={totalEvaluaciones?.length || 0}
+          subtitle="Desde el inicio"
+          icon={Star}
+          iconColor="amber"
         />
       </div>
 
@@ -148,13 +194,24 @@ export default async function AdminDashboard() {
                     <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
                       Planificaciones
                     </th>
+                    <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
+                      Evaluaciones
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
                   {topUsers.map((user: TopUser, index: number) => (
                     <tr key={user.user_id} className="hover:bg-slate-800/50 transition-colors">
                       <td className="px-6 py-4">
-                        <span className="text-slate-400 font-medium">#{index + 1}</span>
+                        <div className="flex items-center gap-2">
+                          {index < 3 && (
+                            <div className={`w-2 h-2 rounded-full ${
+                              index === 0 ? 'bg-yellow-400' : 
+                              index === 1 ? 'bg-gray-400' : 'bg-amber-600'
+                            }`} />
+                          )}
+                          <span className="text-slate-400 font-medium">#{index + 1}</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-white font-medium">{user.nombre}</span>
@@ -170,6 +227,9 @@ export default async function AdminDashboard() {
                       </td>
                       <td className="px-6 py-4 text-white font-semibold">
                         {user.total_planificaciones}
+                      </td>
+                      <td className="px-6 py-4 text-slate-300 font-medium">
+                        {user.total_evaluaciones}
                       </td>
                     </tr>
                   ))}
@@ -188,6 +248,40 @@ export default async function AdminDashboard() {
       <div>
         <h2 className="text-xl font-bold text-white mb-4">Últimos 10 Usuarios Registrados</h2>
         <RecentUsersTable users={recentUsers || []} />
+      </div>
+
+      {/* Quick Actions */}
+      <div>
+        <h2 className="text-xl font-bold text-white mb-4">Acciones Rápidas</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <a href="/admin/usuarios" className="bg-slate-900 border border-slate-800 rounded-lg p-6 hover:bg-slate-800 transition-colors">
+            <div className="flex items-center gap-3">
+              <Users className="w-8 h-8 text-blue-400" />
+              <div>
+                <h3 className="text-white font-semibold">Gestionar Usuarios</h3>
+                <p className="text-slate-400 text-sm">Ver y administrar todos los usuarios</p>
+              </div>
+            </div>
+          </a>
+          <a href="/admin/planificaciones" className="bg-slate-900 border border-slate-800 rounded-lg p-6 hover:bg-slate-800 transition-colors">
+            <div className="flex items-center gap-3">
+              <FileText className="w-8 h-8 text-green-400" />
+              <div>
+                <h3 className="text-white font-semibold">Ver Planificaciones</h3>
+                <p className="text-slate-400 text-sm">Revisar todas las planificaciones</p>
+              </div>
+            </div>
+          </a>
+          <a href="/admin/analytics" className="bg-slate-900 border border-slate-800 rounded-lg p-6 hover:bg-slate-800 transition-colors">
+            <div className="flex items-center gap-3">
+              <TrendingUp className="w-8 h-8 text-purple-400" />
+              <div>
+                <h3 className="text-white font-semibold">Analytics Avanzados</h3>
+                <p className="text-slate-400 text-sm">Métricas detalladas y reportes</p>
+              </div>
+            </div>
+          </a>
+        </div>
       </div>
     </div>
   )
