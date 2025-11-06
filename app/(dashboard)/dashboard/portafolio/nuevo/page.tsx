@@ -1,12 +1,12 @@
 // app/(dashboard)/dashboard/portafolio/nuevo/page.tsx
-import { createServerClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 
 export const dynamic = 'force-dynamic'
 
 export default async function NuevoPortafolioPage() {
-  const supabase = await createServerClient()
+  const supabase = await createClient()
 
   const {
     data: { user },

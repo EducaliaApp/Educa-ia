@@ -1,5 +1,5 @@
 // app/(dashboard)/dashboard/portafolio/[id]/page.tsx
-import { createServerClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -14,7 +14,7 @@ interface Props {
 
 export default async function PortafolioDetallePage({ params }: Props) {
   const resolvedParams = await params
-  const supabase = await createServerClient()
+  const supabase = await createClient()
 
   const {
     data: { user },
