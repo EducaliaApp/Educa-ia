@@ -10,7 +10,8 @@
     "admin:create": "node scripts/create-admin.js",
     "admin:create-sql": "node scripts/create-admin-sql.js",
     "admin:setup": "echo 'Ejecuta el contenido de sql/admin/supabase-admin-setup.sql en Supabase SQL Editor'",
-    "flags:test": "node scripts/test-flags.js"
+    "flags:test": "node scripts/test-flags.js",
+    "seed:rubricas": "tsx scripts/seed-rubricas-mbe.ts"
   },
   "dependencies": {
     "@flags-sdk/hypertune": "^0.3.1",
@@ -44,6 +45,7 @@
     "eslint-config-next": "14.2.5",
     "postcss": "^8.4.41",
     "tailwindcss": "^3.4.9",
+    "tsx": "^4.20.6",
     "typescript": "^5.5.4"
   }
 }

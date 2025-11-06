@@ -1,8 +1,8 @@
 // hooks/useAIAnalysis.ts
 
 import { useState, useCallback } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { useToast } from '@/components/ui/use-toast'
+import { createBrowserClient } from '@supabase/ssr'
+// import { useToast } from '@/components/ui/use-toast'
 
 export interface AnalysisResult {
   criterios_evaluados: CriterioEvaluado[]
@@ -28,8 +28,11 @@ export function useAIAnalysis() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   
-  const supabase = createClientComponentClient()
-  const { toast } = useToast()
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+  // const { toast } = useToast()
 
   const analyzePlanificacion = useCallback(
     async (tareaId: string, contenido: any, modelo: string = 'gpt-4-turbo-preview') => {
@@ -63,31 +66,31 @@ export function useAIAnalysis() {
         const result = await response.json()
         
         setAnalysis(result.analisis)
-        
-        toast({
-          title: '✨ Análisis completado',
-          description: `Tu planificación ha sido evaluada. Nivel estimado: ${result.analisis.nivel_desempeño}`,
-          variant: 'default'
-        })
+
+        // toast({
+        //   title: '✨ Análisis completado',
+        //   description: `Tu planificación ha sido evaluada. Nivel estimado: ${result.analisis.nivel_desempeño}`,
+        //   variant: 'default'
+        // })
 
         return result.analisis
         
       } catch (err: any) {
         const errorMsg = err.message || 'Error al analizar'
         setError(errorMsg)
-        
-        toast({
-          title: 'Error en el análisis',
-          description: errorMsg,
-          variant: 'destructive'
-        })
-        
+
+        // toast({
+        //   title: 'Error en el análisis',
+        //   description: errorMsg,
+        //   variant: 'destructive'
+        // })
+
         return null
       } finally {
         setIsAnalyzing(false)
       }
     },
-    [supabase, toast]
+    [supabase]
   )
 
   const reset = useCallback(() => {
