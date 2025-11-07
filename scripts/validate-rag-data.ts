@@ -262,6 +262,9 @@ if (porDominio) {
   }
 }
 
+// Calcular rúbricas con embedding
+const rubricasConEmbedding = (totalRubricas || 0) - (rubricasSinEmbedding?.length || 0)
+
 // ============================================
 // 4. VALIDAR ÍNDICES VECTORIALES
 // ============================================
@@ -310,49 +313,62 @@ if (!indices) {
 
 console.log('\n🔎 Probando búsqueda vectorial...')
 
-try {
-  // Generar embedding de prueba (vector aleatorio normalizado)
-  const dimensiones = 1536
-  const vectorPrueba = Array.from({ length: dimensiones }, () => Math.random() - 0.5)
-  const norma = Math.sqrt(vectorPrueba.reduce((sum, v) => sum + v * v, 0))
-  const vectorNormalizado = vectorPrueba.map(v => v / norma)
+// Solo hacer test de búsqueda si hay datos en la base
+const hayDatos = totalChunks > 0 || rubricasConEmbedding > 0
 
-  const { data: resultadosBusqueda, error: errorBusqueda } = await supabase.rpc(
-    'buscar_rubricas_similares',
-    {
-      query_embedding: vectorNormalizado,
-      match_threshold: 0.5,
-      match_count: 5
+if (!hayDatos) {
+  resultados.push({
+    tipo: 'busqueda_vectorial_skip',
+    nivel: 'info',
+    mensaje: 'Test de búsqueda omitido (base de datos vacía)',
+    detalles: { motivo: 'No hay embeddings para buscar' }
+  })
+  console.log(`  ℹ️  Test de búsqueda omitido (base de datos vacía)`)
+} else {
+  try {
+    // Generar embedding de prueba (vector aleatorio normalizado)
+    const dimensiones = 1536
+    const vectorPrueba = Array.from({ length: dimensiones }, () => Math.random() - 0.5)
+    const norma = Math.sqrt(vectorPrueba.reduce((sum, v) => sum + v * v, 0))
+    const vectorNormalizado = vectorPrueba.map(v => v / norma)
+
+    const { data: resultadosBusqueda, error: errorBusqueda } = await supabase.rpc(
+      'buscar_rubricas_similares',
+      {
+        query_embedding: vectorNormalizado,
+        match_threshold: 0.5,
+        match_count: 5
+      }
+    )
+
+    if (errorBusqueda) {
+      erroresCriticos++
+      resultados.push({
+        tipo: 'busqueda_vectorial_fallo',
+        nivel: 'critical',
+        mensaje: 'Error en búsqueda vectorial',
+        detalles: { error: errorBusqueda.message }
+      })
+      console.log(`  🔴 Búsqueda vectorial FALLÓ: ${errorBusqueda.message}`)
+    } else {
+      resultados.push({
+        tipo: 'busqueda_vectorial_ok',
+        nivel: 'info',
+        mensaje: `Búsqueda vectorial funcional (${resultadosBusqueda?.length || 0} resultados)`,
+        detalles: { resultados: resultadosBusqueda?.length || 0 }
+      })
+      console.log(`  ✅ Búsqueda vectorial funciona (${resultadosBusqueda?.length || 0} resultados)`)
     }
-  )
-
-  if (errorBusqueda) {
+  } catch (error) {
     erroresCriticos++
     resultados.push({
-      tipo: 'busqueda_vectorial_fallo',
+      tipo: 'busqueda_vectorial_error',
       nivel: 'critical',
-      mensaje: 'Error en búsqueda vectorial',
-      detalles: { error: errorBusqueda.message }
+      mensaje: 'Excepción en búsqueda vectorial',
+      detalles: { error: error.message }
     })
-    console.log(`  🔴 Búsqueda vectorial FALLÓ: ${errorBusqueda.message}`)
-  } else {
-    resultados.push({
-      tipo: 'busqueda_vectorial_ok',
-      nivel: 'info',
-      mensaje: `Búsqueda vectorial funcional (${resultadosBusqueda?.length || 0} resultados)`,
-      detalles: { resultados: resultadosBusqueda?.length || 0 }
-    })
-    console.log(`  ✅ Búsqueda vectorial funciona (${resultadosBusqueda?.length || 0} resultados)`)
+    console.log(`  🔴 Excepción en búsqueda: ${error.message}`)
   }
-} catch (error) {
-  erroresCriticos++
-  resultados.push({
-    tipo: 'busqueda_vectorial_error',
-    nivel: 'critical',
-    mensaje: 'Excepción en búsqueda vectorial',
-    detalles: { error: error.message }
-  })
-  console.log(`  🔴 Excepción en búsqueda: ${error.message}`)
 }
 
 // ============================================

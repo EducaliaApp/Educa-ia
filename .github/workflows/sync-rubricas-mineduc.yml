@@ -181,7 +181,7 @@ jobs:
       - name: Ejecutar validación de chunks
         id: validate
         run: |
-          deno run --allow-net --allow-env scripts/validate-rag-data.ts
+          deno run --allow-net --allow-env --allow-write scripts/validate-rag-data.ts
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
