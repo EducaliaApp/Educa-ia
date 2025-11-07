@@ -2,7 +2,7 @@
 -- FIX: Asegurar que nivel_educativo use el tipo ENUM
 -- ============================================
 
--- Si la columna existe como TEXT, convertirla a ENUM
+-- Enfoque más eficiente en memoria: crear nueva columna y migrar datos
 DO $$
 BEGIN
   -- Verificar si la columna es de tipo text
@@ -12,9 +12,20 @@ BEGIN
       AND column_name = 'nivel_educativo'
       AND data_type IN ('text', 'character varying')
   ) THEN
-    -- Convertir de TEXT a ENUM con casting
-    ALTER TABLE rubricas_mbe
-      ALTER COLUMN nivel_educativo TYPE nivel_educativo USING nivel_educativo::nivel_educativo;
+    -- Agregar nueva columna temporal con tipo ENUM
+    ALTER TABLE rubricas_mbe ADD COLUMN nivel_educativo_new nivel_educativo;
+    
+    -- Migrar datos en lotes pequeños para evitar problemas de memoria
+    UPDATE rubricas_mbe 
+    SET nivel_educativo_new = nivel_educativo::nivel_educativo
+    WHERE nivel_educativo_new IS NULL;
+    
+    -- Eliminar columna antigua y renombrar la nueva
+    ALTER TABLE rubricas_mbe DROP COLUMN nivel_educativo;
+    ALTER TABLE rubricas_mbe RENAME COLUMN nivel_educativo_new TO nivel_educativo;
+    
+    -- Hacer la columna NOT NULL si es necesario
+    ALTER TABLE rubricas_mbe ALTER COLUMN nivel_educativo SET NOT NULL;
 
     RAISE NOTICE 'Columna nivel_educativo convertida de TEXT a ENUM';
   ELSE
@@ -22,27 +33,39 @@ BEGIN
   END IF;
 END $$;
 
+-- Agregar columna embedding si no existe
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'rubricas_mbe'
+      AND column_name = 'embedding'
+  ) THEN
+    ALTER TABLE rubricas_mbe ADD COLUMN embedding vector(1536);
+    RAISE NOTICE 'Columna embedding agregada a rubricas_mbe';
+  ELSE
+    RAISE NOTICE 'Columna embedding ya existe en rubricas_mbe';
+  END IF;
+END $$;
+
+-- Crear índice vectorial si no existe
+CREATE INDEX IF NOT EXISTS idx_rubricas_embedding
+  ON rubricas_mbe USING ivfflat (embedding vector_cosine_ops)
+  WITH (lists = 100);
+
 -- Recrear función con mejor manejo de tipos
-DROP FUNCTION IF EXISTS buscar_rubricas_similares(vector, float, int, int, text, nivel_educativo, text);
+DROP FUNCTION IF EXISTS buscar_rubricas_similares CASCADE;
 CREATE OR REPLACE FUNCTION buscar_rubricas_similares(
   query_embedding vector(1536),
   match_threshold float DEFAULT 0.7,
-  match_count int DEFAULT 5,
-  p_año_vigencia int DEFAULT NULL,
-  p_asignatura text DEFAULT NULL,
-  p_nivel text DEFAULT NULL,  -- Cambiado a TEXT para mejor compatibilidad
-  p_modalidad text DEFAULT 'regular'
+  match_count int DEFAULT 5
 )
 RETURNS TABLE (
   id uuid,
+  indicador_id text,
+  nombre_indicador text,
+  nivel_educativo text,
   asignatura text,
-  nivel_educativo text,  -- Retornar como TEXT
-  modalidad text,
-  dominio text,  -- Retornar como TEXT
-  estandar_numero int,
-  nombre_estandar text,
-  descripcion_estandar text,
-  contenido_texto text,
   similarity float
 )
 LANGUAGE plpgsql
@@ -51,22 +74,14 @@ BEGIN
   RETURN QUERY
   SELECT
     r.id,
-    r.asignatura,
-    r.nivel_educativo::text,  -- Cast explícito a TEXT
-    r.modalidad,
-    r.dominio::text,  -- Cast explícito a TEXT
-    r.estandar_numero,
-    r.nombre_estandar,
-    r.descripcion_estandar,
-    r.contenido_texto,
+    r.indicador_id,
+    r.nombre_indicador,
+    r.nivel_educativo::text,
+    COALESCE(r.asignatura, ''),
     (1 - (r.embedding <=> query_embedding))::float as similarity
   FROM rubricas_mbe r
   WHERE
-    (p_año_vigencia IS NULL OR r.año_vigencia = p_año_vigencia)
-    AND (p_asignatura IS NULL OR r.asignatura = p_asignatura)
-    AND (p_nivel IS NULL OR r.nivel_educativo::text = p_nivel)  -- Cast explícito
-    AND (p_modalidad IS NULL OR r.modalidad = p_modalidad)
-    AND r.embedding IS NOT NULL  -- Solo buscar en rúbricas con embedding
+    r.embedding IS NOT NULL
     AND (1 - (r.embedding <=> query_embedding)) > match_threshold
   ORDER BY r.embedding <=> query_embedding
   LIMIT match_count;
