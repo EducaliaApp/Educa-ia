@@ -29,7 +29,7 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
   SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-  SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+
 
 jobs:
   monitor-documentos:
@@ -55,7 +55,7 @@ jobs:
         run: |
           response=$(curl -X POST \
             "${{ secrets.SUPABASE_URL }}/functions/v1/monitor-documentos-oficiales" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
             -d '{"force": ${{ github.event.inputs.force_full_sync || false }}}')
 
