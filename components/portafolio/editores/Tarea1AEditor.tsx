@@ -9,7 +9,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
-import { Textarea } from '@/components/ui/Textarea'
+import Textarea from '@/components/ui/Textarea'
 import { Badge } from '@/components/ui/Badge'
 import {
   Form,
@@ -222,7 +222,7 @@ function ExperienciaCard({
             <CardTitle className="text-lg">
               Experiencia {experienceNumber}
             </CardTitle>
-            <Badge variant={completitud === 100 ? 'default' : 'secondary'}>
+            <Badge variant={completitud === 100 ? 'success' : 'warning'}>
               {completitud}% completado
             </Badge>
           </div>
@@ -319,7 +319,7 @@ function ExperienciaCard({
               <Card key={field.id} className="bg-gray-50">
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between mb-4">
-                    <Badge variant="outline">Actividad {index + 1}</Badge>
+                    <Badge variant="default">Actividad {index + 1}</Badge>
                     {!readOnly && (
                       <Button
                         type="button"

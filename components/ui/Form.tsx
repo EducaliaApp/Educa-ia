@@ -2,7 +2,7 @@
 'use client'
 
 import * as React from 'react'
-import { useFormContext, FormProvider, Controller } from 'react-hook-form'
+import { useFormContext, FormProvider, Controller, ControllerProps, FieldPath, FieldValues } from 'react-hook-form'
 import { cn } from '@/lib/utils'
 
 // Form Provider
@@ -15,7 +15,12 @@ type FormFieldContextValue = {
 
 const FormFieldContext = React.createContext<FormFieldContextValue>({} as FormFieldContextValue)
 
-const FormField = ({ ...props }: any) => {
+const FormField = <
+  TFieldValues extends FieldValues = FieldValues,
+  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
+>({
+  ...props
+}: ControllerProps<TFieldValues, TName>) => {
   return (
     <FormFieldContext.Provider value={{ name: props.name }}>
       <Controller {...props} />

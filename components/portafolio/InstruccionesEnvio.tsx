@@ -54,8 +54,8 @@ export function InstruccionesEnvio({
   // Determinar variante de badge según días restantes
   const getBadgeVariant = (dias: number | null) => {
     if (!dias) return 'default'
-    if (dias <= 7) return 'destructive'
-    if (dias <= 30) return 'default'
+    if (dias <= 7) return 'danger'
+    if (dias <= 30) return 'warning'
     return 'default'
   }
 
@@ -279,9 +279,9 @@ export function InstruccionesEnvio({
                 <p className="text-gray-600 mb-3">
                   Haz clic en <strong>"Enviar Portafolio"</strong> y confirma el envío.
                 </p>
-                <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
+                <Alert className="bg-red-50 border-red-300">
+                  <AlertTriangle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="text-red-800">
                     <strong>⚠️ IMPORTANTE:</strong> Una vez enviado, NO podrás hacer cambios. Asegúrate de que
                     todo esté correcto antes de confirmar.
                   </AlertDescription>

@@ -8,7 +8,7 @@ import * as z from 'zod'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
-import { Textarea } from '@/components/ui/Textarea'
+import Textarea from '@/components/ui/Textarea'
 import { Badge } from '@/components/ui/Badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
@@ -329,13 +329,12 @@ export function Modulo2Editor({
                     <p className="text-sm text-gray-600 mb-4">
                       MP4, MOV o AVI - Máximo 2GB - 40-45 minutos
                     </p>
-                    <label htmlFor="video-upload" className="cursor-pointer">
-                      <Button asChild variant="outline" disabled={readOnly}>
-                        <span>
-                          <FileVideo className="mr-2 h-4 w-4" />
-                          Seleccionar Archivo
-                        </span>
-                      </Button>
+                    <label
+                      htmlFor="video-upload"
+                      className="inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed border-2 border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-500 px-4 py-2 text-base cursor-pointer"
+                    >
+                      <FileVideo className="mr-2 h-4 w-4" />
+                      Seleccionar Archivo
                     </label>
                     <input
                       id="video-upload"
@@ -380,9 +379,9 @@ export function Modulo2Editor({
                   </div>
 
                   {uploadError && (
-                    <Alert variant="destructive" className="mt-3">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>{uploadError}</AlertDescription>
+                    <Alert className="bg-red-50 border-red-300 mt-3">
+                      <AlertCircle className="h-4 w-4 text-red-600" />
+                      <AlertDescription className="text-red-800">{uploadError}</AlertDescription>
                     </Alert>
                   )}
 

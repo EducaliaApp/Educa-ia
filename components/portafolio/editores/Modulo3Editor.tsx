@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Textarea } from '@/components/ui/Textarea'
+import Textarea from '@/components/ui/Textarea'
 import { Badge } from '@/components/ui/Badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
@@ -155,14 +155,14 @@ export function Modulo3Editor({
                 <Users className="h-5 w-5 text-purple-600" />
                 Parte Obligatoria
               </span>
-              <Badge variant="destructive">OBLIGATORIA</Badge>
+              <Badge variant="danger">OBLIGATORIA</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
             {/* A1: Relevancia del problema */}
             <div className="border-l-4 border-blue-500 pl-4">
               <div className="flex items-center gap-2 mb-2">
-                <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                <Badge variant="default" className="bg-blue-50 text-blue-700">
                   <Users className="h-3 w-3 mr-1" />
                   GRUPAL
                 </Badge>
@@ -198,7 +198,7 @@ export function Modulo3Editor({
             {/* A2: Reflexión conjunta y diálogo */}
             <div className="border-l-4 border-blue-500 pl-4">
               <div className="flex items-center gap-2 mb-2">
-                <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                <Badge variant="default" className="bg-blue-50 text-blue-700">
                   <Users className="h-3 w-3 mr-1" />
                   GRUPAL
                 </Badge>
@@ -277,7 +277,7 @@ export function Modulo3Editor({
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 Parte Voluntaria
-                <Badge variant="secondary">OPCIONAL</Badge>
+                <Badge variant="warning">OPCIONAL</Badge>
               </CardTitle>
               {!readOnly && (
                 <Button
@@ -316,7 +316,7 @@ export function Modulo3Editor({
               {/* A11: Reflexión sobre necesidades desde evidencia */}
               <div className="border-l-4 border-blue-500 pl-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                  <Badge variant="default" className="bg-blue-50 text-blue-700">
                     <Users className="h-3 w-3 mr-1" />
                     GRUPAL
                   </Badge>
@@ -351,7 +351,7 @@ export function Modulo3Editor({
               {/* A3: Seguimiento de implementación */}
               <div className="border-l-4 border-blue-500 pl-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                  <Badge variant="default" className="bg-blue-50 text-blue-700">
                     <Users className="h-3 w-3 mr-1" />
                     GRUPAL
                   </Badge>

@@ -7,7 +7,7 @@ import * as z from 'zod'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
-import { Textarea } from '@/components/ui/Textarea'
+import Textarea from '@/components/ui/Textarea'
 import {
   Form,
   FormControl,
@@ -24,7 +24,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 
 const seccionASchema = z.object({
   estrategia_descrita: z.string().min(100, 'Describe la estrategia con al menos 100 caracteres'),
-  instrumentos_utilizados: z.array(z.string().min(5)).min(1, 'Agrega al menos un instrumento'),
+  instrumentos_utilizados: z.array(z.object({ nombre: z.string().min(5) })).min(1, 'Agrega al menos un instrumento'),
   criterios_evaluacion: z.string().min(80, 'Describe los criterios con al menos 80 caracteres'),
   momento_aplicacion: z.string().min(50, 'Explica cuándo aplicarás esta evaluación'),
 })
@@ -123,7 +123,7 @@ export function Tarea2AEditor({ tareaId, initialData, onSave, readOnly = false }
               <div className="flex items-center justify-between">
                 <FormLabel>Instrumentos Utilizados <span className="text-red-500">*</span></FormLabel>
                 {!readOnly && (
-                  <Button type="button" variant="outline" size="sm" onClick={() => append('')}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => append({ nombre: '' })}>
                     <Plus className="h-4 w-4 mr-2" />
                     Agregar Instrumento
                   </Button>
@@ -133,7 +133,7 @@ export function Tarea2AEditor({ tareaId, initialData, onSave, readOnly = false }
                 <div key={field.id} className="flex gap-2">
                   <FormField
                     control={form.control}
-                    name={`instrumentos_utilizados.${index}`}
+                    name={`instrumentos_utilizados.${index}.nombre` as any}
                     render={({ field }) => (
                       <FormItem className="flex-1">
                         <FormControl>

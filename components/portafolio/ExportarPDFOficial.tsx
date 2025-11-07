@@ -115,9 +115,9 @@ export function ExportarPDFOficial({
                 </AlertDescription>
               </Alert>
             ) : (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
+              <Alert className="bg-red-50 border-red-300">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800">
                   <strong>Portafolio incompleto.</strong> Faltan:
                   <ul className="list-disc list-inside mt-2 space-y-1">
                     {faltantes.map((item, index) => (
@@ -167,7 +167,7 @@ export function ExportarPDFOficial({
         <div className="flex items-center justify-between pt-4 border-t border-green-200">
           <div className="flex items-center gap-2">
             {lastGenerated && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="success" className="text-xs">
                 <FileCheck className="h-3 w-3 mr-1" />
                 Generado hace poco
               </Badge>

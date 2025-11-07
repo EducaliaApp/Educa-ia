@@ -46,8 +46,8 @@ export class GeneradorPDFOficialMINEDUC {
   private margin: number = 20
   private yPosition: number = 20
   private lineHeight: number = 7
-  private readonly PRIMARY_COLOR = [37, 99, 235] // Blue-600
-  private readonly SECONDARY_COLOR = [107, 114, 128] // Gray-500
+  private readonly PRIMARY_COLOR: [number, number, number] = [37, 99, 235] // Blue-600
+  private readonly SECONDARY_COLOR: [number, number, number] = [107, 114, 128] // Gray-500
 
   constructor() {
     this.doc = new jsPDF({

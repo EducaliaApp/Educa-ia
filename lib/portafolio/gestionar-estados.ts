@@ -21,7 +21,7 @@ export async function marcarComoEnviado(
 ): Promise<TransicionEstadoResultado> {
   try {
     // 1. Obtener portafolio completo con todos sus módulos y tareas
-    const { data: portafolio, error: fetchError } = await supabase
+    const { data: portafolio, error: fetchError } = (await supabase
       .from('portafolios')
       .select(
         `
@@ -33,7 +33,7 @@ export async function marcarComoEnviado(
       `
       )
       .eq('id', portafolioId)
-      .single()
+      .single()) as { data: any; error: any }
 
     if (fetchError || !portafolio) {
       return {
@@ -62,8 +62,8 @@ export async function marcarComoEnviado(
     }
 
     // 4. Actualizar estado a 'enviado'
-    const { error: updateError } = await supabase
-      .from('portafolios')
+    const portafoliosTable: any = supabase.from('portafolios')
+    const { error: updateError } = await portafoliosTable
       .update({
         estado: 'enviado',
         submitted_at: new Date().toISOString(),
@@ -101,11 +101,11 @@ export async function cambiarEstadoPortafolio(
 ): Promise<TransicionEstadoResultado> {
   try {
     // Obtener estado actual
-    const { data: portafolio, error: fetchError } = await supabase
+    const { data: portafolio, error: fetchError } = (await supabase
       .from('portafolios')
       .select('estado')
       .eq('id', portafolioId)
-      .single()
+      .single()) as { data: any; error: any }
 
     if (fetchError || !portafolio) {
       return {
@@ -141,8 +141,8 @@ export async function cambiarEstadoPortafolio(
       updateData.completado_at = new Date().toISOString()
     }
 
-    const { error: updateError } = await supabase
-      .from('portafolios')
+    const portafoliosTable2: any = supabase.from('portafolios')
+    const { error: updateError } = await portafoliosTable2
       .update(updateData)
       .eq('id', portafolioId)
 
@@ -217,11 +217,11 @@ export async function desbloquearPortafolio(
 ): Promise<TransicionEstadoResultado> {
   try {
     // Verificar que el usuario sea admin
-    const { data: profile } = await supabase
+    const { data: profile } = (await supabase
       .from('profiles')
       .select('role')
       .eq('id', userId)
-      .single()
+      .single()) as { data: any }
 
     if (profile?.role !== 'admin') {
       return {
@@ -231,8 +231,8 @@ export async function desbloquearPortafolio(
     }
 
     // Cambiar estado a completado
-    const { error: updateError } = await supabase
-      .from('portafolios')
+    const portafoliosTable3: any = supabase.from('portafolios')
+    const { error: updateError } = await portafoliosTable3
       .update({
         estado: 'completado',
         submitted_at: null,

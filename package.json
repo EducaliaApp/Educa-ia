@@ -21,6 +21,7 @@
     "@supabase/supabase-js": "^2.45.0",
     "@vercel/edge-config": "^1.4.3",
     "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "flags": "^4.0.1",
     "html2canvas": "^1.4.1",
