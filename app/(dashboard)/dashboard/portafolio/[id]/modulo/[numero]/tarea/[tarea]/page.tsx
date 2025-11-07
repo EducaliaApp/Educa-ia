@@ -199,7 +199,7 @@ export default async function TareaDetallePage({ params }: Props) {
               {analisisReciente && (
                 <Badge className="bg-purple-600">
                   <Sparkles className="h-3 w-3 mr-1" />
-                  Con Análisis IA
+                  Con Análisis LIA
                 </Badge>
               )}
             </div>
@@ -280,14 +280,14 @@ export default async function TareaDetallePage({ params }: Props) {
         </CardContent>
       </Card>
 
-      {/* Análisis IA y Feedback */}
+      {/* Análisis LIA y Feedback */}
       {analisisReciente && evaluaciones.length > 0 ? (
         <>
           {/* Análisis Display */}
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Sparkles className="h-6 w-6 text-purple-600" />
-              Análisis IA
+              Análisis LIA
             </h2>
             <AnalisisDisplay
               analisis={{
@@ -327,13 +327,13 @@ export default async function TareaDetallePage({ params }: Props) {
           <div className="p-8 text-center">
             <Sparkles className="h-12 w-12 text-blue-600 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Análisis IA No Disponible
+              Análisis LIA No Disponible
             </h3>
             <p className="text-gray-600 mb-4">
-              Esta tarea aún no ha sido analizada por IA. Completa el contenido y solicita un análisis.
+              Esta tarea aún no ha sido analizada por LIA. Completa el contenido y solicita un análisis.
             </p>
             <Button>
-              Solicitar Análisis IA
+              Solicitar Análisis LIA
             </Button>
           </div>
         </Card>

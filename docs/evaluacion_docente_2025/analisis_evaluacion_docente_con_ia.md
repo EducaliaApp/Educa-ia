@@ -1,4 +1,4 @@
-# 🎯 MANUAL: SISTEMA DE ANÁLISIS DE PORTAFOLIO CON IA
+# 🎯 MANUAL: SISTEMA DE ANÁLISIS DE PORTAFOLIO CON LIA
 
 ## 📑 TABLA DE CONTENIDOS
 
@@ -17,17 +17,17 @@
 
 ### ¿Qué hace este sistema?
 
-El **Sistema de Análisis de Portafolio con IA** evalúa automáticamente cada tarea del portafolio docente usando:
+El **Sistema de Análisis de Portafolio con LIA** evalúa automáticamente cada tarea del portafolio docente usando:
 
 - **Rúbricas oficiales MINEDUC 2025**
-- **Motor de evaluación con IA** (Claude Sonnet 4 / GPT-4)
+- **Motor de evaluación con LIA** (Claude Sonnet 4 / GPT-4)
 - **Verificación rigurosa** de condiciones
 - **Feedback accionable** con evidencias
 
 ### Componentes
 ```
 ┌─────────────────────────────────────────────┐
-│     SISTEMA DE ANÁLISIS CON IA              │
+│     SISTEMA DE ANÁLISIS CON LIA              │
 └─────────────────────────────────────────────┘
         │
         ├─ Edge Functions (Supabase)
@@ -43,7 +43,7 @@ El **Sistema de Análisis de Portafolio con IA** evalúa automáticamente cada t
         │   ├─ Verifica condiciones
         │   └─ Calcula puntajes
         │
-        ├─ Evaluador IA (TypeScript)
+        ├─ Evaluador LIA (TypeScript)
         │   ├─ Claude Sonnet 4
         │   ├─ GPT-4 Turbo
         │   └─ Prompts especializados
@@ -74,7 +74,7 @@ Edge Function:
 ├─ 3. Cargar rúbricas relevantes (basica_1_6, matemática, 2025)
 ├─ 4. Para cada indicador:
 │   ├─ a. Construir prompt con condiciones específicas
-│   ├─ b. Llamar a IA (Claude/GPT)
+│   ├─ b. Llamar a LIA (Claude/GPT)
 │   ├─ c. Verificar cada condición
 │   ├─ d. Determinar nivel alcanzado (I/B/C/D)
 │   └─ e. Calcular puntaje (1.0 - 4.0)
@@ -128,7 +128,7 @@ supabase/
 │   │   └── index.ts
 │   └── shared/
 │       ├── rubricas-engine.ts      # Motor de rúbricas
-│       ├── ia-evaluator.ts         # Evaluador IA
+│       ├── ia-evaluator.ts         # Evaluador LIA
 │       ├── types.ts                # Tipos TypeScript
 │       └── utils.ts                # Utilidades
 ├── migrations/
@@ -380,12 +380,12 @@ export function AnalizadorTarea({ tareaId, modulo, numeroTarea, nombreTarea }: P
             {analizando ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Analizando con IA...
+                Analizando con LIA...
               </>
             ) : (
               <>
                 <CheckCircle className="mr-2 h-4 w-4" />
-                Analizar con IA
+                Analizar con LIA
               </>
             )}
           </Button>
@@ -1023,7 +1023,7 @@ export function setCachedRubricas(key: string, rubricas: any): void {
 }
 
 /**
- * Batching de evaluaciones para reducir llamadas a IA
+ * Batching de evaluaciones para reducir llamadas a LIA
  */
 export async function evaluarIndicadoresBatch(
   indicadores: any[],
@@ -1214,7 +1214,7 @@ export function CostDashboard() {
   
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">💰 Análisis de Costos IA</h2>
+      <h2 className="text-2xl font-bold">💰 Análisis de Costos LIA</h2>
       
       {/* Resumen del mes */}
       <div className="grid grid-cols-4 gap-4">
@@ -2157,7 +2157,7 @@ async function enviarNotificacionCritica(alertas: any[], stats: any) {
       body: JSON.stringify({
         from: 'alerts@tuapp.com',
         to: ['admin@tuapp.com'],
-        subject: '🚨 ALERTA CRÍTICA: Sistema de Análisis IA',
+        subject: '🚨 ALERTA CRÍTICA: Sistema de Análisis LIA',
         html: generarHTMLAlerta(alertas, stats)
       })
     })
@@ -2297,7 +2297,7 @@ async function analizarConTimeout(
 }
 ```
 
-### Problema 2: Rate limits de APIs de IA
+### Problema 2: Rate limits de APIs de LIA
 
 **Síntoma:**
 

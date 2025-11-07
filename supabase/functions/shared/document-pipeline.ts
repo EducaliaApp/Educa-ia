@@ -1,5 +1,6 @@
-import { createClient } from "npm:@supabase/supabase-js@2.30.0";
-import { DocumentProcessor } from "./document-processor.ts";
+// @ts-nocheck
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { DocumentProcessor } from './document-processor.ts'
 import { AIAnalyzer } from "./ai-analyzer.ts";
 
 interface VersionSemantica {
@@ -25,10 +26,10 @@ interface PipelineResult {
 }
 
 export class DocumentPipeline {
-  private supabase: any;
-  private processor: DocumentProcessor;
-  private aiAnalyzer: AIAnalyzer;
-  private embeddingCache = new Map<string, number[]>();
+  private supabase: any
+  private processor: DocumentProcessor
+  private aiAnalyzer: AIAnalyzer
+  private embeddingCache = new Map<string, number[]>()
 
   stages = [
     'download',
@@ -41,13 +42,13 @@ export class DocumentPipeline {
     'notify'
   ];
 
-  constructor() {
-    this.supabase = createClient(
+  constructor(supabaseClient?: any) {
+    this.supabase = supabaseClient ?? createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
-    this.processor = new DocumentProcessor();
-    this.aiAnalyzer = new AIAnalyzer();
+    )
+    this.processor = new DocumentProcessor(this.supabase)
+    this.aiAnalyzer = new AIAnalyzer()
   }
 
   async process(document: any): Promise<PipelineResult> {

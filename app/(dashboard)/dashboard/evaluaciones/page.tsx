@@ -30,7 +30,7 @@ export default async function EvaluacionesPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Evaluaciones</h1>
           <p className="text-gray-600 mt-2">
-            Evalúa trabajos de estudiantes con IA
+            Evalúa trabajos de estudiantes con LIA
           </p>
         </div>
         <Link href="/dashboard/evaluaciones/nueva">
@@ -63,7 +63,7 @@ export default async function EvaluacionesPage() {
                       {feedback && (
                         <div className="mt-3 pt-3 border-t border-gray-200">
                           <p className="text-sm text-gray-700 font-medium">
-                            Feedback generado por IA disponible
+                            Feedback generado por LIA disponible
                           </p>
                         </div>
                       )}
@@ -91,7 +91,7 @@ export default async function EvaluacionesPage() {
               No tienes evaluaciones aún
             </h3>
             <p className="text-gray-600 mb-6">
-              Evalúa trabajos de estudiantes con retroalimentación generada por IA
+              Evalúa trabajos de estudiantes con retroalimentación generada por LIA
             </p>
             <Link href="/dashboard/evaluaciones/nueva">
               <Button variant="secondary">

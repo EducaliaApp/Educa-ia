@@ -217,7 +217,7 @@ SELECT buscar_chunks_similares(
 ```
 
 ### Casos de Uso
-- Asistente IA para profesores
+- Asistente LIA para profesores
 - Validación automática de portafolios
 - Generación de feedback contextualizado
 - Búsqueda de criterios específicos

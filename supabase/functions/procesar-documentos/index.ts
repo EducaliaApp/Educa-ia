@@ -1,19 +1,13 @@
-import { createClient } from "npm:@supabase/supabase-js@2.30.0";
-import { getDocument } from "npm:pdfjs-dist@3.11.174";
-import { DocumentProcessor } from "../shared/document-processor.ts";
-import { AIAnalyzer } from "../shared/ai-analyzer.ts";
+// @ts-nocheck
+import { getDocument } from 'npm:pdfjs-dist@3.11.174'
+import { DocumentProcessor } from '../shared/document-processor.ts'
+import { AIAnalyzer } from '../shared/ai-analyzer.ts'
+import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.ts'
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
 if (!OPENAI_API_KEY) throw new Error('Missing OPENAI_API_KEY');
 
-const processor = new DocumentProcessor();
-const aiAnalyzer = new AIAnalyzer();
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-  { auth: { persistSession: false } }
-);
-async function createEmbeddings(inputs: string[]) {
+async function createEmbeddings(processor: DocumentProcessor, inputs: string[]) {
   return processor.processWithRetry(async () => {
     const res = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
@@ -44,7 +38,7 @@ async function blobFromResponse(res: any) {
   }
   throw new Error('Unsupported download response format');
 }
-async function extraerTextoDePDF(arrayBuffer: ArrayBuffer) {
+async function extraerTextoDePDF(processor: DocumentProcessor, arrayBuffer: ArrayBuffer) {
   if (!await processor.validatePDF(arrayBuffer)) {
     throw new Error('Archivo PDF inválido o corrupto');
   }
@@ -198,14 +192,14 @@ function chunkearDocumento(texto: string, documento: any) {
   if (documento.tipo_documento === 'mbe') return chunkearMBE(texto, documento);
   return chunkearGenerico(texto, documento);
 }
-async function generarEmbeddings(chunks: any[]) {
+async function generarEmbeddings(chunks: any[], processor: DocumentProcessor) {
   console.log(`🔢 Generando embeddings para ${chunks.length} chunks...`);
   const BATCH_SIZE = 20;
   const result = [];
   for(let i = 0; i < chunks.length; i += BATCH_SIZE){
     const batch = chunks.slice(i, i + BATCH_SIZE);
     const inputs = batch.map((c: any) => c.contenido);
-    const embeddings = await createEmbeddings(inputs);
+  const embeddings = await createEmbeddings(processor, inputs);
     for(let j = 0; j < batch.length; j++)result.push({
       ...batch[j],
       embedding: embeddings[j]
@@ -217,6 +211,9 @@ async function generarEmbeddings(chunks: any[]) {
 // Main handler
 Deno.serve(async (req: Request) => {
   try {
+    const supabase = crearClienteServicio(req)
+    const processor = new DocumentProcessor(supabase)
+    const aiAnalyzer = new AIAnalyzer()
     const { documento_id } = await req.json();
     console.log(`📄 Procesando documento: ${documento_id}`);
     const { data: documento, error } = await supabase.from('documentos_oficiales').select('*').eq('id', documento_id).single();
@@ -225,9 +222,9 @@ Deno.serve(async (req: Request) => {
     const download = await supabase.storage.from('documentos-oficiales').download(documento.storage_path);
     if (download.error) throw download.error;
     const arrayBuffer = await blobFromResponse(download.data);
-    const textoCompleto = await extraerTextoDePDF(arrayBuffer);
+    const textoCompleto = await extraerTextoDePDF(processor, arrayBuffer);
     
-    // Clasificación inteligente con IA
+    // Clasificación inteligente con LIA
     const clasificacionIA = await aiAnalyzer.clasificarDocumento(textoCompleto);
     
     // Validar coherencia entre clasificación y tipo esperado
@@ -238,10 +235,10 @@ Deno.serve(async (req: Request) => {
     // Extraer entidades educativas
     const entidades = await aiAnalyzer.extraerEntidades(textoCompleto);
     
-    const chunks = await chunkearDocumento(textoCompleto, documento);
-    const chunksConEmbeddings = await generarEmbeddings(chunks);
+  const chunks = await chunkearDocumento(textoCompleto, documento);
+  const chunksConEmbeddings = await generarEmbeddings(chunks, processor);
     for (const chunk of chunksConEmbeddings){
-      const insertRes = await supabase.from('chunks_documentos').insert({
+  const insertRes = await supabase.from('chunks_documentos').insert({
         documento_id: documento.id,
         contenido: chunk.contenido,
         chunk_index: chunk.index,
@@ -287,6 +284,17 @@ Deno.serve(async (req: Request) => {
       }
     });
   } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return new Response(JSON.stringify({
+        error: 'No autorizado'
+      }), {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+
     console.error('Error procesando documento:', error);
     return new Response(JSON.stringify({
       error: String(error.message || error)

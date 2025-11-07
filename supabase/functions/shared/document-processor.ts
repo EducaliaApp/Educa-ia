@@ -1,4 +1,5 @@
-import { createClient } from "npm:@supabase/supabase-js@2.30.0";
+// @ts-nocheck
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 interface LogEvent {
   timestamp: string
@@ -12,11 +13,11 @@ export class DocumentProcessor {
   private supabase: any;
   private logs: LogEvent[] = [];
 
-  constructor() {
-    this.supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
+    constructor(supabaseClient?: any) {
+      this.supabase = supabaseClient ?? createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      );
   }
 
   private log(level: LogEvent['level'], component: string, event: string, metadata: any = {}) {

@@ -72,7 +72,7 @@ export function ModuloCard({
               {getModuloDescripcion(numero_modulo)}
             </p>
           </div>
-          <Badge className={completado ? 'bg-green-600' : 'bg-yellow-600'}>
+          <Badge className={completado ? 'bg-green-600 text-white' : 'bg-orange-500 text-white'}>
             {completado ? 'Completado' : 'En Progreso'}
           </Badge>
         </div>
@@ -125,11 +125,12 @@ export function ModuloCard({
               Ver Módulo
             </Button>
           </Link>
-          {!completado && (
+          {!completado && tareas.length > 0 && (
             <Link
-              href={`/dashboard/portafolio/${portafolioId}/modulo/${numero_modulo}/editar`}
+              href={`/dashboard/portafolio/${portafolioId}/modulo/${numero_modulo}/tarea/${tareas.find(t => !t.completado)?.numero_tarea || 1}`}
+              className="flex-1"
             >
-              <Button>
+              <Button className="w-full">
                 Continuar
               </Button>
             </Link>

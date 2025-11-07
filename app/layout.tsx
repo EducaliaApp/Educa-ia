@@ -3,7 +3,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'ProfeFlow - Planificación Inteligente para Profesores',
-  description: 'Herramienta de planificación curricular con IA para profesores chilenos',
+  description: 'Herramienta de planificación curricular con LIA para profesores chilenos',
 }
 
 export default function RootLayout({

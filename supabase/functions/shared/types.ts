@@ -21,7 +21,7 @@ export interface Condicion {
   verificable_automaticamente: boolean
   requiere_evidencia_textual: boolean
   
-  // Para IA
+  // Para LIA
   prompt_verificacion: string
   palabras_clave?: string[]
   patrones_regex?: string[]

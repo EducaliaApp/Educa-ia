@@ -79,7 +79,7 @@ export function AnalisisDisplay({
         <div className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <Sparkles className="h-6 w-6 text-purple-600" />
-            <h2 className="text-2xl font-bold">Análisis IA - Resultados</h2>
+            <h2 className="text-2xl font-bold">Análisis LIA - Resultados</h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -246,7 +246,7 @@ export function AnalisisDisplay({
             <h3 className="text-lg font-semibold mb-4">Información del Análisis</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div>
-                <p className="text-gray-600">Modelo IA</p>
+                <p className="text-gray-600">Modelo LIA</p>
                 <p className="font-medium">{analisis.modelo_usado}</p>
               </div>
               <div>

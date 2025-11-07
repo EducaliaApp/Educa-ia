@@ -112,8 +112,8 @@ const buildNavigation = (
     items: [
       {
         name: 'Portafolio Docente',
+        href: '/dashboard/portafolio',
         icon: FolderOpen,
-        disabled: true,
       },
       {
         name: 'Evaluación Docente',

@@ -27,7 +27,7 @@ export class IAEvaluator {
   }
   
   /**
-   * Verifica una condición usando IA
+   * Verifica una condición usando LIA
    */
   async verificarCondicion(
     prompt: string,

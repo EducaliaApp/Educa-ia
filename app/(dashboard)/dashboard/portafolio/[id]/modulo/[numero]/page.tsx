@@ -30,41 +30,36 @@ export default async function ModuloDetallePage({ params }: Props) {
     redirect(`/dashboard/portafolio/${resolvedParams.id}`)
   }
 
-  // Obtener portafolio con el módulo y sus tareas
-  const { data: portafolio, error } = await supabase
+  // Primero verificar que el portafolio pertenece al usuario
+  const { data: portafolioCheck, error: portafolioError } = await supabase
     .from('portafolios')
-    .select(`
-      *,
-      modulos:modulos_portafolio!inner(
-        *,
-        tareas:tareas_portafolio(
-          *,
-          analisis:analisis_ia_portafolio(
-            id,
-            puntaje_estimado,
-            categoria_logro,
-            nivel_desempeño,
-            created_at
-          )
-        )
-      )
-    `)
+    .select('id, profesor_id, asignatura, nivel_educativo, estado')
     .eq('id', resolvedParams.id)
     .eq('profesor_id', user.id)
-    .eq('modulos.numero_modulo', numeroModulo)
     .single()
 
-  if (error || !portafolio) {
+  if (portafolioError || !portafolioCheck) {
     redirect(`/dashboard/portafolio/${resolvedParams.id}`)
   }
 
-  // Cast to get proper types
-  const portafolioData = portafolio as any
-  if (!portafolioData.modulos || portafolioData.modulos.length === 0) {
+  // Obtener el módulo específico con sus tareas
+  const { data: modulo, error } = await supabase
+    .from('modulos_portafolio')
+    .select('*, tareas_portafolio(*, analisis_ia_portafolio(id, puntaje_estimado, categoria_logro, created_at))')
+    .eq('portafolio_id', resolvedParams.id)
+    .eq('numero_modulo', numeroModulo)
+    .single()
+
+  if (error || !modulo) {
     redirect(`/dashboard/portafolio/${resolvedParams.id}`)
   }
 
-  const modulo = portafolioData.modulos[0]
+  const portafolioData = portafolioCheck as any
+  // Mapear tareas_portafolio a la estructura esperada
+  const moduloData = {
+    ...(modulo as any),
+    tareas: (modulo as any).tareas_portafolio || []
+  }
 
   // Títulos y descripciones según el módulo
   const moduloInfo: Record<number, { titulo: string; descripcion: string; tareas: Array<{ nombre: string; descripcion: string }> }> = {
@@ -116,7 +111,7 @@ export default async function ModuloDetallePage({ params }: Props) {
                 <h1 className="text-3xl font-bold text-gray-900">
                   Módulo {numeroModulo}
                 </h1>
-                {modulo.completado ? (
+                {moduloData.completado ? (
                   <CheckCircle className="h-7 w-7 text-green-600" />
                 ) : (
                   <Clock className="h-7 w-7 text-yellow-600" />
@@ -129,15 +124,13 @@ export default async function ModuloDetallePage({ params }: Props) {
                 {info.descripcion}
               </p>
               <div className="flex items-center gap-4 text-sm text-gray-600">
-                <span>Portafolio {portafolioData.año_evaluacion}</span>
-                <span>•</span>
                 <span>{portafolioData.asignatura}</span>
                 <span>•</span>
                 <span>{portafolioData.nivel_educativo}</span>
               </div>
             </div>
-            <Badge className={modulo.completado ? 'bg-green-600' : 'bg-yellow-600'}>
-              {modulo.completado ? 'Completado' : 'En Progreso'}
+            <Badge className={moduloData.completado ? 'bg-green-600' : 'bg-yellow-600'}>
+              {moduloData.completado ? 'Completado' : 'En Progreso'}
             </Badge>
           </div>
 
@@ -145,12 +138,12 @@ export default async function ModuloDetallePage({ params }: Props) {
           <div className="mt-6">
             <div className="flex items-center justify-between text-sm mb-2">
               <span className="text-gray-600">Progreso del Módulo</span>
-              <span className="font-medium">{modulo.progreso_porcentaje}%</span>
+              <span className="font-medium">{moduloData.progreso_porcentaje}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-3">
               <div
                 className="bg-blue-600 h-3 rounded-full transition-all"
-                style={{ width: `${modulo.progreso_porcentaje}%` }}
+                style={{ width: `${moduloData.progreso_porcentaje}%` }}
               />
             </div>
           </div>
@@ -162,9 +155,9 @@ export default async function ModuloDetallePage({ params }: Props) {
         <h2 className="text-2xl font-bold text-gray-900 mb-4">Tareas del Módulo</h2>
       </div>
 
-      {modulo.tareas && modulo.tareas.length > 0 ? (
+      {moduloData.tareas && moduloData.tareas.length > 0 ? (
         <div className="space-y-4">
-          {modulo.tareas
+          {moduloData.tareas
             .sort((a: any, b: any) => a.numero_tarea - b.numero_tarea)
             .map((tarea: any, idx: number) => {
               const tareaInfo = info.tareas[idx] || { nombre: tarea.nombre_tarea, descripcion: '' }
@@ -190,12 +183,12 @@ export default async function ModuloDetallePage({ params }: Props) {
                           {tareaInfo.descripcion}
                         </p>
 
-                        {/* Análisis IA Badge */}
+                        {/* Análisis LIA Badge */}
                         {analisis && (
                           <div className="ml-9 mb-4 flex items-center gap-4">
                             <div className="flex items-center gap-2 text-sm">
                               <Sparkles className="h-4 w-4 text-purple-600" />
-                              <span className="text-gray-700">Análisis IA disponible</span>
+                              <span className="text-gray-700">Análisis LIA disponible</span>
                             </div>
                             {analisis.puntaje_estimado && (
                               <div className="flex items-center gap-2 text-sm">

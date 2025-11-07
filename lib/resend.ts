@@ -14,7 +14,7 @@ export async function sendWelcomeEmail(email: string, nombre: string) {
           <p>Estamos emocionados de tenerte con nosotros.</p>
           <p>Con ProfeFlow puedes:</p>
           <ul>
-            <li>Generar planificaciones curriculares con IA</li>
+            <li>Generar planificaciones curriculares con LIA</li>
             <li>Evaluar trabajos de estudiantes con retroalimentación inteligente</li>
             <li>Exportar todo a PDF de manera profesional</li>
           </ul>

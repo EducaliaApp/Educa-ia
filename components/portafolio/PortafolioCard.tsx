@@ -101,7 +101,7 @@ export function PortafolioCard({
               <div className="flex items-center justify-center text-gray-400 mb-1">
                 <TrendingUp className="h-4 w-4" />
               </div>
-              <p className="text-xs text-gray-500">Puntaje IA</p>
+              <p className="text-xs text-gray-500">Puntaje LIA</p>
               <p className="text-sm font-medium">{puntaje_estimado_ia.toFixed(1)}/4.0</p>
             </div>
           )}

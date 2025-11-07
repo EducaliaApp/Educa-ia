@@ -42,14 +42,18 @@ export function useAIAnalysis() {
       try {
         // Llamar a Edge Function
         const { data: { session } } = await supabase.auth.getSession()
-        
+
+        if (!session?.access_token) {
+          throw new Error('Tu sesión expiró. Inicia sesión nuevamente para continuar con el análisis.')
+        }
+
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/analizar-planificacion`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session?.access_token}`
+              'Authorization': `Bearer ${session.access_token}`
             },
             body: JSON.stringify({
               tarea_id: tareaId,

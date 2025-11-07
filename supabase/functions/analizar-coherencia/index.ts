@@ -33,11 +33,11 @@ Deno.serve(async (req: Request) => {
     // Preparar documentos para análisis
     const docsParaAnalisis = documentos.map(doc => ({
       id: doc.id,
-      texto: doc.contenido_texto.substring(0, 3000), // Limitar texto para IA
+      texto: doc.contenido_texto.substring(0, 3000), // Limitar texto para LIA
       tipo: doc.tipo_documento
     }));
     
-    // Análisis de coherencia con IA
+    // Análisis de coherencia con LIA
     const analisisCoherencia = await aiAnalyzer.analizarCoherencia(docsParaAnalisis);
     
     // Guardar resultados

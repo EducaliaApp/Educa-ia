@@ -1,5 +1,7 @@
+// @ts-nocheck
 import { assertEquals, assertExists } from "https://deno.land/std@0.168.0/testing/asserts.ts";
 import { createMockSupabaseClient, createMockPDFBuffer, createMockHTMLWithPDFs, mockDocumentos, mockTextos } from "./shared/test-utils.ts";
+import { procesarDocumentoNuevo, PROCESAR_DOCUMENTO_FUNCTION } from "./monitor-documentos-oficiales/index.ts";
 
 // Tests de integración para el flujo completo
 Deno.test("Flujo completo: monitor -> procesamiento", async () => {
@@ -164,3 +166,34 @@ Deno.test("Detección de cambios por hash funciona", async () => {
   const hash1_bis = await calcularHash(contenido1);
   assertEquals(hash1, hash1_bis);
 });
+
+Deno.test("Monitor invoca procesamiento en Supabase Functions", async () => {
+  const supabase = createMockSupabaseClient()
+  const pdfBuffer = createMockPDFBuffer()
+  const originalFetch = globalThis.fetch
+
+  globalThis.fetch = async () => {
+    return new Response(pdfBuffer, {
+      headers: { 'Content-Type': 'application/pdf' }
+    })
+  }
+
+  try {
+    const doc = {
+      nombre: 'Manual Portafolio Educación Básica 2025',
+      url: 'https://example.com/manual.pdf',
+      tipo: 'manuales',
+      año: 2025,
+      nivel_educativo: 'basica_1_6',
+      modalidad: 'regular'
+    }
+
+    const resultado = await procesarDocumentoNuevo(supabase, doc)
+    const invocaciones = supabase._getInvokedFunctions()
+
+    assertEquals(resultado.exito, true)
+    assertEquals(invocaciones.includes(PROCESAR_DOCUMENTO_FUNCTION), true)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

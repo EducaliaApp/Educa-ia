@@ -75,7 +75,7 @@ class RubricExtractor:
         metadata: Dict
     ) -> Optional[Dict]:
         """
-        Extrae una rúbrica individual usando IA
+        Extrae una rúbrica individual usando LIA
         """
         
         prompt = f"""Extrae la información estructurada de esta rúbrica oficial del MINEDUC:

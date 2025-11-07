@@ -123,7 +123,7 @@ serve(async (req) => {
       año_vigencia
     )
 
-    // 6. Llamar a IA
+    // 6. Llamar a LIA
     const startTime = Date.now()
     let analisis: PlanificacionAnalysis
     let tokens = { prompt: 0, completion: 0 }

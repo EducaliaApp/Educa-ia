@@ -121,7 +121,7 @@ class DocumentProcessor:
         metadata: Dict
     ) -> Dict:
         """
-        Identifica estructura del documento usando IA
+        Identifica estructura del documento usando LIA
         """
         
         # Usar Claude para identificar secciones

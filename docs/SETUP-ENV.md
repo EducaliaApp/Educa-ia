@@ -202,5 +202,5 @@ Una vez configurado todo:
 
 1. Registra una cuenta
 2. Crea tu primera planificación
-3. Explora las evaluaciones con IA
+3. Explora las evaluaciones con LIA
 4. ¡Disfruta de ProfeFlow! 🎓

@@ -109,7 +109,7 @@ export default async function PortafolioDetallePage({ params }: Props) {
                   <TrendingUp className="h-6 w-6 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Puntaje Estimado IA</p>
+                  <p className="text-sm text-gray-600">Puntaje Estimado LIA</p>
                   <p className="font-medium">{portafolio.puntaje_estimado_ia.toFixed(1)}/4.0</p>
                 </div>
               </div>

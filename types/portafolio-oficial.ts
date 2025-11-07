@@ -208,7 +208,7 @@ export interface PortafolioCompleto {
   modulo_2: Modulo2
   modulo_3: Modulo3
   
-  // Evaluación IA
+  // Evaluación LIA
   puntaje_estimado_ia?: number
   categoria_logro?: CategoriaLogro
   nivel_desempeño_estimado?: NivelDesempeño
@@ -220,7 +220,7 @@ export interface PortafolioCompleto {
 }
 
 // ============================================
-// ANÁLISIS IA POR TAREA
+// ANÁLISIS LIA POR TAREA
 // ============================================
 
 export interface AnalisisIA_Tarea {

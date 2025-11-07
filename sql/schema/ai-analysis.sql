@@ -1,4 +1,4 @@
--- Tabla para entidades educativas extraídas por IA
+-- Tabla para entidades educativas extraídas por LIA
 CREATE TABLE IF NOT EXISTS entidades_educativas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     documento_id UUID NOT NULL REFERENCES documentos_oficiales(id) ON DELETE CASCADE,
@@ -12,13 +12,13 @@ CREATE TABLE IF NOT EXISTS entidades_educativas (
     nivel_taxonomico VARCHAR(50), -- 'recordar', 'comprender', 'aplicar', etc.
     asignaturas_relacionadas TEXT[], -- Array de asignaturas
     
-    -- Metadata de IA
+    -- Metadata de LIA
     metadata JSONB DEFAULT '{}'::jsonb,
     
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Agregar columnas a documentos_oficiales para IA
+-- Agregar columnas a documentos_oficiales para LIA
 ALTER TABLE documentos_oficiales 
 ADD COLUMN IF NOT EXISTS clasificacion_ia JSONB,
 ADD COLUMN IF NOT EXISTS entidades_extraidas INTEGER DEFAULT 0;
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS cambios_inteligentes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     documento_id UUID NOT NULL REFERENCES documentos_oficiales(id),
     
-    -- Cambios detectados por IA
+    -- Cambios detectados por LIA
     cambios_detectados JSONB NOT NULL,
     impacto_maximo VARCHAR(20) NOT NULL, -- 'critico', 'alto', 'medio', 'bajo'
     

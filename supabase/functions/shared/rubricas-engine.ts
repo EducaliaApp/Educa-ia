@@ -162,7 +162,7 @@ export class RubricasEngine {
       rubrica
     )
     
-    // Llamar a IA
+    // Llamar a LIA
     const respuesta = await evaluadorIA.verificarCondicion(prompt)
     
     return {

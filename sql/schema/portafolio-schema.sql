@@ -179,7 +179,7 @@ CREATE INDEX idx_videos_tarea ON videos_clase(tarea_id);
 CREATE INDEX idx_videos_procesado ON videos_clase(procesado);
 
 -- ============================================
--- TABLA: ANÁLISIS IA
+-- TABLA: ANÁLISIS LIA
 -- ============================================
 
 CREATE TABLE analisis_ia_portafolio (

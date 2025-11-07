@@ -1,6 +1,7 @@
 // Utilidades compartidas para tests
 export function createMockSupabaseClient() {
   const mockData = new Map();
+  const invokedFunctions: string[] = []
   
   return {
     from: (table: string) => ({
@@ -44,10 +45,13 @@ export function createMockSupabaseClient() {
       })
     },
     functions: {
-      invoke: (name: string, options: any) => ({
-        data: { success: true },
-        error: null
-      })
+      invoke: (name: string, options: any) => {
+        invokedFunctions.push(name)
+        return {
+          data: { success: true },
+          error: null
+        }
+      }
     },
     channel: (name: string) => ({
       send: (payload: any) => Promise.resolve(),
@@ -56,7 +60,8 @@ export function createMockSupabaseClient() {
     // Helper para agregar datos mock
     _setMockData: (key: string, value: any) => {
       mockData.set(key, value);
-    }
+    },
+    _getInvokedFunctions: () => invokedFunctions
   };
 }
 

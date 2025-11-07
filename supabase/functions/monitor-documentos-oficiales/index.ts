@@ -1,9 +1,10 @@
 // supabase/functions/monitor-documentos-oficiales/index.ts
 
+// @ts-nocheck
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { DocumentProcessor } from '../shared/document-processor.ts'
 import { AIAnalyzer } from '../shared/ai-analyzer.ts'
+import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.ts'
 
 // URLs oficiales del MINEDUC
 const URLS_OFICIALES = {
@@ -11,6 +12,8 @@ const URLS_OFICIALES = {
   rubricas: 'https://www.docentemas.cl/portafolio-2025/rubricas',
   documentos: 'https://www.docentemas.cl/documentos-descargables'
 }
+
+export const PROCESAR_DOCUMENTO_FUNCTION = 'procesar-documentos'
 
 interface DocumentoDetectado {
   nombre: string
@@ -22,20 +25,15 @@ interface DocumentoDetectado {
   hash?: string
 }
 
-serve(async (req) => {
-  const processor = new DocumentProcessor()
-  const aiAnalyzer = new AIAnalyzer()
-  
+export async function handler(req: Request): Promise<Response> {
   try {
     console.log('🔍 Iniciando monitoreo de documentos oficiales...')
-    
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    )
-    
+
+    const supabase = crearClienteServicio(req)
+    const processor = new DocumentProcessor(supabase)
+    const aiAnalyzer = new AIAnalyzer()
     const documentosDetectados: DocumentoDetectado[] = []
-    
+
     // 1. Scrapear sitio oficial DocenteMás
     console.log('📡 Consultando sitio DocenteMás...')
     
@@ -57,15 +55,15 @@ serve(async (req) => {
         for (const link of pdfLinks) {
           let metadata = parsearNombreArchivo(link.nombre)
           
-          // Si parsing básico falla, usar IA para clasificar
+          // Si parsing básico falla, usar LIA para clasificar
           if (!metadata) {
             try {
-              const response = await fetch(link.url)
-              const buffer = await response.arrayBuffer()
-              
+              const clasificacionResponse = await fetch(link.url)
+              const buffer = await clasificacionResponse.arrayBuffer()
+
               if (await processor.validatePDF(buffer)) {
-                // Extraer texto rápido para clasificación
-                const textoMuestra = link.nombre + ' ' + (await response.text()).substring(0, 1000)
+                const textoCrudo = new TextDecoder().decode(new Uint8Array(buffer).subarray(0, 4000))
+                const textoMuestra = `${link.nombre} ${textoCrudo}`
                 const clasificacion = await aiAnalyzer.clasificarDocumento(textoMuestra)
                 
                 if (clasificacion.confianza > 0.7) {
@@ -214,7 +212,7 @@ serve(async (req) => {
     if (documentosNuevos.length > 0 || documentosActualizados.length > 0) {
       await notificarAdministradores(supabase, reporte)
     }
-    
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -225,10 +223,20 @@ serve(async (req) => {
         headers: { 'Content-Type': 'application/json' }
       }
     )
-    
+
   } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return new Response(
+        JSON.stringify({ error: 'No autorizado' }),
+        {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
     console.error('❌ Error en monitoreo:', error)
-    
+
     return new Response(
       JSON.stringify({
         error: 'Error en monitoreo de documentos',
@@ -240,7 +248,11 @@ serve(async (req) => {
       }
     )
   }
-})
+}
+
+if (import.meta.main) {
+  serve(handler)
+}
 
 // ============================================
 // FUNCIONES AUXILIARES
@@ -336,7 +348,7 @@ async function calcularHashRemoto(url: string): Promise<string | null> {
   }
 }
 
-async function procesarDocumentoNuevo(
+export async function procesarDocumentoNuevo(
   supabase: any,
   doc: DocumentoDetectado
 ): Promise<any> {
@@ -388,7 +400,7 @@ async function procesarDocumentoNuevo(
   
   // 4. Disparar procesamiento asíncrono
   console.log('  ⚙️ Iniciando procesamiento...')
-  await supabase.functions.invoke('procesar-documento-oficial', {
+  await supabase.functions.invoke(PROCESAR_DOCUMENTO_FUNCTION, {
     body: { documento_id: documentoRegistrado.id }
   })
   
