@@ -44,7 +44,7 @@ serve(async (req) => {
     // 3. Obtener tarea y contexto
     const { data: tarea, error: tareaError } = await supabase
       .from('tareas_portafolio')
-      .select(\`
+      .select(`
         *,
         modulo:modulos_portafolio!inner(
           *,
@@ -54,12 +54,12 @@ serve(async (req) => {
             año_evaluacion
           )
         )
-      \`)
+      `)
       .eq('id', tarea_id)
       .single()
 
     if (tareaError || !tarea) {
-      throw new Error(\`Tarea no encontrada: \${tareaError?.message || 'Unknown error'}\`)
+      throw new Error(`Tarea no encontrada: ${tareaError?.message || 'Unknown error'}`)
     }
 
     const portafolio = tarea.modulo.portafolio
@@ -82,7 +82,7 @@ serve(async (req) => {
       tarea: 1,
     })
 
-    logger.info(\`Rúbricas cargadas: \${rubricas.length}\`)
+    logger.info(`Rúbricas cargadas: ${rubricas.length}`)
 
     // 6. Inicializar evaluador de IA
     const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
@@ -103,13 +103,13 @@ serve(async (req) => {
     const evaluaciones = []
     
     for (const rubrica of rubricas) {
-      logger.info(\`Evaluando \${rubrica.indicador_id}...\`)
+      logger.info(`Evaluando ${rubrica.indicador_id}...`)
       
       // Aquí iría la llamada real al motor
       // const evaluacion = await rubricasEngine.evaluarIndicador(...)
       
       // Por ahora retornamos mock
-      logger.info(\`✅ \${rubrica.indicador_id} evaluado\`)
+      logger.info(`✅ ${rubrica.indicador_id} evaluado`)
     }
 
     // 8. Retornar resultado

@@ -11,9 +11,11 @@ class UnauthorizedError extends Error {
 }
 
 function validarClaveServicio(req: Request): void {
-  const expected = Deno.env.get('SERVICE_FUNCTION_SECRET')
-  if (!expected) {
-    throw new Error('Falta SERVICE_FUNCTION_SECRET en configuración')
+  const customSecret = Deno.env.get('SERVICE_FUNCTION_SECRET')
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  
+  if (!customSecret && !serviceRoleKey) {
+    throw new Error('Falta SERVICE_FUNCTION_SECRET o SUPABASE_SERVICE_ROLE_KEY en configuración')
   }
 
   const headerValue = req.headers.get(HEADER_API_KEY) ?? req.headers.get('authorization')
@@ -21,7 +23,11 @@ function validarClaveServicio(req: Request): void {
     ? headerValue.slice(7)
     : headerValue || ''
 
-  if (clave !== expected) {
+  // Aceptar tanto el secret personalizado como el service role key
+  const esValido = (customSecret && clave === customSecret) || 
+                   (serviceRoleKey && clave === serviceRoleKey)
+  
+  if (!esValido) {
     throw new UnauthorizedError('No autorizado para ejecutar esta función')
   }
 }
