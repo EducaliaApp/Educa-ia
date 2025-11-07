@@ -470,21 +470,21 @@ try {
   console.warn(`⚠️  No se pudo guardar en BD: ${error.message}`)
 }
 
+// Escribir outputs para GitHub Actions
+const githubOutput = Deno.env.get('GITHUB_OUTPUT')
+if (githubOutput) {
+  const outputs = `critical_errors=${erroresCriticos}\nvalidated=${totalChunks}\n`
+  await Deno.writeTextFile(githubOutput, outputs, { append: true })
+}
+
 // Salir con código apropiado
 if (erroresCriticos > 0) {
   console.log(`\n❌ VALIDACIÓN FALLIDA (${erroresCriticos} errores críticos)`)
-  // Output para GitHub Actions
-  console.log(`::set-output name=critical_errors::${erroresCriticos}`)
-  console.log(`::set-output name=validated::${totalChunks}`)
   Deno.exit(1)
 } else if (errores > 0) {
   console.log(`\n⚠️  VALIDACIÓN COMPLETADA CON ERRORES (${errores} errores)`)
-  console.log(`::set-output name=critical_errors::0`)
-  console.log(`::set-output name=validated::${totalChunks}`)
   Deno.exit(0)
 } else {
   console.log(`\n✅ VALIDACIÓN EXITOSA`)
-  console.log(`::set-output name=critical_errors::0`)
-  console.log(`::set-output name=validated::${totalChunks}`)
   Deno.exit(0)
 }

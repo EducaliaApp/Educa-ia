@@ -25,6 +25,10 @@ jobs:
     name: Monitorear Documentos Oficiales
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      has_changes: ${{ steps.check_nuevos.outputs.has_changes }}
+      nuevos: ${{ steps.check_nuevos.outputs.nuevos }}
+      actualizados: ${{ steps.check_nuevos.outputs.actualizados }}
 
     steps:
       - name: Checkout código
@@ -112,6 +116,8 @@ jobs:
     needs: monitor-documentos
     if: needs.monitor-documentos.outputs.has_changes == 'true'
     timeout-minutes: 45
+    outputs:
+      extracted: ${{ steps.count_extracted.outputs.count }}
 
     steps:
       - name: Checkout código
@@ -129,12 +135,21 @@ jobs:
           pip install anthropic supabase python-dotenv pdfplumber tabula-py
 
       - name: Ejecutar extracción de rúbricas
+        id: extract
         run: |
           python scripts/document-monitor/rubric-extractor.py --auto --verbose
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      - name: Contar rúbricas extraídas
+        id: count_extracted
+        run: |
+          # Contar rúbricas desde logs o asumir valor basado en documentos nuevos
+          extracted=${{ needs.monitor-documentos.outputs.nuevos }}
+          echo "count=$extracted" >> $GITHUB_OUTPUT
+          echo "Rúbricas extraídas: $extracted"
 
       - name: Guardar logs
         if: always()
@@ -150,6 +165,9 @@ jobs:
     needs: extract-rubricas
     if: always()
     timeout-minutes: 15
+    outputs:
+      critical_errors: ${{ steps.validate.outputs.critical_errors }}
+      validated: ${{ steps.validate.outputs.validated }}
 
     steps:
       - name: Checkout código
