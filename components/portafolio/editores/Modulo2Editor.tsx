@@ -257,11 +257,22 @@ export function Modulo2Editor({
 
       if (error) throw error
 
+      // Clear local state
       setVideoUrl(null)
       setVideoStoragePath(null)
       setVideoFile(null)
       setVideoDuration(null)
       setUploadProgress(0)
+
+      // Persist the cleared video state immediately
+      await onSave({
+        video: {
+          url: null,
+          storage_path: null,
+          duracion_segundos: null,
+        },
+        ficha: form.getValues(),
+      })
     } catch (error: any) {
       console.error('Error al eliminar video:', error)
       setUploadError('Error al eliminar el video')
