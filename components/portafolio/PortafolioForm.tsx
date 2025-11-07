@@ -328,6 +328,9 @@ export function PortafolioForm({
   }, [nivelSeleccionado, form])
 
   const onSubmit = async (values: PortafolioFormValues) => {
+    // Prevent double-submission race condition
+    if (isSubmitting) return
+
     setIsSubmitting(true)
     setError(null)
 
