@@ -99,7 +99,7 @@ export async function guardarEvaluacion(
       version: 1,
       puntaje_estimado: metadata.puntaje_promedio,
       categoria_logro: metadata.categoria_logro,
-      nivel_desempeño: metadata.nivel_predominante
+      nivel_desempeno: metadata.nivel_predominante
     })
     .select()
     .single()

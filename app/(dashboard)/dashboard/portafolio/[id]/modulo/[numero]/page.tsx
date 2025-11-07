@@ -45,12 +45,36 @@ export default async function ModuloDetallePage({ params }: Props) {
   // Obtener el módulo específico con sus tareas
   const { data: modulo, error } = await supabase
     .from('modulos_portafolio')
-    .select('*, tareas_portafolio(*, analisis_ia_portafolio(id, puntaje_estimado, categoria_logro, created_at))')
+    .select(`
+      id,
+      portafolio_id,
+      numero_modulo,
+      completado,
+      progreso_porcentaje,
+      tipo_modulo,
+      created_at,
+      updated_at,
+      tareas_portafolio(
+        id,
+        numero_tarea,
+        nombre_tarea,
+        completado,
+        contenido_url,
+        analisis_ia_portafolio(
+          id,
+          puntaje_estimado,
+          categoria_logro,
+          nivel_desempeno,
+          created_at
+        )
+      )
+    `)
     .eq('portafolio_id', resolvedParams.id)
     .eq('numero_modulo', numeroModulo)
     .single()
 
   if (error || !modulo) {
+    console.error('Error fetching modulo:', error)
     redirect(`/dashboard/portafolio/${resolvedParams.id}`)
   }
 
@@ -161,7 +185,7 @@ export default async function ModuloDetallePage({ params }: Props) {
             .sort((a: any, b: any) => a.numero_tarea - b.numero_tarea)
             .map((tarea: any, idx: number) => {
               const tareaInfo = info.tareas[idx] || { nombre: tarea.nombre_tarea, descripcion: '' }
-              const analisis = tarea.analisis && tarea.analisis.length > 0 ? tarea.analisis[0] : null
+              const analisis = tarea.analisis_ia_portafolio && tarea.analisis_ia_portafolio.length > 0 ? tarea.analisis_ia_portafolio[0] : null
 
               return (
                 <Card key={tarea.id} className="hover:shadow-lg transition-shadow">
@@ -195,9 +219,9 @@ export default async function ModuloDetallePage({ params }: Props) {
                                 <span className="font-medium text-gray-900">
                                   Puntaje: {analisis.puntaje_estimado.toFixed(1)}/4.0
                                 </span>
-                                {analisis.nivel_desempeño && (
+                                {analisis.nivel_desempeno && (
                                   <Badge className="bg-blue-600">
-                                    {analisis.nivel_desempeño}
+                                    {analisis.nivel_desempeno}
                                   </Badge>
                                 )}
                               </div>
