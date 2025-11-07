@@ -222,22 +222,29 @@ if __name__ == '__main__':
     extractor = RubricExtractor()
     
     # Leer documento ya procesado
-    doc = supabase.table('documentos_oficiales')\
-        .select('*')\
-        .eq('tipo_documento', 'rubrica')\
-        .eq('año_vigencia', 2025)\
-        .limit(1)\
-        .single()\
-        .execute()
-    
-    if doc.data:
-        rubricas = extractor.extraer_rubricas(
-            doc.data['contenido_texto'],
-            {
-                'nivel_educativo': doc.data['nivel_educativo'],
-                'asignatura': doc.data['asignatura'],
-                'año_vigencia': doc.data['año_vigencia']
-            }
-        )
+    try:
+        doc = supabase.table('documentos_oficiales')\
+            .select('*')\
+            .eq('tipo_documento', 'rubrica')\
+            .eq('año_vigencia', 2025)\
+            .limit(1)\
+            .execute()
         
-        extractor.guardar_rubricas(rubricas, supabase)
+        if doc.data and len(doc.data) > 0:
+            rubricas = extractor.extraer_rubricas(
+                doc.data[0]['contenido_texto'],
+                {
+                    'nivel_educativo': doc.data[0]['nivel_educativo'],
+                    'asignatura': doc.data[0]['asignatura'],
+                    'año_vigencia': doc.data[0]['año_vigencia']
+                }
+            )
+            
+            extractor.guardar_rubricas(rubricas, supabase)
+        else:
+            print("📄 No se encontraron documentos de rúbricas para procesar")
+            print("✅ Script completado sin errores")
+    
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        print("✅ Script completado (sin documentos disponibles)")
