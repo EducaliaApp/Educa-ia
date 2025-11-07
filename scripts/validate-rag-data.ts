@@ -262,8 +262,13 @@ if (porDominio) {
   }
 }
 
-// Calcular rúbricas con embedding
-const rubricasConEmbedding = (totalRubricas || 0) - (rubricasSinEmbedding?.length || 0)
+// Contar rúbricas con embedding (consulta directa)
+const { count: rubricasConEmbedding } = await supabase
+  .from('rubricas_mbe')
+  .select('*', { count: 'exact', head: true })
+  .not('embedding', 'is', null)
+
+console.log(`  ℹ️  Rúbricas con embedding: ${rubricasConEmbedding || 0}`)
 
 // ============================================
 // 4. VALIDAR ÍNDICES VECTORIALES
