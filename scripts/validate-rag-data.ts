@@ -269,16 +269,25 @@ if (porDominio) {
 console.log('\n🔍 Validando índices vectoriales...')
 
 // 4.1 Verificar que existan los índices
-const { data: indices } = await supabase.rpc('verificar_indices_vectoriales' as any).catch(() => ({
-  data: null
-}))
+let indices = null
+try {
+  const result = await supabase.rpc('verificar_indices_vectoriales' as any)
+  indices = result.data
+} catch (error) {
+  // Función no existe, continuamos con alternativa
+}
 
 if (!indices) {
   // Alternativa: query manual
-  const checkIndices = await supabase.from('pg_indexes').select('indexname').in('indexname', [
-    'idx_chunks_embedding',
-    'idx_rubricas_embedding'
-  ]).catch(() => ({ data: [] }))
+  let checkIndices = { data: [] as any[] }
+  try {
+    checkIndices = await supabase
+      .from('pg_indexes')
+      .select('indexname')
+      .in('indexname', ['idx_chunks_embedding', 'idx_rubricas_embedding'])
+  } catch (error) {
+    // Tabla no accesible, asumir que índices no existen
+  }
 
   if (checkIndices.data && checkIndices.data.length < 2) {
     resultados.push({
