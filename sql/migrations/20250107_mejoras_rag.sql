@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS cache_embeddings (
   last_used_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_cache_last_used ON cache_embeddings(last_used_at);
-CREATE INDEX idx_cache_uso_count ON cache_embeddings(uso_count DESC);
+CREATE INDEX IF NOT EXISTS idx_cache_last_used ON cache_embeddings(last_used_at);
+CREATE INDEX IF NOT EXISTS idx_cache_uso_count ON cache_embeddings(uso_count DESC);
 
 COMMENT ON TABLE cache_embeddings IS 'Caché de embeddings de queries para reducir llamadas a OpenAI';
 
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS metricas_rag (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_metricas_fecha ON metricas_rag(fecha DESC);
+CREATE INDEX IF NOT EXISTS idx_metricas_fecha ON metricas_rag(fecha DESC);
 
 COMMENT ON TABLE metricas_rag IS 'Métricas diarias del sistema RAG para monitoreo';
 
@@ -138,7 +138,7 @@ CREATE TABLE IF NOT EXISTS queries_sin_resultados (
   fecha TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_queries_sin_resultados_fecha ON queries_sin_resultados(fecha DESC);
+CREATE INDEX IF NOT EXISTS idx_queries_sin_resultados_fecha ON queries_sin_resultados(fecha DESC);
 
 COMMENT ON TABLE queries_sin_resultados IS 'Log de queries que no retornaron resultados para análisis';
 
@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS validaciones_rag (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_validaciones_fecha ON validaciones_rag(fecha DESC);
+CREATE INDEX IF NOT EXISTS idx_validaciones_fecha ON validaciones_rag(fecha DESC);
 
 COMMENT ON TABLE validaciones_rag IS 'Historial de validaciones de calidad de datos RAG';
 
@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS metricas_pipeline_rag (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_pipeline_fecha ON metricas_pipeline_rag(fecha DESC);
+CREATE INDEX IF NOT EXISTS idx_pipeline_fecha ON metricas_pipeline_rag(fecha DESC);
 
 COMMENT ON TABLE metricas_pipeline_rag IS 'Métricas del pipeline ETL de documentos MINEDUC';
 
@@ -449,6 +449,15 @@ CREATE POLICY "Admin puede ver métricas pipeline" ON metricas_pipeline_rag
 -- ============================================
 
 -- Limpiar caché viejo cada día a las 4 AM
+-- Primero eliminar si existe
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'limpiar-cache-embeddings') THEN
+    PERFORM cron.unschedule('limpiar-cache-embeddings');
+  END IF;
+END $$;
+
+-- Crear cronjob
 SELECT cron.schedule(
   'limpiar-cache-embeddings',
   '0 4 * * *',
