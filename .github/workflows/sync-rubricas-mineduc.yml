@@ -54,7 +54,7 @@ jobs:
         run: |
           response=$(curl -X POST \
             "${{ secrets.SUPABASE_URL }}/functions/v1/monitor-documentos-oficiales" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
             -H "Content-Type: application/json" \
             -d '{"force": ${{ github.event.inputs.force_full_sync || false }}}')
 
@@ -67,8 +67,24 @@ jobs:
       - name: Verificar documentos nuevos
         id: check_nuevos
         run: |
-          nuevos=$(echo '${{ steps.monitor.outputs.response }}' | jq -r '.reporte.documentos_nuevos')
-          actualizados=$(echo '${{ steps.monitor.outputs.response }}' | jq -r '.reporte.documentos_actualizados')
+          response='${{ steps.monitor.outputs.response }}'
+          
+          # Verificar si hay error en la respuesta
+          if echo "$response" | jq -e '.error' > /dev/null; then
+            echo "❌ Error en Edge Function: $(echo "$response" | jq -r '.error')"
+            echo "nuevos=0" >> $GITHUB_OUTPUT
+            echo "actualizados=0" >> $GITHUB_OUTPUT
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Extraer valores con defaults
+          nuevos=$(echo "$response" | jq -r '.reporte.documentos_nuevos // 0')
+          actualizados=$(echo "$response" | jq -r '.reporte.documentos_actualizados // 0')
+          
+          # Validar que son números
+          if ! [[ "$nuevos" =~ ^[0-9]+$ ]]; then nuevos=0; fi
+          if ! [[ "$actualizados" =~ ^[0-9]+$ ]]; then actualizados=0; fi
 
           echo "nuevos=$nuevos" >> $GITHUB_OUTPUT
           echo "actualizados=$actualizados" >> $GITHUB_OUTPUT
@@ -157,7 +173,8 @@ jobs:
         id: count_extracted
         run: |
           # Contar rúbricas desde logs o asumir valor basado en documentos nuevos
-          extracted=${{ needs.monitor-documentos.outputs.nuevos }}
+          extracted=${{ needs.monitor-documentos.outputs.nuevos || 0 }}
+          if ! [[ "$extracted" =~ ^[0-9]+$ ]]; then extracted=0; fi
           echo "count=$extracted" >> $GITHUB_OUTPUT
           echo "Rúbricas extraídas: $extracted"
 
