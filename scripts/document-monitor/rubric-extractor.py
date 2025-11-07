@@ -1,6 +1,6 @@
 # scripts/document-monitor/rubric-extractor.py
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 import re
 import json
 from anthropic import Anthropic
