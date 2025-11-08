@@ -97,7 +97,7 @@ jobs:
           fi
 
       - name: Notificar cambios por Slack
-        if: steps.check_nuevos.outputs.has_changes == 'true'
+        if: steps.check_nuevos.outputs.has_changes == 'true' && github.event.inputs.slack_notification == 'true'
         uses: slackapi/slack-github-action@v1.25.0
         with:
           payload: |
@@ -163,7 +163,15 @@ jobs:
       - name: Ejecutar extracción de rúbricas
         id: extract
         run: |
-          python scripts/document-monitor/rubric-extractor.py --auto --verbose
+          # Ejecutar script y capturar output
+          output=$(python scripts/document-monitor/rubric-extractor.py --auto --verbose 2>&1)
+          echo "$output"
+          
+          # Extraer número de rúbricas del output
+          extracted=$(echo "$output" | grep -o "Procesamiento completado: [0-9]\+ rúbricas extraídas" | grep -o "[0-9]\+" || echo "0")
+          
+          echo "extracted_count=$extracted" >> $GITHUB_OUTPUT
+          echo "Rúbricas extraídas: $extracted"
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -172,8 +180,8 @@ jobs:
       - name: Contar rúbricas extraídas
         id: count_extracted
         run: |
-          # Contar rúbricas desde logs o asumir valor basado en documentos nuevos
-          extracted=${{ needs.monitor-documentos.outputs.nuevos || 0 }}
+          # Usar el conteo real del script
+          extracted=${{ steps.extract.outputs.extracted_count || 0 }}
           if ! [[ "$extracted" =~ ^[0-9]+$ ]]; then extracted=0; fi
           echo "count=$extracted" >> $GITHUB_OUTPUT
           echo "Rúbricas extraídas: $extracted"
@@ -212,6 +220,10 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
 
       - name: Publicar resultados de validación
         run: |
@@ -249,7 +261,7 @@ jobs:
 
   notify-completion:
     name: Notificar Completado
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latestst
     needs: [monitor-documentos, extract-rubricas, validate-data, update-metrics]
     if: always()
 

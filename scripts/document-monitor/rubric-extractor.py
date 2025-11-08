@@ -3,8 +3,19 @@
 from typing import Dict, List, Optional
 import re
 import json
-from anthropic import Anthropic
 import os
+
+try:
+    from anthropic import Anthropic
+except ImportError:
+    print("⚠️ Anthropic no instalado. Instalar con: pip install anthropic")
+    Anthropic = None
+
+try:
+    from supabase import create_client
+except ImportError:
+    print("⚠️ Supabase no instalado. Instalar con: pip install supabase")
+    create_client = None
 
 class RubricExtractor:
     """
@@ -12,7 +23,14 @@ class RubricExtractor:
     """
     
     def __init__(self):
-        self.anthropic = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+        if Anthropic is None:
+            raise ImportError("Anthropic no está instalado. Ejecutar: pip install anthropic")
+        
+        api_key = os.getenv('ANTHROPIC_API_KEY')
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY no está configurada")
+            
+        self.anthropic = Anthropic(api_key=api_key)
     
     def extraer_rubricas(self, texto_documento: str, metadata: Dict) -> List[Dict]:
         """
@@ -84,7 +102,7 @@ class RubricExtractor:
 
 Identifica:
 1. Nombre del indicador
-2. Descripción del indicador  
+2. Descripción del indicador
 3. Evidencia que se debe revisar
 4. Niveles: Insatisfactorio, Básico, Competente, Destacado
 5. Condiciones específicas de cada nivel
@@ -212,39 +230,97 @@ NO inventes información. Si algo no está claro, déjalo vacío."""
 
 # Uso
 if __name__ == '__main__':
-    from supabase import create_client
+    import argparse
+    
+    if create_client is None:
+        print("❌ Error: Supabase no está instalado. Ejecutar: pip install supabase")
+        exit(1)
+    
+    parser = argparse.ArgumentParser(description='Extractor de Rúbricas MINEDUC')
+    parser.add_argument('--auto', action='store_true', help='Modo automático')
+    parser.add_argument('--verbose', action='store_true', help='Modo verbose')
+    parser.add_argument('--year', type=int, default=2025, help='Año a procesar')
+    
+    args = parser.parse_args()
     
     supabase = create_client(
         os.getenv('SUPABASE_URL'),
-        os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+        os.getenv('SUPABASE_SERVICE_ROLE_KEY') or os.getenv('SUPABASE_KEY')
     )
     
     extractor = RubricExtractor()
     
-    # Leer documento ya procesado
     try:
-        doc = supabase.table('documentos_oficiales')\
+        if args.verbose:
+            print(f"🔍 Buscando documentos de rúbricas para el año {args.year}...")
+        
+        # Buscar documentos que contengan rúbricas (múltiples tipos)
+        docs = supabase.table('documentos_oficiales')\
             .select('*')\
-            .eq('tipo_documento', 'rubrica')\
-            .eq('año_vigencia', 2025)\
-            .limit(1)\
+            .in_('tipo_documento', ['rubricas', 'rubrica', 'instructivo'])\
+            .eq('año_vigencia', args.year)\
+            .eq('procesado', True)\
             .execute()
         
-        if doc.data and len(doc.data) > 0:
+        if args.verbose:
+            print(f"📊 Encontrados {len(docs.data)} documentos candidatos")
+        
+        total_rubricas = 0
+        
+        for doc in docs.data:
+            if args.verbose:
+                print(f"\n📄 Procesando: {doc['titulo']}")
+                print(f"   Tipo: {doc['tipo_documento']}")
+                print(f"   Nivel: {doc['nivel_educativo']}")
+            
+            # Verificar si el contenido contiene rúbricas
+            contenido = doc.get('contenido_texto', '')
+            if not contenido:
+                if args.verbose:
+                    print("   ⚠️  Sin contenido de texto")
+                continue
+            
+            # Buscar indicadores de rúbricas en el contenido
+            indicadores_rubrica = [
+                'insatisfactorio', 'básico', 'competente', 'destacado',
+                'rúbrica del indicador', 'nivel de desempeño'
+            ]
+            
+            tiene_rubricas = any(indicador in contenido.lower() for indicador in indicadores_rubrica)
+            
+            if not tiene_rubricas:
+                if args.verbose:
+                    print("   ℹ️  No contiene rúbricas")
+                continue
+            
+            if args.verbose:
+                print("   🎯 Contiene rúbricas, extrayendo...")
+            
             rubricas = extractor.extraer_rubricas(
-                doc.data[0]['contenido_texto'],
+                contenido,
                 {
-                    'nivel_educativo': doc.data[0]['nivel_educativo'],
-                    'asignatura': doc.data[0]['asignatura'],
-                    'año_vigencia': doc.data[0]['año_vigencia']
+                    'nivel_educativo': doc['nivel_educativo'],
+                    'asignatura': doc.get('asignatura'),
+                    'año_vigencia': doc['año_vigencia']
                 }
             )
             
-            extractor.guardar_rubricas(rubricas, supabase)
+            if rubricas:
+                extractor.guardar_rubricas(rubricas, supabase)
+                total_rubricas += len(rubricas)
+                
+                if args.verbose:
+                    print(f"   ✅ Extraídas {len(rubricas)} rúbricas")
+        
+        if total_rubricas > 0:
+            print(f"✅ Procesamiento completado: {total_rubricas} rúbricas extraídas")
         else:
             print("📄 No se encontraron documentos de rúbricas para procesar")
             print("✅ Script completado sin errores")
     
     except Exception as e:
         print(f"❌ Error: {e}")
-        print("✅ Script completado (sin documentos disponibles)")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        print("✅ Script completado (con errores)")
