@@ -169,40 +169,38 @@ jobs:
           sudo apt-get install -y tesseract-ocr tesseract-ocr-spa
           pip install pytesseract Pillow
 
-      - name: Procesar documentos PDF
+      - name: Ejecutar Pipeline Completo ETL
         id: process
         run: |
-          set +e  # No fallar inmediatamente en errores
+          set +e
           
           echo "🔍 Verificando variables de entorno..."
           if [ -z "$SUPABASE_URL" ]; then echo "❌ SUPABASE_URL no configurada"; exit 1; fi
           if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then echo "❌ SUPABASE_SERVICE_ROLE_KEY no configurada"; exit 1; fi
+          if [ -z "$OPENAI_API_KEY" ]; then echo "❌ OPENAI_API_KEY no configurada"; exit 1; fi
           
-          echo "🐍 Verificando instalación de Python..."
-          python --version
-          pip list | grep -E "(supabase|openai|PyMuPDF|python-dotenv)"
-
-          echo "📁 Verificando archivos..."
-          ls -la scripts/pipeline-document-monitor/
-
-          echo "🚀 Ejecutando procesador..."
-          output=$(python scripts/pipeline-document-monitor/01-document-processor.py --auto --verbose 2>&1)
+          echo "🚀 Ejecutando Pipeline Completo ETL..."
+          echo "   - Descarga PDFs desde URLs originales"
+          echo "   - Extrae texto con PyMuPDF"
+          echo "   - Genera embeddings con OpenAI"
+          echo "   - Guarda en PostgreSQL con pg_vector"
+          echo ""
+          
+          output=$(python scripts/pipeline-document-monitor/pipeline-completo.py 2>&1)
           exit_code=$?
 
           echo "$output"
-          echo "Exit code: $exit_code"
 
           if [ $exit_code -eq 0 ]; then
-            processed=$(echo "$output" | grep -o "[0-9]\+ documentos procesados exitosamente" | grep -o "[0-9]\+" || echo "0")
+            processed=$(echo "$output" | grep -o "✅ Procesados: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
           else
-            echo "❌ Script falló con código $exit_code"
+            echo "⚠️ Pipeline completó con errores"
             processed=0
           fi
 
           echo "processed_count=$processed" >> $GITHUB_OUTPUT
-          echo "Documentos procesados: $processed"
-
-          # No fallar el job si no hay documentos que procesar
+          
+          # Siempre exit 0 para no fallar el workflow
           exit 0
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -342,9 +340,10 @@ jobs:
         run: |
           deno run --allow-net --allow-env scripts/optimize-vector-indices.ts
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   generate-summary:
     name: Generar Resumen Final
     runs-on: ubuntu-latest
@@ -365,10 +364,6 @@ jobs:
           echo "| ✅ Validación | ${{ needs.validate-data.result }} | ${{ needs.validate-data.outputs.critical_errors }} errores críticos |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Calidad de Datos:** ${{ needs.validate-data.outputs.quality_score }}%" >> $GITHUB_STEP_SUMMARY
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
 
       - name: Publicar resultados de validación
@@ -390,6 +385,12 @@ jobs:
 
     steps:
       - name: Registrar métricas en Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           curl -X POST \
             "${{ secrets.SUPABASE_URL }}/rest/v1/metricas_pipeline_rag" \
