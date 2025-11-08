@@ -622,59 +622,11 @@ export async function procesarDocumentoNuevo(
     }
   }
   
-  // 1. Descargar documento
-  console.log('  📥 Descargando...')
-  const response = await fetch(doc.url)
-  const pdfBuffer = await response.arrayBuffer()
-  const hash = await calcularHash(pdfBuffer)
+  // 1. Solo calcular metadata (el pipeline descargará y procesará el PDF)
+  console.log('  📝 Preparando metadata...')
+  const fileName = `${doc.tipo}/${doc.año}/${doc.nombre.replace(/[^a-zA-Z0-9.-]/g, '_')}.pdf`
   
-  // 1.5 Extraer texto del PDF
-  console.log('  📄 Extrayendo texto...')
-  const docProcessor = processor || new DocumentProcessor(supabase)
-  let contenidoTexto = ''
-  try {
-    contenidoTexto = await docProcessor.extractTextFromPDF(pdfBuffer)
-    console.log(`  ✓ Texto extraído: ${contenidoTexto.length} caracteres`)
-  } catch (error) {
-    console.warn(`  ⚠️  Error extrayendo texto: ${error.message}`)
-  }
-  
-  // Verificar duplicado por hash
-  const { data: duplicadoHash } = await supabase
-    .from('documentos_oficiales')
-    .select('id, titulo')
-    .eq('hash_contenido', hash)
-    .maybeSingle()
-  
-  if (duplicadoHash) {
-    console.log(`  ⏭️  Contenido duplicado de: ${duplicadoHash.titulo}`)
-    return {
-      documento: doc.nombre,
-      exito: true,
-      documento_id: duplicadoHash.id,
-      duplicado: true
-    }
-  }
-  
-  // 2. Subir a Supabase Storage
-  console.log('  💾 Subiendo a storage...')
-  const fileName = `${doc.tipo}/${doc.año}/${doc.nombre.replace(/[^a-zA-Z0-9.-]/g, '_')}`
-  
-  // Asegurar que el bucket existe
-  await crearBucketSiNoExiste(supabase)
-  
-  const { data: uploadData, error: uploadError } = await supabase.storage
-    .from('documentos-oficiales')
-    .upload(fileName, pdfBuffer, {
-      contentType: 'application/pdf',
-      upsert: true // Cambiar a true para permitir sobrescribir
-    })
-  
-  if (uploadError) {
-    throw new Error(`Error subiendo archivo: ${uploadError.message}`)
-  }
-  
-  // 3. Registrar en base de datos
+  // 2. Registrar en base de datos (SIN descargar ni subir)
   console.log('  📝 Registrando en BD...')
   // Crear o obtener fuente
   let fuenteId
@@ -731,16 +683,12 @@ export async function procesarDocumentoNuevo(
       titulo: doc.nombre,
       url_original: doc.url,
       storage_path: fileName,
-      tamaño_bytes: pdfBuffer.byteLength,
-      hash_contenido: hash,
-      contenido_texto: contenidoTexto,
       version: `${doc.año}.1`,
       formato: 'pdf',
       procesado: false,
       es_version_actual: true,
       estado_procesamiento: 'pendiente',
-      etapa_actual: 'descargado',
-      fecha_descarga: new Date().toISOString(),
+      etapa_actual: null,  // null para que el pipeline lo procese desde fase 1
       metadata: {
         subcategoria: doc.subcategoria,
         tipo_original: doc.tipo
@@ -753,11 +701,7 @@ export async function procesarDocumentoNuevo(
     throw new Error(`Error en BD: ${dbError.message}`)
   }
 
-  // 4. Disparar procesamiento asíncrono
-  console.log('  ⚙️ Iniciando procesamiento...')
-  await supabase.functions.invoke(PROCESAR_DOCUMENTO_FUNCTION, {
-    body: { documento_id: documentoRegistrado.id }
-  })
+  console.log(`  ✅ Documento registrado para procesamiento: ${documentoRegistrado.id}`)
   
   return {
     documento: doc.nombre,
