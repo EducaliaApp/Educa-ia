@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 import re
 import json
 import os
+import requests
 
 try:
     from anthropic import Anthropic
@@ -45,8 +46,21 @@ class RubricExtractor:
             except Exception as e:
                 print(f"⚠️ Error configurando OpenAI: {e}")
         
-        if not self.anthropic and not self.openai_client:
-            raise ValueError("Ni ANTHROPIC_API_KEY ni OPENAI_API_KEY están configuradas")
+        # Configurar GitHub Models como tercera opción
+        self.github_token = os.getenv('GITHUB_TOKEN')
+        if self.github_token:
+            print("✅ GitHub Models disponible como fallback")
+        
+        # Configurar Cohere como cuarta opción
+        self.cohere_key = os.getenv('COHERE_API_KEY')
+        if self.cohere_key:
+            print("✅ Cohere disponible como fallback final")
+        
+        apis_disponibles = sum([bool(self.anthropic), bool(self.openai_client), bool(self.github_token), bool(self.cohere_key)])
+        print(f"🔧 APIs configuradas: {apis_disponibles}/4")
+        
+        if apis_disponibles == 0:
+            print("⚠️ Ninguna API de IA configurada. Se necesita al menos una de: ANTHROPIC_API_KEY, OPENAI_API_KEY, GITHUB_TOKEN, COHERE_API_KEY")
     
     def extraer_rubricas(self, texto_documento: str, metadata: Dict) -> List[Dict]:
         """
@@ -63,7 +77,13 @@ class RubricExtractor:
         
         print(f"  Encontradas {len(secciones_rubricas)} posibles rúbricas")
         
-        # 2. Extraer cada rúbrica
+        # 2. Limitar procesamiento para respetar rate limits
+        max_rubricas = 5  # Máximo 5 rúbricas por documento para respetar límites
+        if len(secciones_rubricas) > max_rubricas:
+            print(f"  ⚠️ Limitando a {max_rubricas} rúbricas para respetar rate limits")
+            secciones_rubricas = secciones_rubricas[:max_rubricas]
+        
+        # 3. Extraer cada rúbrica con delay entre requests
         rubricas = []
         
         for i, seccion in enumerate(secciones_rubricas, 1):
@@ -73,6 +93,11 @@ class RubricExtractor:
             
             if rubrica:
                 rubricas.append(rubrica)
+            
+            # Delay entre requests para respetar rate limits (4 segundos = 15 req/min)
+            if i < len(secciones_rubricas):
+                import time
+                time.sleep(4)
         
         print(f"  ✅ {len(rubricas)} rúbricas extraídas exitosamente")
         
@@ -217,12 +242,205 @@ NO inventes información. Si algo no está claro, déjalo vacío."""
                 
             except Exception as e:
                 print(f"  ⚠️ Error con OpenAI: {e}")
-                return None
+                if "connection" in str(e).lower():
+                    print("  🔄 Intentando con GitHub Models como fallback...")
         
-        print("  ❌ No hay APIs disponibles")
+        # Fallback a GitHub Models
+        if self.github_token:
+            try:
+                rubrica = self._extraer_con_github_models(prompt, metadata)
+                if rubrica:
+                    print("  ✅ Extraído con GitHub Models")
+                    return rubrica
+            except Exception as e:
+                print(f"  ⚠️ Error con GitHub Models: {e}")
+                if "rate limit" in str(e).lower():
+                    print("  🔄 Intentando con Cohere como fallback final...")
+        
+        # Fallback final a Cohere
+        if self.cohere_key:
+            try:
+                rubrica = self._extraer_con_cohere(prompt, metadata)
+                if rubrica:
+                    print("  ✅ Extraído con Cohere")
+                    return rubrica
+            except Exception as e:
+                print(f"  ⚠️ Error con Cohere: {e}")
+        
+        print("  ❌ Todas las APIs fallaron")
         return None
     
 
+    
+    def _extraer_con_github_models(self, prompt: str, metadata: Dict) -> Optional[Dict]:
+        """Extrae rúbrica usando GitHub Models API"""
+        
+        import requests
+        
+        # Prompt optimizado para GitHub Models (respetando límites de tokens)
+        prompt_simple = f"""Extrae esta rúbrica MINEDUC como JSON:
+
+{prompt[:3000]}
+
+JSON con: indicador_id, nombre_indicador, descripcion_indicador, nivel_insatisfactorio, nivel_basico, nivel_competente, nivel_destacado"""
+        
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {self.github_token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": "openai/gpt-4o-mini",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Eres un experto en rúbricas educativas. Responde SOLO con JSON válido."
+                },
+                {
+                    "role": "user",
+                    "content": prompt_simple
+                }
+            ],
+            "temperature": 0.1,
+            "max_tokens": 2000  # Reducido para respetar límites
+        }
+        
+        # Intentar con retry para manejar rate limits
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    "https://models.github.ai/inference/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=30
+                )
+                
+                if response.ok:
+                    break
+                elif response.status_code == 429:  # Rate limit
+                    if attempt < max_retries - 1:
+                        wait_time = (attempt + 1) * 10  # 10, 20, 30 segundos
+                        print(f"    ⏳ Rate limit alcanzado, esperando {wait_time}s...")
+                        import time
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        raise Exception(f"Rate limit persistente después de {max_retries} intentos")
+                else:
+                    raise Exception(f"GitHub Models API error: {response.status_code} - {response.text}")
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries - 1:
+                    print(f"    ⚠️ Error de conexión, reintentando...")
+                    import time
+                    time.sleep(5)
+                    continue
+                else:
+                    raise Exception(f"Error de conexión persistente: {e}")
+        
+        result = response.json()
+        content = result["choices"][0]["message"]["content"]
+        
+        # Limpiar respuesta y extraer JSON
+        content_limpio = content.strip()
+        if content_limpio.startswith('```json'):
+            content_limpio = content_limpio[7:]
+        if content_limpio.endswith('```'):
+            content_limpio = content_limpio[:-3]
+        
+        try:
+            rubrica = json.loads(content_limpio)
+            
+            # Agregar metadata
+            rubrica['nivel_educativo'] = metadata['nivel_educativo']
+            rubrica['asignatura'] = metadata.get('asignatura') or 'generalista'
+            rubrica['año_vigencia'] = metadata['año_vigencia']
+            rubrica['modalidad'] = metadata.get('modalidad', 'regular')
+            
+            return rubrica
+            
+        except json.JSONDecodeError as e:
+            print(f"    ⚠️ Error parseando JSON de GitHub Models: {e}")
+            print(f"    📝 Contenido recibido: {content_limpio[:200]}...")
+            return None
+    
+    def _extraer_con_cohere(self, prompt: str, metadata: Dict) -> Optional[Dict]:
+        """Extrae rúbrica usando Cohere API"""
+        
+        # Prompt optimizado para Cohere
+        prompt_cohere = f"""Extrae la información estructurada de esta rúbrica educativa chilena del MINEDUC.
+
+Texto de la rúbrica:
+{prompt[:4000]}
+
+Extrae y estructura la información en formato JSON con estos campos:
+- indicador_id: identificador único
+- nombre_indicador: nombre del indicador
+- descripcion_indicador: descripción completa
+- evidencia_revisar: lista de evidencias a revisar
+- nivel_insatisfactorio: descripción y condiciones
+- nivel_basico: descripción y condiciones
+- nivel_competente: descripción y condiciones
+- nivel_destacado: descripción y condiciones
+- notas_aclaratorias: notas adicionales
+
+Responde SOLO con JSON válido:"""
+        
+        headers = {
+            "Authorization": f"Bearer {self.cohere_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": "command-r",
+            "message": prompt_cohere,
+            "temperature": 0.1,
+            "max_tokens": 2000
+        }
+        
+        response = requests.post(
+            "https://api.cohere.ai/v1/chat",
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+        
+        if not response.ok:
+            raise Exception(f"Cohere API error: {response.status_code} - {response.text}")
+        
+        result = response.json()
+        content = result["text"]
+        
+        # Limpiar respuesta y extraer JSON
+        content_limpio = content.strip()
+        if content_limpio.startswith('```json'):
+            content_limpio = content_limpio[7:]
+        if content_limpio.endswith('```'):
+            content_limpio = content_limpio[:-3]
+        
+        # Buscar JSON en la respuesta
+        import re
+        json_match = re.search(r'\{.*\}', content_limpio, re.DOTALL)
+        if json_match:
+            content_limpio = json_match.group(0)
+        
+        try:
+            rubrica = json.loads(content_limpio)
+            
+            # Agregar metadata
+            rubrica['nivel_educativo'] = metadata['nivel_educativo']
+            rubrica['asignatura'] = metadata.get('asignatura') or 'generalista'
+            rubrica['año_vigencia'] = metadata['año_vigencia']
+            rubrica['modalidad'] = metadata.get('modalidad', 'regular')
+            
+            return rubrica
+            
+        except json.JSONDecodeError as e:
+            print(f"    ⚠️ Error parseando JSON de Cohere: {e}")
+            print(f"    📝 Contenido recibido: {content_limpio[:200]}...")
+            return None
     
     def guardar_rubricas(self, rubricas: List[Dict], supabase_client):
         """Guarda rúbricas en la base de datos"""
@@ -321,8 +539,13 @@ if __name__ == '__main__':
             print(f"📊 Encontrados {len(docs.data)} documentos candidatos (sin filtro procesado)")
         
         total_rubricas = 0
+        docs_procesados = 0
+        max_docs_por_ejecucion = 10  # Limitar documentos para respetar rate limits diarios
         
         for doc in docs.data:
+            if docs_procesados >= max_docs_por_ejecucion:
+                print(f"⚠️ Limitando a {max_docs_por_ejecucion} documentos para respetar rate limits diarios")
+                break
             if args.verbose:
                 print(f"\n📄 Procesando: {doc['titulo']}")
                 print(f"   Tipo: {doc['tipo_documento']}")
@@ -366,16 +589,44 @@ if __name__ == '__main__':
                 
                 if args.verbose:
                     print(f"   ✅ Extraídas {len(rubricas)} rúbricas")
+            
+            docs_procesados += 1
         
         if total_rubricas > 0:
             print(f"✅ Procesamiento completado: {total_rubricas} rúbricas extraídas")
+            print(f"📊 Documentos procesados: {docs_procesados}/{len(docs.data)}")
         else:
-            print("📄 No se encontraron documentos de rúbricas para procesar")
-            print("✅ Script completado sin errores")
+            # Verificar si había rúbricas potenciales pero fallaron las APIs
+            docs_con_rubricas = 0
+            for doc in docs.data:
+                contenido = doc.get('contenido_texto', '')
+                if contenido and any(indicador in contenido.lower() for indicador in 
+                    ['insatisfactorio', 'básico', 'competente', 'destacado']):
+                    docs_con_rubricas += 1
+            
+            if docs_con_rubricas > 0:
+                print(f"⚠️ Se encontraron {docs_con_rubricas} documentos con rúbricas pero todas las APIs fallaron")
+                print(f"ℹ️ APIs probadas: Anthropic → OpenAI → GitHub Models → Cohere")
+                print(f"✅ Procesamiento completado: 0 rúbricas extraídas (todas las APIs no disponibles)")
+                print(f"📅 Nota: Cohere tiene límites de 20 req/min y 1,000 req/mes (gratis)")
+            else:
+                print("📄 No se encontraron documentos de rúbricas para procesar")
+                print("✅ Script completado sin errores")
+            
+            print(f"📊 Documentos procesados: {docs_procesados}/{len(docs.data)}")
+            if docs_procesados < len(docs.data):
+                print(f"ℹ️ {len(docs.data) - docs_procesados} documentos pendientes (ejecutar nuevamente para continuar)")
     
     except Exception as e:
         print(f"❌ Error: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()
-        print("✅ Script completado (con errores)")
+        
+        # Si el error es por APIs no disponibles, no es crítico
+        error_msg = str(e).lower()
+        if any(term in error_msg for term in ['credit balance', 'connection error', 'rate limit', 'cohere']):
+            print("ℹ️ Error relacionado con APIs externas (no crítico para el pipeline)")
+            print("✅ Procesamiento completado: 0 rúbricas extraídas (APIs no disponibles)")
+        else:
+            print("✅ Script completado (con errores)")

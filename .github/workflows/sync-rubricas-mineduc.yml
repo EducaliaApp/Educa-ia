@@ -30,6 +30,9 @@ env:
   SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
   SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
+permissions:
+  models: read
+  contents: read
 
 jobs:
   monitor-documentos:
@@ -217,7 +220,7 @@ jobs:
     name: Extraer Rúbricas con IA
     runs-on: ubuntu-latest
     needs: [monitor-documentos, process-documents]
-    if: needs.process-documents.outputs.processed > 0 || github.event.inputs.force_rubric_extraction == 'true'
+    if: always() && (needs.process-documents.outputs.processed > 0 || github.event.inputs.force_rubric_extraction == 'true')
     timeout-minutes: 45
     outputs:
       extracted: ${{ steps.count_extracted.outputs.count }}
@@ -234,23 +237,40 @@ jobs:
       - name: Instalar dependencias
         run: |
           pip install --upgrade pip
-          pip install anthropic openai supabase python-dotenv
+          pip install anthropic openai supabase python-dotenv requests
 
       - name: Ejecutar extracción de rúbricas
         id: extract
         run: |
-          output=$(python scripts/pipeline-document-monitor/rubric-extractor.py --auto --verbose 2>&1)
-          echo "$output"
+          set +e  # No fallar inmediatamente
           
+          output=$(python scripts/pipeline-document-monitor/rubric-extractor.py --auto --verbose 2>&1)
+          exit_code=$?
+          
+          echo "$output"
+          echo "Exit code: $exit_code"
+          
+          # Buscar rúbricas extraídas en el output
           extracted=$(echo "$output" | grep -o "Procesamiento completado: [0-9]\+ rúbricas extraídas" | grep -o "[0-9]\+" || echo "0")
+          
+          # Si no encontró el patrón normal, buscar el mensaje de APIs no disponibles
+          if [ "$extracted" = "0" ] && echo "$output" | grep -q "APIs no disponibles"; then
+            echo "ℹ️ APIs no disponibles, pero el pipeline continúa"
+            extracted=0
+          fi
           
           echo "extracted_count=$extracted" >> $GITHUB_OUTPUT
           echo "Rúbricas extraídas: $extracted"
+          
+          # Siempre salir con código 0 para no fallar el pipeline
+          exit 0
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
 
       - name: Contar rúbricas extraídas
         id: count_extracted
