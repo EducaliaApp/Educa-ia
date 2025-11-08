@@ -34,7 +34,7 @@ export class DocumentProcessor {
     
     // Enviar logs críticos a BD
     if (level === 'error') {
-      this.supabase.from('system_logs').insert(logEvent).catch(() => {});
+      this.supabase.from('system_logs').insert(logEvent).then().catch(() => {});
     }
   }
 

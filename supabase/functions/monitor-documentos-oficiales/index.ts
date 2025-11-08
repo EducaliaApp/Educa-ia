@@ -8,9 +8,11 @@ import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.
 
 // URLs oficiales del MINEDUC
 const URLS_OFICIALES = {
-  manuales: 'https://www.docentemas.cl/portafolio-2025/manuales',
-  rubricas: 'https://www.docentemas.cl/portafolio-2025/rubricas',
-  documentos: 'https://www.docentemas.cl/documentos-descargables'
+  manuales: 'https://www.docentemas.cl/documentos-descargables/manuales-de-instrumentos/',
+  rubricas: 'https://www.docentemas.cl/documentos-descargables/rubricas',
+  tiposDeInformesDeResultados: 'https://www.docentemas.cl/documentos-descargables/tipos-de-informes-de-resultados',
+  documentos: 'https://www.docentemas.cl/documentos-descargables',
+  documentosLegales: 'https://www.docentemas.cl/documentos-descargables/documentos-legales-2'
 }
 
 export const PROCESAR_DOCUMENTO_FUNCTION = 'procesar-documentos'
@@ -53,29 +55,21 @@ export async function handler(req: Request): Promise<Response> {
         const pdfLinks = extraerLinksPDF(html)
         
         for (const link of pdfLinks) {
-          let metadata = parsearNombreArchivo(link.nombre)
+          let metadata = parsearNombreArchivo(link.nombre, tipo, html)
           
-          // Si parsing básico falla, usar LIA para clasificar
+          // Si parsing básico falla, intentar clasificación con IA
           if (!metadata) {
-            try {
-              const clasificacionResponse = await fetch(link.url)
-              const buffer = await clasificacionResponse.arrayBuffer()
-
-              if (await processor.validatePDF(buffer)) {
-                const textoCrudo = new TextDecoder().decode(new Uint8Array(buffer).subarray(0, 4000))
-                const textoMuestra = `${link.nombre} ${textoCrudo}`
-                const clasificacion = await aiAnalyzer.clasificarDocumento(textoMuestra)
-                
-                if (clasificacion.confianza > 0.7) {
-                  metadata = {
-                    año: 2025, // Asumir año actual si no se detecta
-                    nivel: clasificacion.nivel_educativo,
-                    modalidad: clasificacion.modalidad
-                  }
-                }
+            console.log(`  🤖 Intentando clasificación con IA para ${link.nombre}...`)
+            metadata = await clasificarConIA(link, aiAnalyzer, processor)
+            
+            // Si IA también falla, usar valores por defecto
+            if (!metadata) {
+              metadata = {
+                año: 2025,
+                nivel: inferirNivelPorTipo(tipo),
+                modalidad: 'regular'
               }
-            } catch (error) {
-              console.warn(`No se pudo clasificar ${link.nombre}:`, error.message)
+              console.log(`  ℹ️  Usando valores por defecto para ${link.nombre} (tipo: ${tipo})`)
             }
           }
           
@@ -109,8 +103,8 @@ export async function handler(req: Request): Promise<Response> {
       // Verificar si ya existe
       const { data: existente } = await supabase
         .from('documentos_oficiales')
-        .select('id, hash_sha256, version')
-        .eq('nombre_archivo', doc.nombre)
+        .select('id, hash_contenido, version')
+        .eq('titulo', doc.nombre)
         .eq('año_vigencia', doc.año)
         .single()
       
@@ -120,7 +114,7 @@ export async function handler(req: Request): Promise<Response> {
       } else {
         const hashNuevo = await calcularHashRemoto(doc.url)
         
-        if (hashNuevo && hashNuevo !== existente.hash_sha256) {
+        if (hashNuevo && hashNuevo !== existente.hash_contenido) {
           // Análisis inteligente de cambios
           try {
             const { data: docAnterior } = await supabase
@@ -262,19 +256,38 @@ function extraerLinksPDF(html: string): Array<{ nombre: string; url: string }> {
   const links: Array<{ nombre: string; url: string }> = []
   const baseUrl = 'https://www.docentemas.cl'
   
-  // Múltiples patrones para diferentes estructuras HTML
-  const patrones = [
-    /href=["']([^"']*\.pdf)["'][^>]*>([^<]*)<\/a>/gi,
-    /href=["']([^"']*\.pdf)["'][^>]*title=["']([^"']*)["']/gi,
-    /<a[^>]*href=["']([^"']*\.pdf)["'][^>]*>.*?<span[^>]*>([^<]*)<\/span>/gi,
-    /<a[^>]*href=["']([^"']*\.pdf)["'][^>]*data-title=["']([^"']*)["']/gi
+  // Patrón principal: data-downloadurl con WordPress Download Manager
+  const patronDataDownload = /<div[^>]*>.*?<a[^>]*data-downloadurl=["']([^"']*)["'][^>]*>([^<]*)<\/a>.*?<\/div>/gis
+  
+  let match
+  while ((match = patronDataDownload.exec(html)) !== null) {
+    const url = match[1].replace(/&amp;/g, '&') // Decodificar HTML entities
+    const textoBoton = match[2].trim()
+    const contextoDiv = match[0] // Todo el div para extraer más contexto
+    
+    // Extraer nombre mejorado con contexto
+    const nombre = extraerNombreConContexto(url, textoBoton, contextoDiv)
+    
+    if (url && !links.some(l => l.url === url)) {
+      links.push({
+        nombre,
+        url: url.startsWith('http') ? url : new URL(url, baseUrl).href
+      })
+    }
+  }
+  
+  // Patrones adicionales como fallback
+  const patronesAdicionales = [
+    // Enlaces directos a PDF
+    /href=["']([^"']*\.pdf[^"']*)["'][^>]*>([^<]*)<\/a>/gi,
+    // WordPress Download Manager en href
+    /href=["']([^"']*\?wpdmdl=\d+[^"']*)["'][^>]*>([^<]*)<\/a>/gi
   ]
   
-  for (const patron of patrones) {
-    let match
+  for (const patron of patronesAdicionales) {
     while ((match = patron.exec(html)) !== null) {
-      const url = match[1]
-      const nombre = (match[2] || url.split('/').pop() || '').trim()
+      const url = match[1].replace(/&amp;/g, '&')
+      const nombre = (match[2] || extraerNombreDeUrl(url) || '').trim()
       
       if (nombre && !links.some(l => l.url === url)) {
         links.push({
@@ -288,7 +301,42 @@ function extraerLinksPDF(html: string): Array<{ nombre: string; url: string }> {
   return links
 }
 
-function parsearNombreArchivo(nombre: string): {
+function extraerNombreDeUrl(url: string): string {
+  // Para URLs con wpdmdl, intentar extraer nombre del contexto
+  if (url.includes('wpdmdl=')) {
+    const id = url.match(/wpdmdl=(\d+)/)?.[1]
+    return id ? `documento_${id}` : 'documento'
+  }
+  
+  // Para URLs directas, usar el nombre del archivo
+  return url.split('/').pop()?.split('?')[0] || 'documento'
+}
+
+function extraerNombreConContexto(url: string, textoBoton: string, contextoHtml: string): string {
+  // Buscar títulos o descripciones en el contexto HTML
+  const patronTitulo = /<h[1-6][^>]*>([^<]+)<\/h[1-6]>/i
+  const patronDescripcion = /<p[^>]*>([^<]+)<\/p>/i
+  const patronStrong = /<strong[^>]*>([^<]+)<\/strong>/i
+  
+  const matchTitulo = contextoHtml.match(patronTitulo)
+  const matchDescripcion = contextoHtml.match(patronDescripcion)
+  const matchStrong = contextoHtml.match(patronStrong)
+  
+  // Priorizar título, luego descripción, luego texto del botón
+  const nombreContexto = matchTitulo?.[1]?.trim() || 
+                         matchStrong?.[1]?.trim() ||
+                         matchDescripcion?.[1]?.trim() ||
+                         textoBoton
+  
+  // Si encontramos contexto útil, usarlo; sino usar URL
+  if (nombreContexto && nombreContexto !== 'Descargar' && nombreContexto.length > 5) {
+    return nombreContexto.replace(/[^a-zA-Z0-9À-ſ\s\-_]/g, '').trim()
+  }
+  
+  return extraerNombreDeUrl(url)
+}
+
+function parsearNombreArchivo(nombre: string, tipo?: string, html?: string): {
   año: number
   nivel: string
   modalidad: string
@@ -298,9 +346,7 @@ function parsearNombreArchivo(nombre: string): {
   
   // Detectar año con múltiples patrones
   const añoMatch = nombre.match(/202[0-9]/) || nombre.match(/\b(2024|2025|2026)\b/)
-  if (!añoMatch) return null
-  
-  const año = parseInt(añoMatch[0])
+  const año = añoMatch ? parseInt(añoMatch[0]) : 2025 // Default a 2025 si no se encuentra
   
   // Patrones mejorados para nivel educativo
   let nivel = 'regular'
@@ -334,6 +380,116 @@ function parsearNombreArchivo(nombre: string): {
   return { año, nivel, modalidad }
 }
 
+function inferirNivelPorTipo(tipo: string): string {
+  // Inferir nivel educativo basado en el tipo de documento
+  const mapeoNivel: Record<string, string> = {
+    'manuales': 'regular',
+    'rubricas': 'regular', 
+    'referentesCurriculares': 'basica_1_6',
+    'tiposDeInformesDeResultados': 'regular',
+    'documentos': 'regular',
+    'documentosLegales': 'regular'
+  }
+  return mapeoNivel[tipo] || 'regular'
+}
+
+async function clasificarConIA(
+  link: { nombre: string; url: string },
+  aiAnalyzer: any,
+  processor: any
+): Promise<{ año: number; nivel: string; modalidad: string } | null> {
+  try {
+    // 1. Descargar una muestra del PDF
+    const response = await fetch(link.url)
+    if (!response.ok) return null
+    
+    const buffer = await response.arrayBuffer()
+    
+    // 2. Validar que es un PDF válido
+    if (!(await processor.validatePDF(buffer))) {
+      console.log(`    ⚠️  Archivo no es un PDF válido: ${link.nombre}`)
+      return null
+    }
+    
+    // 3. Extraer texto de las primeras páginas
+    const textoExtraido = await extraerTextoPDF(buffer)
+    if (!textoExtraido || textoExtraido.length < 100) {
+      console.log(`    ⚠️  No se pudo extraer texto suficiente: ${link.nombre}`)
+      return null
+    }
+    
+    // 4. Crear prompt para clasificación
+    const prompt = `Analiza este documento educativo chileno y clasifícalo:
+
+Nombre del archivo: ${link.nombre}
+
+Contenido (primeras líneas):
+${textoExtraido.substring(0, 2000)}
+
+Responde SOLO con JSON válido:
+{
+  "año": 2025,
+  "nivel_educativo": "basica_1_6|basica_7_8_media|media_tp|parvularia|especial_regular|especial_neep|hospitalaria|encierro|lengua_indigena|epja|regular",
+  "modalidad": "regular|especial|hospitalaria|encierro|lengua_indigena",
+  "confianza": 0.8
+}`
+    
+    // 5. Llamar a la IA
+    const clasificacion = await aiAnalyzer.clasificarDocumento(prompt)
+    
+    if (clasificacion && clasificacion.confianza > 0.6) {
+      console.log(`    ✅ Clasificado con IA: ${link.nombre} (confianza: ${clasificacion.confianza})`)
+      return {
+        año: clasificacion.año || 2025,
+        nivel: clasificacion.nivel_educativo || 'regular',
+        modalidad: clasificacion.modalidad || 'regular'
+      }
+    }
+    
+    return null
+    
+  } catch (error) {
+    console.log(`    ⚠️  Error en clasificación IA para ${link.nombre}: ${error.message}`)
+    return null
+  }
+}
+
+async function extraerTextoPDF(buffer: ArrayBuffer): Promise<string> {
+  try {
+    // Implementación simplificada - en producción usarías una librería como pdf-parse
+    const uint8Array = new Uint8Array(buffer)
+    const decoder = new TextDecoder('utf-8', { fatal: false })
+    let texto = decoder.decode(uint8Array)
+    
+    // Limpiar texto extraído
+    texto = texto
+      .replace(/[\x00-\x1F\x7F-\x9F]/g, ' ') // Remover caracteres de control
+      .replace(/\s+/g, ' ') // Normalizar espacios
+      .trim()
+    
+    // Buscar patrones de texto legible
+    const patronesTexto = [
+      /[A-Za-zÀ-ſ]{3,}/g, // Palabras con al menos 3 caracteres
+      /\d{4}/g, // Años
+      /[A-Za-zÀ-ſ\s]{10,}/g // Frases
+    ]
+    
+    let textoLimpio = ''
+    for (const patron of patronesTexto) {
+      const matches = texto.match(patron)
+      if (matches) {
+        textoLimpio += matches.join(' ') + ' '
+      }
+    }
+    
+    return textoLimpio.substring(0, 3000) // Limitar tamaño
+    
+  } catch (error) {
+    console.error('Error extrayendo texto PDF:', error)
+    return ''
+  }
+}
+
 async function calcularHashRemoto(url: string): Promise<string | null> {
   try {
     const response = await fetch(url)
@@ -361,13 +517,16 @@ export async function procesarDocumentoNuevo(
   
   // 2. Subir a Supabase Storage
   console.log('  💾 Subiendo a storage...')
-  const fileName = `${doc.tipo}/${doc.año}/${doc.nombre}`
+  const fileName = `${doc.tipo}/${doc.año}/${doc.nombre.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+  
+  // Asegurar que el bucket existe
+  await crearBucketSiNoExiste(supabase)
   
   const { data: uploadData, error: uploadError } = await supabase.storage
     .from('documentos-oficiales')
     .upload(fileName, pdfBuffer, {
       contentType: 'application/pdf',
-      upsert: false
+      upsert: true // Cambiar a true para permitir sobrescribir
     })
   
   if (uploadError) {
@@ -376,28 +535,77 @@ export async function procesarDocumentoNuevo(
   
   // 3. Registrar en base de datos
   console.log('  📝 Registrando en BD...')
+  // Crear o obtener fuente
+  let fuenteId
+  try {
+    const { data: fuente, error: fuenteError } = await supabase
+      .from('fuentes_documentacion')
+      .select('id')
+      .eq('nombre', 'DocenteMas')
+      .maybeSingle()
+    
+    if (fuente?.id) {
+      fuenteId = fuente.id
+    } else {
+      console.log('  📁 Creando fuente DocenteMas...')
+      const { data: nuevaFuente, error: insertError } = await supabase
+        .from('fuentes_documentacion')
+        .insert({
+          nombre: 'DocenteMas',
+          url_base: 'https://www.docentemas.cl',
+          tipo_fuente: 'sitio_web',
+          activo: true,
+          patron_url: 'https://www.docentemas.cl/documentos-descargables/*',
+          frecuencia_check: '1 day'
+        })
+        .select('id')
+        .single()
+      
+      if (insertError) {
+        throw new Error(`Error creando fuente: ${insertError.message}`)
+      }
+      
+      fuenteId = nuevaFuente?.id
+    }
+  } catch (error) {
+    console.error('Error con fuente:', error)
+    throw new Error(`No se pudo obtener fuente_id: ${error.message}`)
+  }
+  
+  if (!fuenteId) {
+    throw new Error('fuente_id es null después de crear/obtener fuente')
+  }
+  
+  console.log(`  📝 Usando fuente_id: ${fuenteId}`)
+  
   const { data: documentoRegistrado, error: dbError } = await supabase
     .from('documentos_oficiales')
     .insert({
+      fuente_id: fuenteId,
       tipo_documento: mapearTipoDocumento(doc.tipo),
       nivel_educativo: doc.nivel_educativo,
       modalidad: doc.modalidad,
       año_vigencia: doc.año,
-      nombre_archivo: doc.nombre,
+      titulo: doc.nombre,
       url_original: doc.url,
       storage_path: fileName,
-      hash_sha256: hash,
       tamaño_bytes: pdfBuffer.byteLength,
+      hash_contenido: hash,
       version: `${doc.año}.1`,
-      estado: 'pendiente'
+      formato: 'pdf',
+      procesado: false,
+      es_version_actual: true,
+      estado_procesamiento: 'pendiente',
+      etapa_actual: 'descargado',
+      fecha_descarga: new Date().toISOString()
     })
     .select()
     .single()
-  
+
   if (dbError) {
     throw new Error(`Error en BD: ${dbError.message}`)
   }
-  
+
   // 4. Disparar procesamiento asíncrono
   console.log('  ⚙️ Iniciando procesamiento...')
   await supabase.functions.invoke(PROCESAR_DOCUMENTO_FUNCTION, {
@@ -416,16 +624,14 @@ async function procesarActualizacionDocumento(
   doc: any
 ): Promise<void> {
   
-  // 1. Archivar versión anterior
+  // 1. Marcar versión anterior como no actual
   await supabase
     .from('documentos_oficiales')
-    .update({ estado: 'archivado' })
+    .update({ es_version_actual: false })
     .eq('id', doc.id_existente)
   
   // 2. Crear nueva versión
   const nuevaVersion = incrementarVersion(doc.version_anterior)
-  
-  // Repetir proceso de descarga y registro
   await procesarDocumentoNuevo(supabase, {
     ...doc,
     version: nuevaVersion
@@ -451,9 +657,11 @@ function mapearTipoDocumento(tipo: string): string {
   const mapeo: Record<string, string> = {
     'manuales': 'manual_portafolio',
     'rubricas': 'rubricas',
-    'documentos': 'instructivo'
+    'tiposDeInformesDeResultados': 'informe_resultados',
+    'documentos': 'instructivo',
+    'documentosLegales': 'documento_legal'
   }
-  return mapeo[tipo] || 'manual_portafolio'
+  return mapeo[tipo] || 'instructivo'
 }
 
 function incrementarVersion(versionAnterior: string): string {
@@ -494,4 +702,29 @@ async function notificarAdministradores(supabase: any, reporte: any): Promise<vo
     })
   
   console.log('  ✓ Notificación enviada')
+}
+
+async function crearBucketSiNoExiste(supabase: any): Promise<void> {
+  try {
+    // Verificar si el bucket existe
+    const { data: buckets } = await supabase.storage.listBuckets()
+    const bucketExiste = buckets?.some((bucket: any) => bucket.name === 'documentos-oficiales')
+    
+    if (!bucketExiste) {
+      console.log('  📁 Creando bucket documentos-oficiales...')
+      const { error } = await supabase.storage.createBucket('documentos-oficiales', {
+        public: false,
+        allowedMimeTypes: ['application/pdf'],
+        fileSizeLimit: 50 * 1024 * 1024 // 50MB
+      })
+      
+      if (error) {
+        console.warn('  ⚠️  Error creando bucket:', error.message)
+      } else {
+        console.log('  ✓ Bucket creado exitosamente')
+      }
+    }
+  } catch (error) {
+    console.warn('  ⚠️  Error verificando bucket:', error.message)
+  }
 }
