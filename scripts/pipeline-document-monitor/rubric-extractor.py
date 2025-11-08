@@ -7,16 +7,22 @@ import os
 import requests
 
 try:
-    from anthropic import Anthropic
-except ImportError:
-    print("⚠️ Anthropic no instalado. Instalar con: pip install anthropic")
-    Anthropic = None
-
-try:
     import openai
 except ImportError:
     print("⚠️ OpenAI no instalado. Instalar con: pip install openai")
     openai = None
+
+try:
+    import google.generativeai as genai
+except ImportError:
+    print("⚠️ Google Generative AI no instalado. Instalar con: pip install google-generativeai")
+    genai = None
+
+try:
+    from anthropic import Anthropic
+except ImportError:
+    print("⚠️ Anthropic no instalado. Instalar con: pip install anthropic")
+    Anthropic = None
 
 try:
     from supabase import create_client
@@ -30,15 +36,7 @@ class RubricExtractor:
     """
     
     def __init__(self):
-        # Configurar Anthropic como primaria
-        self.anthropic = None
-        if Anthropic and os.getenv('ANTHROPIC_API_KEY'):
-            try:
-                self.anthropic = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
-            except Exception as e:
-                print(f"⚠️ Error configurando Anthropic: {e}")
-        
-        # Configurar OpenAI como fallback
+        # Configurar OpenAI como primaria
         self.openai_client = None
         if openai and os.getenv('OPENAI_API_KEY'):
             try:
@@ -46,21 +44,33 @@ class RubricExtractor:
             except Exception as e:
                 print(f"⚠️ Error configurando OpenAI: {e}")
         
-        # Configurar GitHub Models como tercera opción
-        self.github_token = os.getenv('GITHUB_TOKEN')
-        if self.github_token:
-            print("✅ GitHub Models disponible como fallback")
+        # Configurar Gemini como segunda opción
+        self.gemini_client = None
+        if genai and os.getenv('GEMINI_API_KEY'):
+            try:
+                genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+                self.gemini_client = genai.GenerativeModel('gemini-1.5-flash')
+            except Exception as e:
+                print(f"⚠️ Error configurando Gemini: {e}")
         
-        # Configurar Cohere como cuarta opción
+        # Configurar Cohere como tercera opción
         self.cohere_key = os.getenv('COHERE_API_KEY')
         if self.cohere_key:
-            print("✅ Cohere disponible como fallback final")
+            print("✅ Cohere disponible como fallback")
         
-        apis_disponibles = sum([bool(self.anthropic), bool(self.openai_client), bool(self.github_token), bool(self.cohere_key)])
+        # Configurar Anthropic como cuarta opción
+        self.anthropic = None
+        if Anthropic and os.getenv('ANTHROPIC_API_KEY'):
+            try:
+                self.anthropic = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+            except Exception as e:
+                print(f"⚠️ Error configurando Anthropic: {e}")
+        
+        apis_disponibles = sum([bool(self.openai_client), bool(self.gemini_client), bool(self.cohere_key), bool(self.anthropic)])
         print(f"🔧 APIs configuradas: {apis_disponibles}/4")
         
         if apis_disponibles == 0:
-            print("⚠️ Ninguna API de IA configurada. Se necesita al menos una de: ANTHROPIC_API_KEY, OPENAI_API_KEY, GITHUB_TOKEN, COHERE_API_KEY")
+            print("⚠️ Ninguna API de IA configurada. Se necesita al menos una de: OPENAI_API_KEY, GEMINI_API_KEY, COHERE_API_KEY, ANTHROPIC_API_KEY")
     
     def extraer_rubricas(self, texto_documento: str, metadata: Dict) -> List[Dict]:
         """
@@ -187,37 +197,7 @@ Responde SOLO con JSON válido:
 
 NO inventes información. Si algo no está claro, déjalo vacío."""
 
-        # Intentar con Anthropic primero
-        if self.anthropic:
-            try:
-                response = self.anthropic.messages.create(
-                    model="claude-3-5-sonnet-20241022",
-                    max_tokens=4000,
-                    temperature=0.1,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                
-                texto_respuesta = response.content[0].text
-                texto_limpio = texto_respuesta.replace('```json\n', '').replace('\n```', '').strip()
-                
-                rubrica = json.loads(texto_limpio)
-                
-                # Agregar metadata según esquema real
-                rubrica['nivel_educativo'] = metadata['nivel_educativo']
-                rubrica['asignatura'] = metadata.get('asignatura') or 'generalista'
-                rubrica['año_vigencia'] = metadata['año_vigencia']
-                rubrica['modalidad'] = metadata.get('modalidad', 'regular')
-                
-                return rubrica
-                
-            except Exception as e:
-                print(f"  ⚠️ Error con Anthropic: {e}")
-                if "credit balance" in str(e).lower() or "insufficient" in str(e).lower():
-                    print("  🔄 Intentando con OpenAI como fallback...")
-                else:
-                    return None
-        
-        # Fallback a OpenAI
+        # Intentar con OpenAI primero
         if self.openai_client:
             try:
                 response = self.openai_client.chat.completions.create(
@@ -242,22 +222,22 @@ NO inventes información. Si algo no está claro, déjalo vacío."""
                 
             except Exception as e:
                 print(f"  ⚠️ Error con OpenAI: {e}")
-                if "connection" in str(e).lower():
-                    print("  🔄 Intentando con GitHub Models como fallback...")
+                if "rate limit" in str(e).lower() or "quota" in str(e).lower():
+                    print("  🔄 Intentando con Gemini como fallback...")
         
-        # Fallback a GitHub Models
-        if self.github_token:
+        # Fallback a Gemini
+        if self.gemini_client:
             try:
-                rubrica = self._extraer_con_github_models(prompt, metadata)
+                rubrica = self._extraer_con_gemini(prompt, metadata)
                 if rubrica:
-                    print("  ✅ Extraído con GitHub Models")
+                    print("  ✅ Extraído con Gemini")
                     return rubrica
             except Exception as e:
-                print(f"  ⚠️ Error con GitHub Models: {e}")
-                if "rate limit" in str(e).lower():
-                    print("  🔄 Intentando con Cohere como fallback final...")
+                print(f"  ⚠️ Error con Gemini: {e}")
+                if "quota" in str(e).lower() or "rate limit" in str(e).lower():
+                    print("  🔄 Intentando con Cohere como fallback...")
         
-        # Fallback final a Cohere
+        # Fallback a Cohere
         if self.cohere_key:
             try:
                 rubrica = self._extraer_con_cohere(prompt, metadata)
@@ -266,11 +246,101 @@ NO inventes información. Si algo no está claro, déjalo vacío."""
                     return rubrica
             except Exception as e:
                 print(f"  ⚠️ Error con Cohere: {e}")
+                if "rate limit" in str(e).lower():
+                    print("  🔄 Intentando con Anthropic como fallback final...")
+        
+        # Fallback final a Anthropic
+        if self.anthropic:
+            try:
+                response = self.anthropic.messages.create(
+                    model="claude-3-5-sonnet-20241022",
+                    max_tokens=4000,
+                    temperature=0.1,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                
+                texto_respuesta = response.content[0].text
+                texto_limpio = texto_respuesta.replace('```json\n', '').replace('\n```', '').strip()
+                
+                rubrica = json.loads(texto_limpio)
+                
+                # Agregar metadata según esquema real
+                rubrica['nivel_educativo'] = metadata['nivel_educativo']
+                rubrica['asignatura'] = metadata.get('asignatura') or 'generalista'
+                rubrica['año_vigencia'] = metadata['año_vigencia']
+                rubrica['modalidad'] = metadata.get('modalidad', 'regular')
+                
+                print("  ✅ Extraído con Anthropic")
+                return rubrica
+                
+            except Exception as e:
+                print(f"  ⚠️ Error con Anthropic: {e}")
         
         print("  ❌ Todas las APIs fallaron")
         return None
     
 
+    
+    def _extraer_con_gemini(self, prompt: str, metadata: Dict) -> Optional[Dict]:
+        """Extrae rúbrica usando Google Gemini API"""
+        
+        # Prompt optimizado para Gemini
+        prompt_gemini = f"""Extrae la información estructurada de esta rúbrica oficial del MINEDUC chileno.
+
+Texto de la rúbrica:
+{prompt[:5000]}
+
+Extrae y estructura la información en formato JSON válido con estos campos exactos:
+- indicador_id: identificador único (string)
+- nombre_indicador: nombre del indicador (string)
+- descripcion_indicador: descripción completa (string)
+- evidencia_revisar: lista de evidencias a revisar (array de strings)
+- nivel_insatisfactorio: objeto con descripcion, condiciones, operador_logico, puntaje
+- nivel_basico: objeto con descripcion, condiciones, operador_logico, puntaje
+- nivel_competente: objeto con descripcion, condiciones, operador_logico, puntaje
+- nivel_destacado: objeto con descripcion, condiciones, operador_logico, puntaje
+- notas_aclaratorias: notas adicionales (array de strings)
+
+IMPORTANTE: Responde ÚNICAMENTE con JSON válido, sin texto adicional."""
+        
+        try:
+            response = self.gemini_client.generate_content(
+                prompt_gemini,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.1,
+                    max_output_tokens=4000,
+                    response_mime_type="application/json"
+                )
+            )
+            
+            content = response.text.strip()
+            
+            # Limpiar respuesta
+            if content.startswith('```json'):
+                content = content[7:]
+            if content.endswith('```'):
+                content = content[:-3]
+            
+            rubrica = json.loads(content)
+            
+            # Agregar metadata
+            rubrica['nivel_educativo'] = metadata['nivel_educativo']
+            rubrica['asignatura'] = metadata.get('asignatura') or 'generalista'
+            rubrica['año_vigencia'] = metadata['año_vigencia']
+            rubrica['modalidad'] = metadata.get('modalidad', 'regular')
+            
+            return rubrica
+            
+        except json.JSONDecodeError as e:
+            print(f"    ⚠️ Error parseando JSON de Gemini: {e}")
+            print(f"    📝 Contenido recibido: {content[:200]}...")
+            return None
+        except Exception as e:
+            if "quota" in str(e).lower() or "rate limit" in str(e).lower():
+                raise Exception(f"Gemini quota/rate limit: {e}")
+            else:
+                print(f"    ⚠️ Error inesperado con Gemini: {e}")
+                return None
     
     def _extraer_con_github_models(self, prompt: str, metadata: Dict) -> Optional[Dict]:
         """Extrae rúbrica usando GitHub Models API"""
@@ -606,7 +676,7 @@ if __name__ == '__main__':
             
             if docs_con_rubricas > 0:
                 print(f"⚠️ Se encontraron {docs_con_rubricas} documentos con rúbricas pero todas las APIs fallaron")
-                print(f"ℹ️ APIs probadas: Anthropic → OpenAI → GitHub Models → Cohere")
+                print(f"ℹ️ APIs probadas: OpenAI → Gemini → Cohere → Anthropic")
                 print(f"✅ Procesamiento completado: 0 rúbricas extraídas (todas las APIs no disponibles)")
                 print(f"📅 Nota: Cohere tiene límites de 20 req/min y 1,000 req/mes (gratis)")
             else:
@@ -625,7 +695,7 @@ if __name__ == '__main__':
         
         # Si el error es por APIs no disponibles, no es crítico
         error_msg = str(e).lower()
-        if any(term in error_msg for term in ['credit balance', 'connection error', 'rate limit', 'cohere']):
+        if any(term in error_msg for term in ['credit balance', 'connection error', 'rate limit', 'cohere', 'quota', 'gemini']):
             print("ℹ️ Error relacionado con APIs externas (no crítico para el pipeline)")
             print("✅ Procesamiento completado: 0 rúbricas extraídas (APIs no disponibles)")
         else:

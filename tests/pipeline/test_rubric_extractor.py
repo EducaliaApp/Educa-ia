@@ -25,19 +25,20 @@ class TestRubricExtractor:
     def mock_env_vars(self):
         """Mock de variables de entorno"""
         with patch.dict(os.environ, {
-            'ANTHROPIC_API_KEY': 'test_anthropic_key',
             'OPENAI_API_KEY': 'test_openai_key',
-            'GITHUB_TOKEN': 'test_github_token',
-            'COHERE_API_KEY': 'test_cohere_key'
+            'GEMINI_API_KEY': 'test_gemini_key',
+            'COHERE_API_KEY': 'test_cohere_key',
+            'ANTHROPIC_API_KEY': 'test_anthropic_key'
         }):
             yield
 
     @pytest.fixture
     def extractor(self, mock_env_vars):
         """Instancia del extractor con mocks"""
-        with patch('rubric_extractor.Anthropic'):
-            with patch('rubric_extractor.openai.OpenAI'):
-                return RubricExtractor()
+        with patch('rubric_extractor.openai.OpenAI'):
+            with patch('rubric_extractor.genai'):
+                with patch('rubric_extractor.Anthropic'):
+                    return RubricExtractor()
 
     @pytest.fixture
     def sample_rubric_text(self):
@@ -63,26 +64,31 @@ class TestRubricExtractor:
 
     def test_init_all_apis_available(self, mock_env_vars):
         """Test inicialización con todas las APIs disponibles"""
-        with patch('rubric_extractor.Anthropic') as mock_anthropic:
-            with patch('rubric_extractor.openai.OpenAI') as mock_openai:
-                extractor = RubricExtractor()
-                
-                assert extractor.anthropic is not None
-                assert extractor.openai_client is not None
-                assert extractor.github_token == 'test_github_token'
-                assert extractor.cohere_key == 'test_cohere_key'
+        with patch('rubric_extractor.openai.OpenAI') as mock_openai:
+            with patch('rubric_extractor.genai') as mock_genai:
+                with patch('rubric_extractor.Anthropic') as mock_anthropic:
+                    mock_genai.configure = Mock()
+                    mock_genai.GenerativeModel.return_value = Mock()
+                    
+                    extractor = RubricExtractor()
+                    
+                    assert extractor.openai_client is not None
+                    assert extractor.gemini_client is not None
+                    assert extractor.cohere_key == 'test_cohere_key'
+                    assert extractor.anthropic is not None
 
     def test_init_no_apis_available(self):
         """Test inicialización sin APIs disponibles"""
         with patch.dict(os.environ, {}, clear=True):
-            with patch('rubric_extractor.Anthropic', None):
-                with patch('rubric_extractor.openai', None):
-                    extractor = RubricExtractor()
-                    
-                    assert extractor.anthropic is None
-                    assert extractor.openai_client is None
-                    assert extractor.github_token is None
-                    assert extractor.cohere_key is None
+            with patch('rubric_extractor.openai', None):
+                with patch('rubric_extractor.genai', None):
+                    with patch('rubric_extractor.Anthropic', None):
+                        extractor = RubricExtractor()
+                        
+                        assert extractor.openai_client is None
+                        assert extractor.gemini_client is None
+                        assert extractor.cohere_key is None
+                        assert extractor.anthropic is None
 
     def test_identificar_secciones_rubricas(self, extractor, sample_rubric_text):
         """Test identificación de secciones de rúbricas"""
@@ -130,12 +136,11 @@ class TestRubricExtractor:
             # Debe limitarse a 5 rúbricas máximo
             assert mock_extract.call_count <= 5
 
-    def test_extraer_rubrica_individual_anthropic_success(self, extractor, sample_rubric_text, sample_metadata):
-        """Test extracción exitosa con Anthropic"""
+    def test_extraer_rubrica_individual_openai_success(self, extractor, sample_rubric_text, sample_metadata):
+        """Test extracción exitosa con OpenAI"""
         mock_response = Mock()
-        mock_response.content = [Mock()]
-        mock_response.content[0].text = '''```json
-        {
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = json.dumps({
             "indicador_id": "test_indicator",
             "nombre_indicador": "Test Indicator",
             "descripcion_indicador": "Test description",
@@ -145,10 +150,9 @@ class TestRubricExtractor:
             "nivel_competente": {"descripcion": "test", "condiciones": [], "operador_logico": "AND", "puntaje": 3.0},
             "nivel_destacado": {"descripcion": "test", "condiciones": [], "operador_logico": "AND", "puntaje": 4.0},
             "notas_aclaratorias": ["test note"]
-        }
-        ```'''
+        })
         
-        extractor.anthropic.messages.create.return_value = mock_response
+        extractor.openai_client.chat.completions.create.return_value = mock_response
         
         resultado = extractor._extraer_rubrica_individual(sample_rubric_text, sample_metadata)
         
@@ -157,24 +161,23 @@ class TestRubricExtractor:
         assert resultado['nivel_educativo'] == 'basica_1_6'
         assert resultado['asignatura'] == 'matematicas'
 
-    def test_extraer_rubrica_individual_anthropic_credit_error(self, extractor, sample_rubric_text, sample_metadata):
-        """Test fallback cuando Anthropic no tiene créditos"""
-        # Simular error de créditos en Anthropic
-        extractor.anthropic.messages.create.side_effect = Exception("credit balance is too low")
+    def test_extraer_rubrica_individual_openai_rate_limit(self, extractor, sample_rubric_text, sample_metadata):
+        """Test fallback cuando OpenAI tiene rate limit"""
+        # Simular rate limit en OpenAI
+        extractor.openai_client.chat.completions.create.side_effect = Exception("rate limit exceeded")
         
-        # Mock OpenAI exitoso
-        mock_openai_response = Mock()
-        mock_openai_response.choices = [Mock()]
-        mock_openai_response.choices[0].message.content = json.dumps({
-            "indicador_id": "openai_test",
-            "nombre_indicador": "OpenAI Test"
+        # Mock Gemini exitoso
+        mock_gemini_response = Mock()
+        mock_gemini_response.text = json.dumps({
+            "indicador_id": "gemini_test",
+            "nombre_indicador": "Gemini Test"
         })
-        extractor.openai_client.chat.completions.create.return_value = mock_openai_response
+        extractor.gemini_client.generate_content.return_value = mock_gemini_response
         
         resultado = extractor._extraer_rubrica_individual(sample_rubric_text, sample_metadata)
         
         assert resultado is not None
-        assert resultado['indicador_id'] == 'openai_test'
+        assert resultado['indicador_id'] == 'gemini_test'
 
     def test_extraer_con_github_models_success(self, extractor, sample_metadata):
         """Test extracción exitosa con GitHub Models"""
@@ -325,16 +328,11 @@ class TestRubricExtractor:
     @pytest.mark.integration
     def test_cascada_fallback_completa(self, extractor, sample_rubric_text, sample_metadata):
         """Test de cascada completa de fallback"""
-        # Anthropic falla
-        extractor.anthropic.messages.create.side_effect = Exception("credit balance")
-        
         # OpenAI falla
-        extractor.openai_client.chat.completions.create.side_effect = Exception("connection error")
+        extractor.openai_client.chat.completions.create.side_effect = Exception("rate limit exceeded")
         
-        # GitHub Models falla
-        mock_github_error = Mock()
-        mock_github_error.ok = False
-        mock_github_error.status_code = 429
+        # Gemini falla
+        extractor.gemini_client.generate_content.side_effect = Exception("quota exceeded")
         
         # Cohere exitoso
         mock_cohere_success = Mock()
@@ -346,18 +344,18 @@ class TestRubricExtractor:
             })
         }
         
-        with patch('rubric_extractor.requests.post', side_effect=[mock_github_error, mock_github_error, mock_github_error, mock_cohere_success]):
-            with patch('time.sleep'):  # Acelerar test
-                resultado = extractor._extraer_rubrica_individual(sample_rubric_text, sample_metadata)
-                
-                assert resultado is not None
-                assert resultado['indicador_id'] == 'fallback_success'
+        with patch('rubric_extractor.requests.post', return_value=mock_cohere_success):
+            resultado = extractor._extraer_rubrica_individual(sample_rubric_text, sample_metadata)
+            
+            assert resultado is not None
+            assert resultado['indicador_id'] == 'fallback_success'
 
     def test_todas_apis_fallan(self, extractor, sample_rubric_text, sample_metadata):
         """Test cuando todas las APIs fallan"""
         # Configurar todos los fallos
-        extractor.anthropic.messages.create.side_effect = Exception("API Error")
         extractor.openai_client.chat.completions.create.side_effect = Exception("API Error")
+        extractor.gemini_client.generate_content.side_effect = Exception("API Error")
+        extractor.anthropic.messages.create.side_effect = Exception("API Error")
         
         mock_error_response = Mock()
         mock_error_response.ok = False
