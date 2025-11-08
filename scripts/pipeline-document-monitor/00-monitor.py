@@ -30,7 +30,9 @@ class DocumentMonitor:
         
         # URLs a monitorear
         self.urls_monitoreo = {
-            'docentemas': 'https://www.docentemas.cl/portafolio/',
+            'docentemas_rubricas': 'https://www.docentemas.cl/documentos-descargables/rubricas/',
+            'docentemas_manuales': 'https://www.docentemas.cl/documentos-descargables/manuales-de-instrumentos/',
+            'docentemas_curriculares': 'https://www.docentemas.cl/documentos-descargables/documentos-curriculares/',
             'cpeip': 'https://www.cpeip.cl/evaluacion-docente/'
         }
         
@@ -55,16 +57,24 @@ class DocumentMonitor:
             'errores': []
         }
         
-        # 1. Monitorear DocenteMás
-        print("\n📍 Monitoreando DocenteMás...")
-        docs_docentemas = self._monitorear_docentemas()
+        # 1. Monitorear DocenteMás - Rúbricas
+        print("\n📍 Monitoreando DocenteMás - Rúbricas...")
+        docs_rubricas = self._monitorear_docentemas_seccion('docentemas_rubricas', 'rubrica')
         
-        # 2. Monitorear CPEIP
+        # 2. Monitorear DocenteMás - Manuales
+        print("\n📍 Monitoreando DocenteMás - Manuales...")
+        docs_manuales = self._monitorear_docentemas_seccion('docentemas_manuales', 'manual_portafolio')
+        
+        # 3. Monitorear DocenteMás - Documentos Curriculares
+        print("\n📍 Monitoreando DocenteMás - Bases Curriculares...")
+        docs_curriculares = self._monitorear_docentemas_seccion('docentemas_curriculares', 'base_curricular')
+        
+        # 4. Monitorear CPEIP
         print("\n📍 Monitoreando CPEIP...")
         docs_cpeip = self._monitorear_cpeip()
         
-        # 3. Combinar documentos encontrados
-        todos_docs = docs_docentemas + docs_cpeip
+        # 5. Combinar documentos encontrados
+        todos_docs = docs_rubricas + docs_manuales + docs_curriculares + docs_cpeip
         
         print(f"\n📊 Encontrados {len(todos_docs)} documentos potenciales")
         
@@ -79,10 +89,11 @@ class DocumentMonitor:
                 if not pdf_path:
                     continue
                 
-                # Procesar
-                resultado = self.processor.procesar_pdf(
-                    pdf_path=pdf_path,
-                    metadata=doc_info['metadata']
+                # Procesar directamente en memoria (sin guardar en Storage)
+                resultado = self._procesar_pdf_directo(
+                    pdf_data=pdf_path.read_bytes(),
+                    metadata=doc_info['metadata'],
+                    url=doc_info['url']
                 )
                 
                 if resultado['status'] == 'procesado':
@@ -130,17 +141,16 @@ class DocumentMonitor:
         
         return resultados
     
-    def _monitorear_docentemas(self) -> List[Dict]:
+    def _monitorear_docentemas_seccion(self, seccion_key: str, tipo_documento: str) -> List[Dict]:
         """
-        Escanea www.docentemas.cl en busca de PDFs
+        Escanea una sección específica de www.docentemas.cl
         """
         
         documentos = []
         
         try:
-            # Página principal de portafolio
             response = requests.get(
-                self.urls_monitoreo['docentemas'],
+                self.urls_monitoreo[seccion_key],
                 timeout=30,
                 headers={'User-Agent': 'Mozilla/5.0'}
             )
@@ -151,31 +161,32 @@ class DocumentMonitor:
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Buscar enlaces a PDFs
-            for link in soup.find_all('a', href=True):
-                href = link['href']
+            # Buscar enlaces con data-downloadurl (WordPress Download Manager)
+            for link in soup.find_all('a', {'data-downloadurl': True}):
+                href = link.get('data-downloadurl') or link.get('href')
                 
-                # Filtrar solo PDFs de 2025
-                if '.pdf' in href.lower() and '2025' in href:
-                    
-                    # Construir URL completa
-                    if not href.startswith('http'):
-                        href = f"https://www.docentemas.cl{href}"
-                    
-                    # Extraer información del nombre del archivo
-                    info = self._extraer_info_nombre_archivo(href, link.get_text())
-                    
-                    if info:
-                        documentos.append({
-                            'url': href,
-                            'titulo': info['titulo'],
-                            'metadata': info['metadata']
-                        })
+                if not href or '.pdf' not in href.lower():
+                    continue
+                
+                # Construir URL completa
+                if not href.startswith('http'):
+                    href = f"https://www.docentemas.cl{href}"
+                
+                # Extraer información
+                texto = link.get_text(strip=True)
+                info = self._extraer_info_nombre_archivo(href, texto, tipo_documento)
+                
+                if info:
+                    documentos.append({
+                        'url': href,
+                        'titulo': info['titulo'],
+                        'metadata': info['metadata']
+                    })
             
-            print(f"  ✓ Encontrados {len(documentos)} documentos en DocenteMás")
+            print(f"  ✓ Encontrados {len(documentos)} documentos")
             
         except Exception as e:
-            print(f"  ❌ Error monitoreando DocenteMás: {e}")
+            print(f"  ❌ Error monitoreando {seccion_key}: {e}")
         
         return documentos
     
@@ -220,32 +231,281 @@ class DocumentMonitor:
         
         return documentos
     
-    def _extraer_info_nombre_archivo(self, url: str, texto: str) -> Optional[Dict]:
+    def _extraer_info_nombre_archivo(self, url: str, texto: str, tipo_forzado: str = None) -> Optional[Dict]:
         """
         Extrae información estructurada del nombre del archivo
         """
         
         filename = url.split('/')[-1].lower()
+        texto_completo = (filename + ' ' + texto).lower()
         
-        # Detectar tipo de documento
-        tipo = None
-        if 'manual' in filename or 'manual' in texto.lower():
-            tipo = 'manual'
-        elif 'rubrica' in filename or 'rúbrica' in texto.lower():
-            tipo = 'rubrica'
-        elif 'instructivo' in filename or 'instructivo' in texto.lower():
-            tipo = 'instructivo'
+        # Usar tipo forzado o detectar
+        tipo = tipo_forzado
+        if not tipo:
+            if 'manual' in texto_completo and 'portafolio' in texto_completo:
+                tipo = 'manual_portafolio'
+            elif 'rubrica' in texto_completo or 'rúbrica' in texto_completo:
+                tipo = 'rubrica'
+            elif 'instructivo' in texto_completo:
+                tipo = 'instructivo'
+            elif 'base' in texto_completo and 'curricular' in texto_completo:
+                tipo = 'base_curricular'
         
         if not tipo:
             return None
         
         # Detectar nivel educativo
-        nivel = self._detectar_nivel_educativo(filename + ' ' + texto.lower())
+        nivel = self._detectar_nivel_educativo(texto_completo)
         
         # Detectar asignatura
-        asignatura = self._detectar_asignatura(filename + ' ' + texto.lower())
+        asignatura = self._detectar_asignatura(texto_completo)
         
-        # Año (buscar 2024, 2025, etc)
+        # Detectar modalidad
+        modalidad = self._detectar_modalidad(texto_completo)
+        
+    
+    def _imprimir_resumen(self, resultados: Dict):
+        """
+        Imprime resumen de resultados
+        """
+        print("\n" + "=" * 60)
+        print("📊 RESUMEN DE MONITOREO")
+        print("=" * 60)
+        print(f"✅ Documentos nuevos: {resultados['documentos_nuevos']}")
+        print(f"🔄 Documentos actualizados: {resultados['documentos_actualizados']}")
+        print(f"📋 Rúbricas extraídas: {resultados['rubricas_extraidas']}")
+        print(f"❌ Errores: {len(resultados['errores'])}")
+        
+        if resultados['errores']:
+            print("\n⚠️  Errores encontrados:")
+            for error in resultados['errores'][:5]:
+                print(f"  - {error}")
+    
+    def _enviar_notificacion(self, resultados: Dict):
+        """
+        Envía notificación de cambios
+        """
+        # TODO: Implementar notificaciones (email, Slack, etc)
+        pass
+    
+    def _descargar_pdf(self, url: str, titulo: str) -> Optional[Path]:
+        """
+        Descarga PDF temporal (solo para procesamiento, no se guarda en Storage)
+        """
+        try:
+            response = requests.get(url, timeout=60)
+            if response.status_code == 200:
+                filename = hashlib.md5(url.encode()).hexdigest() + '.pdf'
+                filepath = self.download_dir / filename
+                filepath.write_bytes(response.content)
+                return filepath
+        except Exception as e:
+            print(f"  ❌ Error descargando: {e}")
+        return None
+    
+    def _procesar_pdf_directo(self, pdf_data: bytes, metadata: Dict, url: str) -> Dict:
+        """
+        Procesa PDF directamente en memoria sin guardarlo en Storage
+        Optimización de costos: solo guardamos el texto extraído en BD
+        """
+        import re
+        
+        # Calcular hash del contenido
+        contenido_hash = hashlib.sha256(pdf_data).hexdigest()
+        
+        # Verificar si ya existe
+        existing = self.supabase.table('documentos_oficiales')\
+            .select('id')\
+            .eq('contenido_hash', contenido_hash)\
+            .execute()
+        
+        if existing.data:
+            return {'status': 'ya_existe', 'documento_id': existing.data[0]['id']}
+        
+        # Extraer texto usando el processor
+        texto = self.processor._extraer_texto_pdf_data(pdf_data)
+        
+        # Si no hay texto, intentar OCR
+        if not texto or len(texto.strip()) < 10:
+            texto = self.processor._extraer_texto_con_ocr(pdf_data)
+        
+        # Crear registro en BD (sin storage_path)
+        doc_data = {
+            'titulo': metadata.get('titulo', 'Sin título'),
+            'tipo_documento': metadata['tipo_documento'],
+            'nivel_educativo': metadata['nivel_educativo'],
+            'asignatura': metadata.get('asignatura'),
+            'modalidad': metadata['modalidad'],
+            'año_vigencia': metadata['año_vigencia'],
+            'fuente': metadata['fuente'],
+            'url_original': url,
+            'contenido_hash': contenido_hash,
+            'contenido_texto': texto or 'Documento sin texto extraíble',
+            'procesado': True,
+            'fecha_procesamiento': datetime.now().isoformat(),
+            'storage_path': None  # No guardamos en Storage para ahorrar costos
+        }
+        
+        result = self.supabase.table('documentos_oficiales').insert(doc_data).execute()
+        
+        if result.data:
+            doc_id = result.data[0]['id']
+            
+            # Generar embedding si hay texto
+            if texto and len(texto) > 50:
+                try:
+                    self.processor._generar_embedding_supabase(doc_id, texto[:8000])
+                except Exception as e:
+                    print(f"  ⚠️ Error generando embedding: {e}")
+            
+            return {'status': 'procesado', 'documento_id': doc_id}
+        
+        return {'status': 'error', 'error': 'No se pudo insertar en BD'}
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Monitor de Documentos Oficiales')
+    parser.add_argument('--interactive', action='store_true', help='Modo interactivo')
+    args = parser.parse_args()
+    
+    monitor = DocumentMonitor(interactive=args.interactive)
+    monitor.ejecutar_monitoreo_completo()      año = 2025
+        import re
+        año_match = re.search(r'20(2[4-9]|3[0-9])', texto_completo)
+        if año_match:
+            año = int(año_match.group(0))
+        
+        return {
+            'titulo': texto.strip() or filename,
+            'metadata': {
+                'tipo_documento': tipo,
+                'nivel_educativo': nivel,
+                'asignatura': asignatura,
+                'modalidad': modalidad,
+                'año_vigencia': año,
+                'fuente': 'docentemas' if 'docentemas' in url else 'cpeip',
+                'url_original': url
+            }
+        }
+    
+    def _detectar_nivel_educativo(self, texto: str) -> str:
+        """
+        Detecta nivel educativo: primero patrones exactos, luego fuzzy
+        """
+        # 1. Patrones exactos de DocenteMás
+        if '7' in texto and '8' in texto and ('básica' in texto or 'basica' in texto):
+            return 'basica_7_8'
+        elif 'ed. básica asignaturas' in texto or 'basica asignaturas' in texto:
+            return 'basica_1_6'
+        elif 'ed. básica generalista' in texto or 'basica generalista' in texto:
+            return 'basica_generalista'
+        elif 'educación media técnico profesional' in texto or 'media técnico profesional' in texto or 'media tp' in texto:
+            return 'media_tp'
+        elif 'educación media' in texto or 'ed. media' in texto:
+            return 'media'
+        elif 'educación parvularia' in texto or 'ed. parvularia' in texto or 'párvulo' in texto:
+            return 'parvularia'
+        elif 'educación especial escuela especial' in texto or 'especial escuela especial' in texto or 'neep' in texto:
+            return 'especial_escuela'
+        elif 'educación especial escuela regular' in texto or 'especial escuela regular' in texto:
+            return 'especial_regular'
+        elif 'personas jóvenes y adultas' in texto or 'epja' in texto:
+            return 'epja'
+        elif 'contextos de encierro' in texto or 'encierro' in texto:
+            return 'encierro'
+        elif 'lengua indígena' in texto or 'indigena' in texto:
+            return 'lengua_indigena'
+        elif 'pedagogía hospitalaria' in texto or 'hospitalaria' in texto:
+            return 'hospitalaria'
+        
+        # 2. Patrones fuzzy (no exactos)
+        elif ('7' in texto or '8' in texto) and 'basica' in texto:
+            return 'basica_7_8'
+        elif ('1' in texto or '6' in texto) and 'basica' in texto and 'asignatura' in texto:
+            return 'basica_1_6'
+        elif 'basica' in texto and 'generalista' in texto:
+            return 'basica_generalista'
+        elif 'media' in texto and ('tecnico' in texto or 'profesional' in texto):
+            return 'media_tp'
+        elif 'media' in texto:
+            return 'media'
+        elif 'parvularia' in texto or 'parvulo' in texto:
+            return 'parvularia'
+        elif 'especial' in texto and 'escuela especial' in texto:
+            return 'especial_escuela'
+        elif 'especial' in texto and 'regular' in texto:
+            return 'especial_regular'
+        elif 'jovenes' in texto or 'adultas' in texto or 'adultos' in texto:
+            return 'epja'
+        elif 'basica' in texto:
+            return 'basica'
+        
+        return 'generalista'
+    
+    def _detectar_asignatura(self, texto: str) -> Optional[str]:
+        """
+        Detecta asignatura del documento
+        """
+        asignaturas = {
+            'artes visuales': 'artes_visuales',
+            'ciencias naturales': 'ciencias_naturales',
+            'educación física': 'educacion_fisica',
+            'educacion fisica': 'educacion_fisica',
+            'francés': 'frances',
+            'frances': 'frances',
+            'historia': 'historia',
+            'geografía': 'historia',
+            'ciencias sociales': 'historia',
+            'inglés': 'ingles',
+            'ingles': 'ingles',
+            'idioma extranjero': 'ingles',
+            'lenguaje': 'lenguaje',
+            'comunicación': 'lenguaje',
+            'lengua castellana': 'lenguaje',
+            'matemática': 'matematica',
+            'matematica': 'matematica',
+            'educación matemática': 'matematica',
+            'música': 'musica',
+            'musica': 'musica',
+            'religión católica': 'religion_catolica',
+            'religión evangélica': 'religion_evangelica',
+            'tecnología': 'tecnologia',
+            'tecnologia': 'tecnologia',
+            'estudios sociales': 'estudios_sociales',
+            'educación especial': 'educacion_especial',
+            'educacion especial': 'educacion_especial',
+            'diferencial': 'educacion_especial'
+        }
+        
+        for key, value in asignaturas.items():
+            if key in texto:
+                return value
+        
+        return None
+    
+    def _detectar_modalidad(self, texto: str) -> str:
+        """
+        Detecta modalidad educativa según patrones de DocenteMás
+        """
+        if 'contextos de encierro' in texto or 'encierro' in texto:
+            return 'encierro'
+        elif 'personas jóvenes y adultas' in texto or 'epja' in texto:
+            return 'epja'
+        elif 'técnico profesional' in texto or 'tp' in texto:
+            return 'tecnico_profesional'
+        elif 'pedagogía hospitalaria' in texto or 'hospitalaria' in texto:
+            return 'hospitalaria'
+        elif 'lengua indígena' in texto or 'indigena' in texto:
+            return 'lengua_indigena'
+        elif 'educación especial escuela especial' in texto or 'neep' in texto:
+            return 'especial_escuela'
+        elif 'educación especial escuela regular' in texto:
+            return 'especial_regular'
+        elif 'escuela de lenguaje' in texto:
+            return 'especial_lenguaje'
+        elif 'especial' in texto:
+            return 'especial'
+        return 'regular'
         import re
         año_match = re.search(r'202[4-9]', filename)
         año = int(año_match.group(0)) if año_match else datetime.now().year

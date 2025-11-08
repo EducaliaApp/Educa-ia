@@ -276,6 +276,10 @@ class DocumentProcessor:
     def _generar_embedding_supabase(self, documento_id: str, texto: str, max_reintentos: int = 2):
         """Genera embedding usando Edge Function de Supabase con pg_vector"""
         
+        # MLOps: Track embedding model
+        EMBEDDING_MODEL = 'text-embedding-3-small'
+        EMBEDDING_VERSION = 'v1.0'
+        
         # Limpiar y preparar texto
         texto_limpio = self._limpiar_texto_para_embedding(texto)
         
@@ -300,6 +304,13 @@ class DocumentProcessor:
                 
                 if response.get('error'):
                     raise Exception(f"Error en Edge Function: {response['error']}")
+                
+                # MLOps: Update model tracking
+                self.supabase.table('documentos_oficiales').update({
+                    'embedding_model': EMBEDDING_MODEL,
+                    'embedding_version': EMBEDDING_VERSION,
+                    'embedding_generated_at': datetime.now().isoformat()
+                }).eq('id', documento_id).execute()
                 
                 print(f"    ✅ Embedding generado exitosamente")
                 return

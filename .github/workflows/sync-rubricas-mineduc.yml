@@ -1,4 +1,4 @@
-name: Sync Rúbricas MINEDUC
+name: Sync Datos MINEDUC - Base de Conocimientos
 
 on:
   schedule:
