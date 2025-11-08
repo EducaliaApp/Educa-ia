@@ -1,4 +1,4 @@
-# scripts/document-monitor/rubric-extractor.py
+# scripts/pipeline-document-monitor/rubric-extractor.py
 
 from typing import Dict, List, Optional
 import re
@@ -12,6 +12,12 @@ except ImportError:
     Anthropic = None
 
 try:
+    import openai
+except ImportError:
+    print("⚠️ OpenAI no instalado. Instalar con: pip install openai")
+    openai = None
+
+try:
     from supabase import create_client
 except ImportError:
     print("⚠️ Supabase no instalado. Instalar con: pip install supabase")
@@ -23,14 +29,24 @@ class RubricExtractor:
     """
     
     def __init__(self):
-        if Anthropic is None:
-            raise ImportError("Anthropic no está instalado. Ejecutar: pip install anthropic")
+        # Configurar Anthropic como primaria
+        self.anthropic = None
+        if Anthropic and os.getenv('ANTHROPIC_API_KEY'):
+            try:
+                self.anthropic = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+            except Exception as e:
+                print(f"⚠️ Error configurando Anthropic: {e}")
         
-        api_key = os.getenv('ANTHROPIC_API_KEY')
-        if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY no está configurada")
-            
-        self.anthropic = Anthropic(api_key=api_key)
+        # Configurar OpenAI como fallback
+        self.openai_client = None
+        if openai and os.getenv('OPENAI_API_KEY'):
+            try:
+                self.openai_client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            except Exception as e:
+                print(f"⚠️ Error configurando OpenAI: {e}")
+        
+        if not self.anthropic and not self.openai_client:
+            raise ValueError("Ni ANTHROPIC_API_KEY ni OPENAI_API_KEY están configuradas")
     
     def extraer_rubricas(self, texto_documento: str, metadata: Dict) -> List[Dict]:
         """
@@ -146,49 +162,67 @@ Responde SOLO con JSON válido:
 
 NO inventes información. Si algo no está claro, déjalo vacío."""
 
-        try:
-            response = self.anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4000,
-                temperature=0.1,  # Muy bajo para consistencia
-                messages=[{"role": "user", "content": prompt}]
-            )
-            
-            texto_respuesta = response.content[0].text
-            texto_limpio = texto_respuesta.replace('```json\n', '').replace('\n```', '').strip()
-            
-            rubrica = json.loads(texto_limpio)
-            
-            # Agregar metadata
-            rubrica['nivel_educativo'] = metadata['nivel_educativo']
-            rubrica['asignatura'] = metadata.get('asignatura')
-            rubrica['año_vigencia'] = metadata['año_vigencia']
-            rubrica['modalidad'] = metadata.get('modalidad', 'regular')
-            
-            # Inferir módulo y tarea desde indicador_id
-            self._inferir_modulo_tarea(rubrica)
-            
-            return rubrica
-            
-        except Exception as e:
-            print(f"  ⚠️ Error extrayendo rúbrica: {e}")
-            return None
+        # Intentar con Anthropic primero
+        if self.anthropic:
+            try:
+                response = self.anthropic.messages.create(
+                    model="claude-3-5-sonnet-20241022",
+                    max_tokens=4000,
+                    temperature=0.1,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                
+                texto_respuesta = response.content[0].text
+                texto_limpio = texto_respuesta.replace('```json\n', '').replace('\n```', '').strip()
+                
+                rubrica = json.loads(texto_limpio)
+                
+                # Agregar metadata según esquema real
+                rubrica['nivel_educativo'] = metadata['nivel_educativo']
+                rubrica['asignatura'] = metadata.get('asignatura') or 'generalista'
+                rubrica['año_vigencia'] = metadata['año_vigencia']
+                rubrica['modalidad'] = metadata.get('modalidad', 'regular')
+                
+                return rubrica
+                
+            except Exception as e:
+                print(f"  ⚠️ Error con Anthropic: {e}")
+                if "credit balance" in str(e).lower() or "insufficient" in str(e).lower():
+                    print("  🔄 Intentando con OpenAI como fallback...")
+                else:
+                    return None
+        
+        # Fallback a OpenAI
+        if self.openai_client:
+            try:
+                response = self.openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"},
+                    temperature=0.1,
+                    max_tokens=4000
+                )
+                
+                texto_respuesta = response.choices[0].message.content
+                rubrica = json.loads(texto_respuesta)
+                
+                # Agregar metadata según esquema real
+                rubrica['nivel_educativo'] = metadata['nivel_educativo']
+                rubrica['asignatura'] = metadata.get('asignatura') or 'generalista'
+                rubrica['año_vigencia'] = metadata['año_vigencia']
+                rubrica['modalidad'] = metadata.get('modalidad', 'regular')
+                
+                print("  ✅ Extraído con OpenAI")
+                return rubrica
+                
+            except Exception as e:
+                print(f"  ⚠️ Error con OpenAI: {e}")
+                return None
+        
+        print("  ❌ No hay APIs disponibles")
+        return None
     
-    def _inferir_modulo_tarea(self, rubrica: Dict):
-        """Infiere módulo y tarea desde el ID del indicador"""
-        
-        indicador_id = rubrica.get('indicador_id', '')
-        
-        # Patrón: mod1_tarea2_indicador3
-        match = re.match(r'mod(\d+)_tarea(\d+)', indicador_id)
-        
-        if match:
-            rubrica['modulo'] = int(match.group(1))
-            rubrica['tarea'] = int(match.group(2))
-        else:
-            # Valores por defecto
-            rubrica['modulo'] = 1
-            rubrica['tarea'] = 1
+
     
     def guardar_rubricas(self, rubricas: List[Dict], supabase_client):
         """Guarda rúbricas en la base de datos"""
@@ -231,6 +265,10 @@ NO inventes información. Si algo no está claro, déjalo vacío."""
 # Uso
 if __name__ == '__main__':
     import argparse
+    from dotenv import load_dotenv
+    
+    # Cargar variables de entorno
+    load_dotenv('.env.local')
     
     if create_client is None:
         print("❌ Error: Supabase no está instalado. Ejecutar: pip install supabase")
@@ -254,16 +292,33 @@ if __name__ == '__main__':
         if args.verbose:
             print(f"🔍 Buscando documentos de rúbricas para el año {args.year}...")
         
-        # Buscar documentos que contengan rúbricas (múltiples tipos)
-        docs = supabase.table('documentos_oficiales')\
-            .select('*')\
-            .in_('tipo_documento', ['rubricas', 'rubrica', 'instructivo'])\
+        # Primero, ver qué documentos hay en total
+        all_docs = supabase.table('documentos_oficiales')\
+            .select('tipo_documento, procesado, año_vigencia')\
             .eq('año_vigencia', args.year)\
-            .eq('procesado', True)\
             .execute()
         
         if args.verbose:
-            print(f"📊 Encontrados {len(docs.data)} documentos candidatos")
+            print(f"📊 Total documentos {args.year}: {len(all_docs.data)}")
+            tipos = {}
+            for doc in all_docs.data:
+                tipo = doc['tipo_documento']
+                procesado = doc['procesado']
+                key = f"{tipo} (procesado: {procesado})"
+                tipos[key] = tipos.get(key, 0) + 1
+            
+            for tipo, count in tipos.items():
+                print(f"  - {tipo}: {count}")
+        
+        # Buscar documentos que contengan rúbricas (sin filtro de procesado)
+        docs = supabase.table('documentos_oficiales')\
+            .select('*')\
+            .in_('tipo_documento', ['rubricas', 'rubrica', 'instructivo', 'manual_portafolio'])\
+            .eq('año_vigencia', args.year)\
+            .execute()
+        
+        if args.verbose:
+            print(f"📊 Encontrados {len(docs.data)} documentos candidatos (sin filtro procesado)")
         
         total_rubricas = 0
         
@@ -277,7 +332,7 @@ if __name__ == '__main__':
             contenido = doc.get('contenido_texto', '')
             if not contenido:
                 if args.verbose:
-                    print("   ⚠️  Sin contenido de texto")
+                    print(f"   ⚠️  Sin contenido de texto (procesado: {doc.get('procesado', 'N/A')})")
                 continue
             
             # Buscar indicadores de rúbricas en el contenido

@@ -137,11 +137,57 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
+  process-documents:
+    name: Procesar Documentos PDF
+    runs-on: ubuntu-latest
+    needs: monitor-documentos
+    if: needs.monitor-documentos.outputs.has_changes == 'true' || github.event.inputs.force_full_sync == 'true'
+    timeout-minutes: 30
+    outputs:
+      processed: ${{ steps.count_processed.outputs.count }}
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: |
+          pip install --upgrade pip
+          pip install supabase python-dotenv PyMuPDF openai
+
+      - name: Procesar documentos PDF
+        id: process
+        run: |
+          output=$(python scripts/pipeline-document-monitor/01-document-processor.py --auto --verbose 2>&1)
+          echo "$output"
+          
+          processed=$(echo "$output" | grep -o "[0-9]\+ documentos procesados exitosamente" | grep -o "[0-9]\+" || echo "0")
+          
+          echo "processed_count=$processed" >> $GITHUB_OUTPUT
+          echo "Documentos procesados: $processed"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Contar documentos procesados
+        id: count_processed
+        run: |
+          processed=${{ steps.process.outputs.processed_count || 0 }}
+          if ! [[ "$processed" =~ ^[0-9]+$ ]]; then processed=0; fi
+          echo "count=$processed" >> $GITHUB_OUTPUT
+          echo "Documentos procesados: $processed"
+
   extract-rubricas:
     name: Extraer Rúbricas con IA
     runs-on: ubuntu-latest
-    needs: monitor-documentos
-    if: needs.monitor-documentos.outputs.has_changes == 'true' || github.event.inputs.force_rubric_extraction == 'true'
+    needs: [monitor-documentos, process-documents]
+    if: needs.process-documents.outputs.processed > 0 || github.event.inputs.force_rubric_extraction == 'true'
     timeout-minutes: 45
     outputs:
       extracted: ${{ steps.count_extracted.outputs.count }}
@@ -158,51 +204,42 @@ jobs:
       - name: Instalar dependencias
         run: |
           pip install --upgrade pip
-          pip install anthropic supabase python-dotenv pdfplumber tabula-py
+          pip install anthropic openai supabase python-dotenv
 
       - name: Ejecutar extracción de rúbricas
         id: extract
         run: |
-          # Ejecutar script y capturar output
-          output=$(python scripts/document-monitor/rubric-extractor.py --auto --verbose 2>&1)
+          output=$(python scripts/pipeline-document-monitor/rubric-extractor.py --auto --verbose 2>&1)
           echo "$output"
           
-          # Extraer número de rúbricas del output
           extracted=$(echo "$output" | grep -o "Procesamiento completado: [0-9]\+ rúbricas extraídas" | grep -o "[0-9]\+" || echo "0")
           
           echo "extracted_count=$extracted" >> $GITHUB_OUTPUT
           echo "Rúbricas extraídas: $extracted"
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
       - name: Contar rúbricas extraídas
         id: count_extracted
         run: |
-          # Usar el conteo real del script
           extracted=${{ steps.extract.outputs.extracted_count || 0 }}
           if ! [[ "$extracted" =~ ^[0-9]+$ ]]; then extracted=0; fi
           echo "count=$extracted" >> $GITHUB_OUTPUT
           echo "Rúbricas extraídas: $extracted"
 
-      - name: Guardar logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: extraction-logs
-          path: logs/rubric-extraction-*.log
-          retention-days: 30
-
   validate-data:
     name: Validar Calidad de Datos
     runs-on: ubuntu-latest
-    needs: extract-rubricas
+    needs: [process-documents, extract-rubricas]
     if: always()
     timeout-minutes: 15
     outputs:
       critical_errors: ${{ steps.validate.outputs.critical_errors }}
       validated: ${{ steps.validate.outputs.validated }}
+      quality_score: ${{ steps.validate.outputs.quality_score }}
 
     steps:
       - name: Checkout código
@@ -219,6 +256,59 @@ jobs:
           deno run --allow-net --allow-env --allow-write scripts/validate-rag-data.ts
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      - name: Subir reporte de validación
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: validation-report
+          path: validation-results.md
+          retention-days: 30
+
+  optimize-embeddings:
+    name: Optimizar Embeddings
+    runs-on: ubuntu-latest
+    needs: validate-data
+    if: needs.validate-data.outputs.critical_errors == '0'
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.40.x
+
+      - name: Optimizar índices vectoriales
+        run: |
+          deno run --allow-net --allow-env scripts/optimize-vector-indices.ts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+  generate-summary:
+    name: Generar Resumen Final
+    runs-on: ubuntu-latest
+    needs: [monitor-documentos, process-documents, extract-rubricas, validate-data]
+    if: always()
+    timeout-minutes: 5
+
+    steps:
+      - name: Generar resumen del pipeline
+        run: |
+          echo "## 📊 Resumen del Pipeline ETL" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Etapa | Estado | Resultados |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 📡 Monitoreo | ${{ needs.monitor-documentos.result }} | ${{ needs.monitor-documentos.outputs.nuevos }} nuevos, ${{ needs.monitor-documentos.outputs.actualizados }} actualizados |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📄 Procesamiento | ${{ needs.process-documents.result }} | ${{ needs.process-documents.outputs.processed }} documentos |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🤖 Extracción IA | ${{ needs.extract-rubricas.result }} | ${{ needs.extract-rubricas.outputs.extracted }} rúbricas |" >> $GITHUB_STEP_SUMMARY
+          echo "| ✅ Validación | ${{ needs.validate-data.result }} | ${{ needs.validate-data.outputs.critical_errors }} errores críticos |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Calidad de Datos:** ${{ needs.validate-data.outputs.quality_score }}%" >> $GITHUB_STEP_SUMMARY
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -239,7 +329,7 @@ jobs:
   update-metrics:
     name: Actualizar Métricas RAG
     runs-on: ubuntu-latest
-    needs: [monitor-documentos, extract-rubricas, validate-data]
+    needs: [monitor-documentos, process-documents, extract-rubricas, validate-data]
     if: always()
 
     steps:
@@ -261,8 +351,8 @@ jobs:
 
   notify-completion:
     name: Notificar Completado
-    runs-on: ubuntu-latestst
-    needs: [monitor-documentos, extract-rubricas, validate-data, update-metrics]
+    runs-on: ubuntu-latest
+    needs: [monitor-documentos, process-documents, extract-rubricas, validate-data, update-metrics]
     if: always()
 
     steps:

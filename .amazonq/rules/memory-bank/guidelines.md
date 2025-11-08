@@ -49,9 +49,9 @@ const response = await openai.chat.completions.create({
 ## Naming Conventions
 
 ### Files and Directories
-- **kebab-case**: For directory names (document-monitor, memory-bank)
+- **kebab-case**: For directory names (pipeline-document-monitor, memory-bank)
 - **PascalCase**: For React components (ExportPDFButton.tsx)
-- **camelCase**: For utility files and functions (monitor.py, utils.ts)
+- **camelCase**: For utility files and functions (00-monitor.py, utils.ts)
 - **Descriptive names**: Clear purpose indication (analizar-planificacion, rubricas-engine)
 
 ### Variables and Functions

@@ -531,7 +531,7 @@ SELECT cron.schedule(
 
 **Problema actual:**
 ```python
-# scripts/document-monitor/rubric-extractor.py
+# scripts/pipeline-document-monitor/rubric-extractor.py
 # Requiere ejecución manual
 ```
 
@@ -561,7 +561,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          python scripts/document-monitor/rubric-extractor.py --auto
+          python scripts/pipeline-document-monitor/rubric-extractor.py --auto
       - name: Notify on failure
         if: failure()
         uses: 8398a7/action-slack@v3

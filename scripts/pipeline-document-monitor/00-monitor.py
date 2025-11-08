@@ -1,4 +1,4 @@
-# scripts/document-monitor/monitor.py
+# scripts/pipeline-document-monitor/00-monitor.py
 
 import os
 import sys
