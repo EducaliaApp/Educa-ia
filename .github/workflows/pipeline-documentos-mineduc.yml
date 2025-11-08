@@ -137,43 +137,11 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
-  etl-extract:
-    name: "FASE 1: Extract - Descargar PDFs"
+  etl-transform:
+    name: "FASE 1: Transform - Extraer Texto"
     runs-on: ubuntu-latest
     needs: extraccion-documentos
     if: always() && (needs.extraccion-documentos.outputs.has_changes == 'true' || github.event.inputs.force_full_sync == 'true')
-    timeout-minutes: 15
-    outputs:
-      downloaded: ${{ steps.download.outputs.count }}
-
-    steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Instalar dependencias
-        run: pip install -r scripts/pipeline-document-mineduc/requirements.txt
-
-      - name: Descargar PDFs
-        id: download
-        run: |
-          output=$(python scripts/pipeline-document-mineduc/fase1_extract.py 2>&1) || true
-          echo "$output"
-          downloaded=$(echo "$output" | grep -o "Descargados: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-          echo "count=$downloaded" >> $GITHUB_OUTPUT
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-
-  etl-transform:
-    name: "FASE 2: Transform - Extraer Texto"
-    runs-on: ubuntu-latest
-    needs: etl-extract
-    if: needs.etl-extract.outputs.downloaded > 0
     timeout-minutes: 20
     outputs:
       transformed: ${{ steps.transform.outputs.count }}
@@ -195,20 +163,21 @@ jobs:
       - name: Extraer texto
         id: transform
         run: |
-          output=$(python scripts/pipeline-document-mineduc/fase2_transform.py 2>&1)
+          output=$(python scripts/pipeline-document-mineduc/fase2_transform_multiproveedor.py 2>&1)
           echo "$output"
           transformed=$(echo "$output" | grep -o "Transformados: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
           echo "count=$transformed" >> $GITHUB_OUTPUT
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # IA Multi-Proveedor (orden de prioridad: Gemini → OpenAI → Claude)
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AI_EXTRACTION_ENABLED: 'true'  # Habilitar IA para rúbricas
 
   etl-load:
-    name: "FASE 3: Load - Generar Embeddings"
+    name: "FASE 2: Load - Generar Embeddings"
     runs-on: ubuntu-latest
     needs: etl-transform
     if: needs.etl-transform.outputs.transformed > 0
@@ -250,7 +219,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
   validar-calidad:
-    name: "FASE 4: Validar Calidad"
+    name: "FASE 3: Validar Calidad"
     runs-on: ubuntu-latest
     needs: etl-load
     if: needs.etl-load.outputs.loaded > 0
@@ -287,7 +256,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   optimizar-embeddings:
-    name: "FASE 5: Optimizar Índices"
+    name: "FASE 4: Optimizar Índices"
     runs-on: ubuntu-latest
     needs: validar-calidad
     if: needs.validar-calidad.outputs.validated > 0
@@ -314,9 +283,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   registrar-metricas:
-    name: "FASE 6: Registrar Métricas"
+    name: "FASE 5: Registrar Métricas"
     runs-on: ubuntu-latest
-    needs: [etl-extract, etl-transform, etl-load, validar-calidad, optimizar-embeddings]
+    needs: [etl-transform, etl-load, validar-calidad, optimizar-embeddings]
     if: always()
     timeout-minutes: 5
 
@@ -335,7 +304,6 @@ jobs:
       - name: Registrar métricas
         run: |
           python scripts/pipeline-document-mineduc/fase6_metrics.py \
-            --downloaded "${{ needs.etl-extract.outputs.downloaded || 0 }}" \
             --transformed "${{ needs.etl-transform.outputs.transformed || 0 }}" \
             --loaded "${{ needs.etl-load.outputs.loaded || 0 }}" \
             --validated "${{ needs.validar-calidad.outputs.validated || 0 }}" \
@@ -353,7 +321,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Fase | Resultado |" >> $GITHUB_STEP_SUMMARY
           echo "|------|-----------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Extract | ${{ needs.etl-extract.outputs.downloaded || 0 }} descargados |" >> $GITHUB_STEP_SUMMARY
           echo "| Transform | ${{ needs.etl-transform.outputs.transformed || 0 }} transformados |" >> $GITHUB_STEP_SUMMARY
           echo "| Load | ${{ needs.etl-load.outputs.loaded || 0 }} cargados |" >> $GITHUB_STEP_SUMMARY
           echo "| Validación | ${{ needs.validar-calidad.outputs.validated || 0 }} validados (${{ needs.validar-calidad.outputs.quality || 0 }}%) |" >> $GITHUB_STEP_SUMMARY
@@ -380,7 +347,7 @@ jobs:
   update-metrics:
     name: Actualizar Métricas RAG
     runs-on: ubuntu-latest
-    needs: [etl-extract, etl-transform, etl-load, validar-calidad, optimizar-embeddings, registrar-metricas]
+    needs: [etl-transform, etl-load, validar-calidad, optimizar-embeddings, registrar-metricas]
     if: always()
 
     steps:
@@ -409,7 +376,7 @@ jobs:
   notify-completion:
     name: Notificar Completado
     runs-on: ubuntu-latest
-    needs: [extraccion-documentos, etl-extract, etl-transform, etl-load, validar-calidad, update-metrics]
+    needs: [extraccion-documentos, etl-transform, etl-load, validar-calidad, update-metrics]
     if: always()
 
     steps:

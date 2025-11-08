@@ -520,32 +520,24 @@ async function clasificarConIA(
   processor: any
 ): Promise<{ año: number; nivel: string; modalidad: string } | null> {
   try {
-    // 1. Descargar una muestra del PDF
-    const response = await fetch(link.url)
+    // Clasificación simplificada basada solo en metadata
+    // La extracción de texto PDF se hace en el pipeline Python
+    
+    // 1. Validar que es un PDF
+    const response = await fetch(link.url, { method: 'HEAD' })
     if (!response.ok) return null
     
-    const buffer = await response.arrayBuffer()
-    
-    // 2. Validar que es un PDF válido
-    if (!(await processor.validatePDF(buffer))) {
-      console.log(`    ⚠️  Archivo no es un PDF válido: ${link.nombre}`)
+    const contentType = response.headers.get('content-type')
+    if (!contentType?.includes('pdf')) {
+      console.log(`    ⚠️  Archivo no es PDF: ${link.nombre}`)
       return null
     }
     
-    // 3. Extraer texto de las primeras páginas
-    const textoExtraido = await extraerTextoPDF(buffer, processor)
-    if (!textoExtraido || textoExtraido.length < 100) {
-      console.log(`    ⚠️  No se pudo extraer texto suficiente: ${link.nombre}`)
-      return null
-    }
-    
-    // 4. Crear prompt para clasificación
-    const prompt = `Analiza este documento educativo chileno y clasifícalo:
+    // 2. Clasificar basado en nombre y URL solamente
+    const prompt = `Analiza este documento educativo chileno basándote SOLO en el nombre del archivo:
 
 Nombre del archivo: ${link.nombre}
-
-Contenido (primeras líneas):
-${textoExtraido.substring(0, 2000)}
+URL: ${link.url}
 
 Responde SOLO con JSON válido:
 {
@@ -555,7 +547,7 @@ Responde SOLO con JSON válido:
   "confianza": 0.8
 }`
     
-    // 5. Llamar a la IA
+    // 3. Llamar a la IA
     const clasificacion = await aiAnalyzer.clasificarDocumento(prompt)
     
     if (clasificacion && clasificacion.confianza > 0.6) {
@@ -572,16 +564,6 @@ Responde SOLO con JSON válido:
   } catch (error) {
     console.log(`    ⚠️  Error en clasificación IA para ${link.nombre}: ${error.message}`)
     return null
-  }
-}
-
-async function extraerTextoPDF(buffer: ArrayBuffer, processor: DocumentProcessor): Promise<string> {
-  try {
-    const texto = await processor.extractTextFromPDF(buffer)
-    return texto.substring(0, 3000) // Limitar tamaño para clasificación
-  } catch (error) {
-    console.error('Error extrayendo texto PDF:', error)
-    return ''
   }
 }
 
@@ -622,11 +604,55 @@ export async function procesarDocumentoNuevo(
     }
   }
   
-  // 1. Solo calcular metadata (el pipeline descargará y procesará el PDF)
-  console.log('  📝 Preparando metadata...')
-  const fileName = `${doc.tipo}/${doc.año}/${doc.nombre.replace(/[^a-zA-Z0-9.-]/g, '_')}.pdf`
+  // 1. Descargar PDF
+  console.log('  📥 Descargando PDF...')
+  const response = await fetch(doc.url)
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+  }
   
-  // 2. Registrar en base de datos (SIN descargar ni subir)
+  const pdfBuffer = await response.arrayBuffer()
+  const hash = await calcularHash(pdfBuffer)
+  
+  console.log(`  ✓ Descargado: ${(pdfBuffer.byteLength / 1024).toFixed(2)} KB`)
+  
+  // Verificar duplicado por hash
+  const { data: duplicadoHash } = await supabase
+    .from('documentos_oficiales')
+    .select('id, titulo')
+    .eq('hash_contenido', hash)
+    .maybeSingle()
+  
+  if (duplicadoHash) {
+    console.log(`  ⏭️  Contenido duplicado de: ${duplicadoHash.titulo}`)
+    return {
+      documento: doc.nombre,
+      exito: true,
+      documento_id: duplicadoHash.id,
+      duplicado: true
+    }
+  }
+  
+  // 2. Subir a Supabase Storage
+  const fileName = `${doc.tipo}/${doc.año}/${doc.nombre.replace(/[^a-zA-Z0-9.-]/g, '_')}.pdf`
+  console.log('  💾 Subiendo a storage...')
+  
+  await crearBucketSiNoExiste(supabase)
+  
+  const { error: uploadError } = await supabase.storage
+    .from('documentos-mineduc')
+    .upload(fileName, pdfBuffer, {
+      contentType: 'application/pdf',
+      upsert: true
+    })
+  
+  if (uploadError) {
+    throw new Error(`Error subiendo archivo: ${uploadError.message}`)
+  }
+  
+  console.log('  ✓ Subido a storage')
+  
+  // 3. Registrar en base de datos
   console.log('  📝 Registrando en BD...')
   // Crear o obtener fuente
   let fuenteId
@@ -683,12 +709,15 @@ export async function procesarDocumentoNuevo(
       titulo: doc.nombre,
       url_original: doc.url,
       storage_path: fileName,
+      tamaño_bytes: pdfBuffer.byteLength,
+      hash_contenido: hash,
       version: `${doc.año}.1`,
       formato: 'pdf',
       procesado: false,
       es_version_actual: true,
       estado_procesamiento: 'pendiente',
-      etapa_actual: null,  // null para que el pipeline lo procese desde fase 1
+      etapa_actual: 'descargado',  // Ya está descargado y en Storage
+      fecha_descarga: new Date().toISOString(),
       metadata: {
         subcategoria: doc.subcategoria,
         tipo_original: doc.tipo
@@ -701,7 +730,7 @@ export async function procesarDocumentoNuevo(
     throw new Error(`Error en BD: ${dbError.message}`)
   }
 
-  console.log(`  ✅ Documento registrado para procesamiento: ${documentoRegistrado.id}`)
+  console.log(`  ✅ Documento registrado: ${documentoRegistrado.id}`)
   
   return {
     documento: doc.nombre,
@@ -818,11 +847,11 @@ async function crearBucketSiNoExiste(supabase: any): Promise<void> {
   try {
     // Verificar si el bucket existe
     const { data: buckets } = await supabase.storage.listBuckets()
-    const bucketExiste = buckets?.some((bucket: any) => bucket.name === 'documentos-oficiales')
+    const bucketExiste = buckets?.some((bucket: any) => bucket.name === 'documentos-mineduc')
     
     if (!bucketExiste) {
-      console.log('  📁 Creando bucket documentos-oficiales...')
-      const { error } = await supabase.storage.createBucket('documentos-oficiales', {
+      console.log('  📁 Creando bucket documentos-mineduc...')
+      const { error } = await supabase.storage.createBucket('documentos-mineduc', {
         public: false,
         allowedMimeTypes: ['application/pdf'],
         fileSizeLimit: 50 * 1024 * 1024 // 50MB
