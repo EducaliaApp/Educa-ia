@@ -110,18 +110,24 @@ class DocumentProcessor:
         Procesa un documento individual desde la base de datos
         """
         
+        print(f"    📄 Procesando: {documento.get('titulo', 'Sin título')}")
+        
         if not documento.get('storage_path'):
             return {'status': 'sin_archivo', 'error': 'No tiene storage_path'}
+        
+        print(f"    📥 Descargando desde: {documento['storage_path']}")
         
         # 1. Descargar PDF desde Storage
         pdf_data = self._descargar_desde_storage(documento['storage_path'])
         if not pdf_data:
             return {'status': 'error_descarga', 'error': 'No se pudo descargar PDF'}
         
+        print(f"    ✅ Descargado: {len(pdf_data)} bytes")
+        
         # 2. Extraer texto
         texto_completo = self._extraer_texto_pdf_data(pdf_data)
-        if not texto_completo:
-            return {'status': 'error_extraccion', 'error': 'No se pudo extraer texto'}
+        if not texto_completo or len(texto_completo.strip()) < 10:
+            return {'status': 'error_extraccion', 'error': f'Texto extraído muy corto: {len(texto_completo) if texto_completo else 0} chars'}
         
         # 3. Generar embedding para búsqueda semántica
         embedding = None
@@ -164,29 +170,48 @@ class DocumentProcessor:
     def _extraer_texto_pdf_data(self, pdf_data: bytes) -> str:
         """Extrae texto de datos PDF en memoria"""
         
+        print(f"    🔍 Extrayendo texto (PyMuPDF disponible: {fitz is not None})")
+        
         if not fitz:
-            # Fallback: extracción básica de texto
+            print("    ⚠️ PyMuPDF no disponible, usando fallback")
             try:
                 texto = pdf_data.decode('utf-8', errors='ignore')
-                # Buscar patrones de texto legible
                 import re
                 matches = re.findall(r'[A-Za-zÀ-ſ\s]{10,}', texto)
-                return ' '.join(matches[:1000])  # Primeros 1000 matches
-            except:
+                resultado = ' '.join(matches[:1000])
+                print(f"    📝 Fallback extrajo: {len(resultado)} caracteres")
+                return resultado
+            except Exception as e:
+                print(f"    ❌ Error en fallback: {e}")
                 return "Contenido extraído del PDF (procesamiento básico)"
         
         try:
             texto_completo = []
             with fitz.open(stream=pdf_data, filetype="pdf") as doc:
+                print(f"    📖 PDF abierto: {len(doc)} páginas")
+                
                 for pagina_num, pagina in enumerate(doc, 1):
                     texto = pagina.get_text()
                     if texto.strip():
                         texto_completo.append(f"--- Página {pagina_num} ---\n{texto}")
+                        print(f"    📄 Página {pagina_num}: {len(texto)} caracteres")
             
-            return "\n".join(texto_completo)
+            resultado = "\n".join(texto_completo)
+            print(f"    ✅ Texto total extraído: {len(resultado)} caracteres")
+            return resultado
+            
         except Exception as e:
-            print(f"    ⚠️ Error con PyMuPDF: {e}")
-            return "Contenido extraído del PDF (error en procesamiento)"
+            print(f"    ❌ Error con PyMuPDF: {e}")
+            # Intentar fallback si PyMuPDF falla
+            try:
+                texto = pdf_data.decode('utf-8', errors='ignore')
+                import re
+                matches = re.findall(r'[A-Za-zÀ-ſ\s]{10,}', texto)
+                resultado = ' '.join(matches[:500])
+                print(f"    🔄 Fallback después de error: {len(resultado)} caracteres")
+                return resultado
+            except:
+                return "Contenido extraído del PDF (error en procesamiento)"
     
     def _calcular_hash(self, texto: str) -> str:
         """Calcula SHA-256 del contenido"""
