@@ -367,7 +367,7 @@ jobs:
 
 
 
-ltados de validación
+      - name: Resultados de validación
         run: |
           echo "### ✅ Validación de Datos RAG" >> $GITHUB_STEP_SUMMARY
           if [ -f validation-results.md ]; then
@@ -385,7 +385,7 @@ ltados de validación
   update-metrics:
     name: Actualizar Métricas RAG
     runs-on: ubuntu-latest
-    needs: [monitor-documentos, process-documents, extract-rubricas, validate-data]
+    needs: [etl-extract, etl-transform, etl-load, validar-calidad, optimizar-embeddings, registrar-metricas]
     if: always()
 
     steps:
@@ -404,27 +404,27 @@ ltados de validación
             -H "Prefer: return=representation" \
             -d '{
               "fecha": "'$(date -I)'",
-              "documentos_monitoreados": ${{ needs.monitor-documentos.outputs.nuevos || 0 }},
-              "documentos_procesados": ${{ needs.extract-rubricas.outputs.extracted || 0 }},
-              "chunks_validados": ${{ needs.validate-data.outputs.validated || 0 }},
-              "errores_criticos": ${{ needs.validate-data.outputs.critical_errors || 0 }},
+              "documentos_monitoreados": ${{ needs.extraccion-documentos.outputs.nuevos || 0 }},
+              "documentos_procesados": ${{ needs.etl-load.outputs.loaded || 0 }},
+              "chunks_validados": ${{ needs.validar-calidad.outputs.validated || 0 }},
+              "errores_criticos": 0,
               "workflow_run_id": "${{ github.run_id }}"
             }'
 
   notify-completion:
     name: Notificar Completado
     runs-on: ubuntu-latest
-    needs: [monitor-documentos, process-documents, extract-rubricas, validate-data, update-metrics]
+    needs: [extraccion-documentos, etl-extract, etl-transform, etl-load, validar-calidad, update-metrics]
     if: always()
 
     steps:
       - name: Determinar estado
         id: status
         run: |
-          if [ "${{ needs.validate-data.result }}" == "failure" ]; then
+          if [ "${{ needs.validar-calidad.result }}" == "failure" ]; then
             echo "status=❌ Falló" >> $GITHUB_OUTPUT
             echo "color=#dc2626" >> $GITHUB_OUTPUT
-          elif [ "${{ needs.extract-rubricas.result }}" == "failure" ]; then
+          elif [ "${{ needs.etl-load.result }}" == "failure" ]; then
             echo "status=⚠️ Completado con errores" >> $GITHUB_OUTPUT
             echo "color=#f59e0b" >> $GITHUB_OUTPUT
           else
@@ -454,19 +454,19 @@ ltados de validación
                       "fields": [
                         {
                           "type": "mrkdwn",
-                          "text": "*Documentos Nuevos:*\n${{ needs.monitor-documentos.outputs.nuevos || 0 }}"
+                          "text": "*Documentos Nuevos:*\n${{ needs.extraccion-documentos.outputs.nuevos || 0 }}"
                         },
                         {
                           "type": "mrkdwn",
-                          "text": "*Documentos Actualizados:*\n${{ needs.monitor-documentos.outputs.actualizados || 0 }}"
+                          "text": "*Documentos Actualizados:*\n${{ needs.extraccion-documentos.outputs.actualizados || 0 }}"
                         },
                         {
                           "type": "mrkdwn",
-                          "text": "*Rúbricas Extraídas:*\n${{ needs.extract-rubricas.outputs.extracted || 0 }}"
+                          "text": "*Documentos Cargados:*\n${{ needs.etl-load.outputs.loaded || 0 }}"
                         },
                         {
                           "type": "mrkdwn",
-                          "text": "*Errores Críticos:*\n${{ needs.validate-data.outputs.critical_errors || 0 }}"
+                          "text": "*Documentos Validados:*\n${{ needs.validar-calidad.outputs.validated || 0 }}"
                         }
                       ]
                     },
