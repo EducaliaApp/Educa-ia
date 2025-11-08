@@ -35,18 +35,29 @@ from supabase import create_client
 load_dotenv('.env.local')
 supabase = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
 
-docs = supabase.table('documentos_oficiales').select('id, url_original').eq('procesado', False).limit(50).execute().data or []
+docs = supabase.table('documentos_oficiales').select('id, url_original').eq('etapa_actual', 'descargado').is_('pdf_data', 'null').limit(50).execute().data or []
 print(f"📥 Descargando {len(docs)} PDFs...")
+
+if len(docs) == 0:
+    print("ℹ️  No hay documentos pendientes de descarga")
+    print("\nDescargados: 0")
+    sys.exit(0)
 
 downloaded = 0
 for doc in docs:
     try:
+        supabase.table('documentos_oficiales').update({'estado_procesamiento': 'procesando'}).eq('id', doc['id']).execute()
         pdf = requests.get(doc['url_original'], timeout=30).content
-        supabase.table('documentos_oficiales').update({'pdf_data': pdf}).eq('id', doc['id']).execute()
+        supabase.table('documentos_oficiales').update({
+            'pdf_data': pdf,
+            'etapa_actual': 'descargado',
+            'progreso_procesamiento': 25
+        }).eq('id', doc['id']).execute()
         downloaded += 1
         print(f"✅ {doc['id']}")
     except Exception as e:
+        supabase.table('documentos_oficiales').update({'estado_procesamiento': 'fallido', 'error_procesamiento': str(e), 'etapa_fallida': 'descarga'}).eq('id', doc['id']).execute()
         print(f"❌ {doc['id']}: {e}")
 
 print(f"\nDescargados: {downloaded}")
-sys.exit(0 if downloaded > 0 else 1)
+sys.exit(0)

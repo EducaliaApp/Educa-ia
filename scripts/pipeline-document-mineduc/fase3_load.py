@@ -36,13 +36,21 @@ load_dotenv('.env.local')
 supabase = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
 openai = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-docs = supabase.table('documentos_oficiales').select('id, contenido_texto').eq('procesado', False).not_.is_('contenido_texto', 'null').limit(50).execute().data or []
+docs = supabase.table('documentos_oficiales').select('id, contenido_texto').eq('etapa_actual', 'texto_extraido').not_.is_('contenido_texto', 'null').limit(50).execute().data or []
 print(f"🔢 Generando embeddings para {len(docs)} documentos...")
+
+if len(docs) == 0:
+    print("ℹ️  No hay documentos pendientes de carga")
+    print("\nCargados: 0")
+    print("Tokens: 0")
+    print("Costo: $0.0000")
+    sys.exit(0)
 
 loaded, total_tokens, total_cost = 0, 0, 0.0
 
 for doc in docs:
     try:
+        supabase.table('documentos_oficiales').update({'estado_procesamiento': 'procesando'}).eq('id', doc['id']).execute()
         texto_completo = doc['contenido_texto'].replace("\n", " ")
         chunks = [texto_completo[i:i+8000] for i in range(0, len(texto_completo), 7000)]
         
@@ -72,15 +80,19 @@ for doc in docs:
         supabase.table('documentos_oficiales').update({
             'procesado': True,
             'fecha_procesamiento': datetime.now().isoformat(),
-            'embedding_model': 'text-embedding-3-small'
+            'embedding_model': 'text-embedding-3-small',
+            'etapa_actual': 'completado',
+            'progreso_procesamiento': 100,
+            'estado_procesamiento': 'exitoso'
         }).eq('id', doc['id']).execute()
         
         loaded += 1
         print(f"✅ {doc['id']}: {len(chunks)} chunks, {total_tokens} tokens")
     except Exception as e:
+        supabase.table('documentos_oficiales').update({'estado_procesamiento': 'fallido', 'error_procesamiento': str(e), 'etapa_fallida': 'embeddings'}).eq('id', doc['id']).execute()
         print(f"❌ {doc['id']}: {e}")
 
 print(f"\nCargados: {loaded}")
 print(f"Tokens: {total_tokens}")
 print(f"Costo: ${total_cost:.4f}")
-sys.exit(0 if loaded > 0 else 1)
+sys.exit(0)

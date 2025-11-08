@@ -161,7 +161,7 @@ jobs:
       - name: Descargar PDFs
         id: download
         run: |
-          output=$(python scripts/pipeline-document-mineduc/fase1_extract.py 2>&1)
+          output=$(python scripts/pipeline-document-mineduc/fase1_extract.py 2>&1) || true
           echo "$output"
           downloaded=$(echo "$output" | grep -o "Descargados: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
           echo "count=$downloaded" >> $GITHUB_OUTPUT

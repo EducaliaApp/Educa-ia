@@ -42,8 +42,13 @@ except ImportError:
 load_dotenv('.env.local')
 supabase = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
 # revisar documentos no procesados y con pdf_data en la base de datos llamada documentos_oficiales revisando las columnas procesado y pdf_data
-docs = supabase.table('documentos_oficiales').select('id, pdf_data').eq('procesado', False).not_.is_('pdf_data', 'null').limit(50).execute().data or []
+docs = supabase.table('documentos_oficiales').select('id, pdf_data').eq('etapa_actual', 'descargado').not_.is_('pdf_data', 'null').limit(50).execute().data or []
 print(f"📄 Extrayendo texto de {len(docs)} PDFs...")
+
+if len(docs) == 0:
+    print("ℹ️  No hay documentos pendientes de transformación")
+    print("\nTransformados: 0")
+    sys.exit(0)
 
 def extraer_texto_con_ocr(pagina):
     if not OCR_AVAILABLE:
@@ -58,10 +63,16 @@ def extraer_texto_con_ocr(pagina):
 transformed = 0
 for doc in docs:
     try:
+        supabase.table('documentos_oficiales').update({'estado_procesamiento': 'procesando'}).eq('id', doc['id']).execute()
         texto = []
         es_escaneado = False
         
-        with fitz.open(stream=doc['pdf_data'], filetype="pdf") as pdf:
+        pdf_data = doc['pdf_data']
+        if isinstance(pdf_data, str):
+            import base64
+            pdf_data = base64.b64decode(pdf_data)
+        
+        with fitz.open(stream=pdf_data, filetype="pdf") as pdf:
             for i, p in enumerate(pdf[:50]):
                 t = p.get_text("text", sort=True).strip()
                 
@@ -76,14 +87,20 @@ for doc in docs:
         
         texto_final = "\n\n".join(texto)
         if len(texto_final) > 100:
-            supabase.table('documentos_oficiales').update({'contenido_texto': texto_final}).eq('id', doc['id']).execute()
+            supabase.table('documentos_oficiales').update({
+                'contenido_texto': texto_final,
+                'etapa_actual': 'texto_extraido',
+                'progreso_procesamiento': 50
+            }).eq('id', doc['id']).execute()
             transformed += 1
             tipo = "OCR" if es_escaneado else "texto"
             print(f"✅ {doc['id']}: {len(texto_final)} chars ({tipo})")
         else:
+            supabase.table('documentos_oficiales').update({'estado_procesamiento': 'fallido', 'error_procesamiento': 'Texto insuficiente', 'etapa_fallida': 'extraccion'}).eq('id', doc['id']).execute()
             print(f"⚠️  {doc['id']}: Texto insuficiente")
     except Exception as e:
+        supabase.table('documentos_oficiales').update({'estado_procesamiento': 'fallido', 'error_procesamiento': str(e), 'etapa_fallida': 'extraccion'}).eq('id', doc['id']).execute()
         print(f"❌ {doc['id']}: {e}")
 
 print(f"\nTransformados: {transformed}")
-sys.exit(0 if transformed > 0 else 1)
+sys.exit(0)
