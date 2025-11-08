@@ -159,26 +159,25 @@ class DocumentProcessor:
                     'nota': 'Documento escaneado sin texto extraíble'
                 }
         
-        # 3. Generar embedding para búsqueda semántica
-        embedding = None
-        if self.openai and len(texto_completo) > 50:
-            try:
-                embedding = self._generar_embedding(texto_completo[:8000])  # Primeros 8k chars
-                print(f"    🔢 Embedding generado ({len(embedding)} dimensiones)")
-            except Exception as e:
-                print(f"    ⚠️ Error generando embedding: {e}")
-        
-        # 4. Actualizar documento en BD
+        # 3. Actualizar documento en BD primero
         update_data = {
             'procesado': True,
             'contenido_texto': texto_completo,
             'fecha_procesamiento': datetime.now().isoformat()
         }
         
-        if embedding:
-            update_data['embedding'] = embedding
-        
         self.supabase.table('documentos_oficiales').update(update_data).eq('id', documento['id']).execute()
+        
+        # 4. Generar embedding usando función de Supabase
+        if len(texto_completo) > 50:
+            try:
+                self._generar_embedding_supabase(documento['id'], texto_completo[:8000])
+                print(f"    🔢 Embedding generado y almacenado en PostgreSQL")
+            except Exception as e:
+                print(f"    ⚠️ Error generando embedding: {e}")
+                print("    ℹ️ Documento procesado sin embedding (se puede generar después)")
+        
+
         
         return {
             'status': 'procesado',
@@ -274,11 +273,8 @@ class DocumentProcessor:
         """Calcula SHA-256 del contenido"""
         return hashlib.sha256(texto.encode('utf-8')).hexdigest()
     
-    def _generar_embedding(self, texto: str) -> List[float]:
-        """Genera embedding para búsqueda semántica con chunking inteligente"""
-        
-        if not self.openai:
-            raise ValueError("OpenAI no está configurado")
+    def _generar_embedding_supabase(self, documento_id: str, texto: str, max_reintentos: int = 2):
+        """Genera embedding usando Edge Function de Supabase con pg_vector"""
         
         # Limpiar y preparar texto
         texto_limpio = self._limpiar_texto_para_embedding(texto)
@@ -287,13 +283,74 @@ class DocumentProcessor:
         if len(texto_limpio) > 8000:
             texto_limpio = self._extraer_contenido_relevante(texto_limpio)
         
-        response = self.openai.embeddings.create(
-            model="text-embedding-3-small",
-            input=texto_limpio,
-            encoding_format="float"
-        )
+        for intento in range(max_reintentos):
+            try:
+                print(f"    🔄 Generando embedding con Supabase (intento {intento + 1}/{max_reintentos})...")
+                
+                # Llamar a Edge Function para generar embedding
+                response = self.supabase.functions.invoke(
+                    'generar-embedding-documento',
+                    {
+                        'body': {
+                            'documento_id': documento_id,
+                            'texto': texto_limpio
+                        }
+                    }
+                )
+                
+                if response.get('error'):
+                    raise Exception(f"Error en Edge Function: {response['error']}")
+                
+                print(f"    ✅ Embedding generado exitosamente")
+                return
+                
+            except Exception as e:
+                error_msg = str(e).lower()
+                
+                if "connection" in error_msg or "timeout" in error_msg or "network" in error_msg:
+                    print(f"    ⚠️ Error de conexión (intento {intento + 1}): {e}")
+                    if intento < max_reintentos - 1:
+                        import time
+                        wait_time = (intento + 1) * 3  # Backoff
+                        print(f"    ⏳ Esperando {wait_time}s antes del siguiente intento...")
+                        time.sleep(wait_time)
+                        continue
+                else:
+                    print(f"    ❌ Error generando embedding: {e}")
+                    break
         
-        return response.data[0].embedding
+        # Si falla, intentar método directo como fallback
+        print("    🔄 Intentando método directo como fallback...")
+        try:
+            self._generar_embedding_directo(documento_id, texto_limpio)
+        except Exception as e:
+            print(f"    ❌ Fallback también falló: {e}")
+            raise
+    
+    def _generar_embedding_directo(self, documento_id: str, texto: str):
+        """Genera embedding directamente usando RPC de Supabase"""
+        
+        try:
+            # Usar función RPC para generar embedding
+            result = self.supabase.rpc(
+                'generar_embedding_documento',
+                {
+                    'p_documento_id': documento_id,
+                    'p_texto': texto
+                }
+            ).execute()
+            
+            if result.data:
+                print(f"    ✅ Embedding generado vía RPC")
+            else:
+                raise Exception("RPC no retornó datos")
+                
+        except Exception as e:
+            print(f"    ❌ Error en RPC: {e}")
+            # Último recurso: actualizar sin embedding
+            print("    ℹ️ Documento quedará sin embedding (se puede procesar después)")
+    
+
     
     def _limpiar_texto_para_embedding(self, texto: str) -> str:
         """Limpia texto para generar embeddings de mejor calidad"""
