@@ -88,7 +88,7 @@ class RubricExtractor:
         print(f"  Encontradas {len(secciones_rubricas)} posibles rúbricas")
         
         # 2. Limitar procesamiento para respetar rate limits
-        max_rubricas = 5  # Máximo 5 rúbricas por documento para respetar límites
+        max_rubricas = 10  # Máximo 10 rúbricas por documento para respetar límites
         if len(secciones_rubricas) > max_rubricas:
             print(f"  ⚠️ Limitando a {max_rubricas} rúbricas para respetar rate limits")
             secciones_rubricas = secciones_rubricas[:max_rubricas]

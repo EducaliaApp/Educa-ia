@@ -6,13 +6,33 @@ import { DocumentProcessor } from '../shared/document-processor.ts'
 import { AIAnalyzer } from '../shared/ai-analyzer.ts'
 import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.ts'
 
-// URLs oficiales del MINEDUC
+// URLs oficiales del MINEDUC con subcategorías
 const URLS_OFICIALES = {
-  manuales: 'https://www.docentemas.cl/documentos-descargables/manuales-de-instrumentos/',
-  rubricas: 'https://www.docentemas.cl/documentos-descargables/rubricas',
-  tiposDeInformesDeResultados: 'https://www.docentemas.cl/documentos-descargables/tipos-de-informes-de-resultados',
-  documentos: 'https://www.docentemas.cl/documentos-descargables',
-  documentosLegales: 'https://www.docentemas.cl/documentos-descargables/documentos-legales-2'
+  manuales: {
+    url: 'https://www.docentemas.cl/documentos-descargables/manuales-de-instrumentos/',
+    subcategorias: ['Manuales de Instrumentos']
+  },
+  basesCurriculares: {
+    url: 'https://www.docentemas.cl/documentos-descargables/documentos-curriculares/',
+    subcategorias: [
+      'Bases curriculares',
+      'Priorización Curricular',
+      'Programas EMTP',
+      'Marco para la Buena Enseñanza'
+    ]
+  },
+  rubricas: {
+    url: 'https://www.docentemas.cl/documentos-descargables/rubricas',
+    subcategorias: ['Rúbricas']
+  },
+  tiposDeInformesDeResultados: {
+    url: 'https://www.docentemas.cl/documentos-descargables/tipos-de-informes-de-resultados',
+    subcategorias: ['Informes de Resultados']
+  },
+  documentosLegales: {
+    url: 'https://www.docentemas.cl/documentos-descargables/documentos-legales-2',
+    subcategorias: ['Documentos Legales']
+  }
 }
 
 export const PROCESAR_DOCUMENTO_FUNCTION = 'procesar-documentos'
@@ -21,15 +41,17 @@ interface DocumentoDetectado {
   nombre: string
   url: string
   tipo: string
+  subcategoria?: string
   año: number
   nivel_educativo: string
   modalidad: string
+  asignatura?: string
   hash?: string
 }
 
 export async function handler(req: Request): Promise<Response> {
   try {
-    console.log('🔍 Iniciando monitoreo de documentos oficiales...')
+    console.log('🔍 Iniciando Extraccion de documentos oficiales...')
 
     const supabase = crearClienteServicio(req)
     const processor = new DocumentProcessor(supabase)
@@ -39,9 +61,9 @@ export async function handler(req: Request): Promise<Response> {
     // 1. Scrapear sitio oficial DocenteMás
     console.log('📡 Consultando sitio DocenteMás...')
     
-    for (const [tipo, url] of Object.entries(URLS_OFICIALES)) {
+    for (const [tipo, config] of Object.entries(URLS_OFICIALES)) {
       await processor.processWithRetry(async () => {
-        const response = await fetch(url, {
+        const response = await fetch(config.url, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; ProfeFlow-Bot/1.0)'
           }
@@ -52,9 +74,16 @@ export async function handler(req: Request): Promise<Response> {
         }
         
         const html = await response.text()
-        const pdfLinks = extraerLinksPDF(html)
         
-        for (const link of pdfLinks) {
+        // Extraer PDFs por subcategoría
+        const pdfsPorSubcategoria = extraerPDFsPorSubcategoria(html, config.subcategorias)
+        
+        console.log(`  📂 ${tipo}: ${Object.keys(pdfsPorSubcategoria).length} subcategorías`)
+        
+        for (const [subcategoria, pdfLinks] of Object.entries(pdfsPorSubcategoria)) {
+          console.log(`    📁 ${subcategoria}: ${pdfLinks.length} documentos`)
+          
+          for (const link of pdfLinks) {
           let metadata = parsearNombreArchivo(link.nombre, tipo, html)
           
           // Si parsing básico falla, intentar clasificación con IA
@@ -78,14 +107,18 @@ export async function handler(req: Request): Promise<Response> {
               nombre: link.nombre,
               url: link.url,
               tipo,
+              subcategoria,
               año: metadata.año,
               nivel_educativo: metadata.nivel,
-              modalidad: metadata.modalidad
+              modalidad: metadata.modalidad,
+              asignatura: metadata.asignatura
             })
           }
         }
+      }
         
-        console.log(`  ✓ Encontrados ${pdfLinks.length} documentos en ${tipo}`)
+        const totalPDFs = Object.values(pdfsPorSubcategoria).reduce((sum, pdfs) => sum + pdfs.length, 0)
+        console.log(`  ✓ Total ${tipo}: ${totalPDFs} documentos`)
         await new Promise(resolve => setTimeout(resolve, 1000))
         
       }, `Scraping ${tipo}`).catch(error => {
@@ -95,26 +128,31 @@ export async function handler(req: Request): Promise<Response> {
     
     console.log(`📋 Total detectados: ${documentosDetectados.length} documentos`)
     
-    // 2. Comparar con base de datos
+    // 2. Comparar con base de datos (verificación mejorada de duplicados)
     const documentosNuevos = []
     const documentosActualizados = []
+    const documentosDuplicados = []
     
     for (const doc of documentosDetectados) {
-      // Verificar si ya existe
-      const { data: existente } = await supabase
+      // Verificar duplicados por múltiples criterios
+      const { data: existentes } = await supabase
         .from('documentos_oficiales')
-        .select('id, hash_contenido, version')
-        .eq('titulo', doc.nombre)
-        .eq('año_vigencia', doc.año)
-        .single()
+        .select('id, hash_contenido, version, url_original, titulo')
+        .or(`url_original.eq.${doc.url},and(titulo.eq.${doc.nombre},año_vigencia.eq.${doc.año})`)
       
-      if (!existente) {
+      if (!existentes || existentes.length === 0) {
+        // Documento completamente nuevo
         documentosNuevos.push(doc)
         console.log(`  🆕 Nuevo: ${doc.nombre}`)
-      } else {
-        const hashNuevo = await calcularHashRemoto(doc.url)
+      } else if (existentes.length === 1) {
+        const existente = existentes[0]
         
-        if (hashNuevo && hashNuevo !== existente.hash_contenido) {
+        // Verificar si es el mismo documento (misma URL)
+        if (existente.url_original === doc.url) {
+          // Calcular hash para ver si cambió el contenido
+          const hashNuevo = await calcularHashRemoto(doc.url)
+          
+          if (hashNuevo && hashNuevo !== existente.hash_contenido) {
           // Análisis inteligente de cambios
           try {
             const { data: docAnterior } = await supabase
@@ -152,8 +190,21 @@ export async function handler(req: Request): Promise<Response> {
             })
           }
           
-          console.log(`  🔄 Actualizado: ${doc.nombre}`)
+            console.log(`  🔄 Actualizado: ${doc.nombre}`)
+          } else {
+            // Mismo documento, mismo contenido (duplicado)
+            documentosDuplicados.push(doc)
+            console.log(`  ⏭️  Ya existe: ${doc.nombre}`)
+          }
+        } else {
+          // Mismo título/año pero URL diferente (posible duplicado)
+          console.log(`  ⚠️  Posible duplicado: ${doc.nombre} (URL diferente)`)
+          documentosDuplicados.push(doc)
         }
+      } else {
+        // Múltiples coincidencias (duplicados en BD)
+        console.log(`  ⚠️  Múltiples coincidencias para: ${doc.nombre} (${existentes.length} registros)`)
+        documentosDuplicados.push(doc)
       }
     }
     
@@ -193,6 +244,7 @@ export async function handler(req: Request): Promise<Response> {
       documentos_detectados: documentosDetectados.length,
       documentos_nuevos: documentosNuevos.length,
       documentos_actualizados: documentosActualizados.length,
+      documentos_duplicados: documentosDuplicados.length,
       procesamiento_exitoso: resultadosProcesamiento.filter(r => r.exito).length,
       procesamiento_fallido: resultadosProcesamiento.filter(r => !r.exito).length,
       detalles: resultadosProcesamiento
@@ -201,6 +253,7 @@ export async function handler(req: Request): Promise<Response> {
     console.log('\n✅ Monitoreo completado')
     console.log(`  📊 Nuevos: ${documentosNuevos.length}`)
     console.log(`  🔄 Actualizados: ${documentosActualizados.length}`)
+    console.log(`  ⏭️  Duplicados (saltados): ${documentosDuplicados.length}`)
     
     // 6. Notificar a administradores si hay cambios
     if (documentosNuevos.length > 0 || documentosActualizados.length > 0) {
@@ -251,6 +304,51 @@ if (import.meta.main) {
 // ============================================
 // FUNCIONES AUXILIARES
 // ============================================
+
+function extraerPDFsPorSubcategoria(
+  html: string, 
+  subcategorias: string[]
+): Record<string, Array<{ nombre: string; url: string }>> {
+  const resultado: Record<string, Array<{ nombre: string; url: string }>> = {}
+  
+  // Inicializar resultado
+  for (const subcategoria of subcategorias) {
+    resultado[subcategoria] = []
+  }
+  
+  // Buscar tabs de Elementor
+  const patronTab = /<div[^>]*id="elementor-tab-title-\d+"[^>]*>([^<]+)<\/div>[\s\S]*?<div[^>]*id="elementor-tab-content-\d+"[^>]*role="tabpanel"[^>]*>([\s\S]*?)<\/div>/gi
+  
+  let matchTab
+  while ((matchTab = patronTab.exec(html)) !== null) {
+    const tituloTab = matchTab[1].trim()
+    const contenidoTab = matchTab[2]
+    
+    // Buscar subcategoría que coincida
+    const subcategoriaMatch = subcategorias.find(sub => 
+      tituloTab.toLowerCase().includes(sub.toLowerCase()) ||
+      sub.toLowerCase().includes(tituloTab.toLowerCase())
+    )
+    
+    if (subcategoriaMatch) {
+      const pdfs = extraerLinksPDF(contenidoTab)
+      resultado[subcategoriaMatch].push(...pdfs)
+      console.log(`      📝 Tab "${tituloTab}" → ${subcategoriaMatch}: ${pdfs.length} PDFs`)
+    }
+  }
+  
+  // Si no se encontraron tabs, extraer todos los PDFs sin categoría
+  const totalEncontrados = Object.values(resultado).reduce((sum, arr) => sum + arr.length, 0)
+  if (totalEncontrados === 0) {
+    console.log(`      ⚠️ No se encontraron tabs, extrayendo todos los PDFs`)
+    const todosPDFs = extraerLinksPDF(html)
+    if (subcategorias.length > 0) {
+      resultado[subcategorias[0]] = todosPDFs
+    }
+  }
+  
+  return resultado
+}
 
 function extraerLinksPDF(html: string): Array<{ nombre: string; url: string }> {
   const links: Array<{ nombre: string; url: string }> = []
@@ -340,6 +438,7 @@ function parsearNombreArchivo(nombre: string, tipo?: string, html?: string): {
   año: number
   nivel: string
   modalidad: string
+  asignatura?: string
 } | null {
   
   const nombreLower = nombre.toLowerCase()
@@ -377,7 +476,29 @@ function parsearNombreArchivo(nombre: string, tipo?: string, html?: string): {
   if (/encierro/.test(nombreLower)) modalidad = 'encierro'
   if (/lengua.*indígena/.test(nombreLower)) modalidad = 'lengua_indigena'
   
-  return { año, nivel, modalidad }
+  // Detectar asignatura
+  let asignatura: string | undefined
+  const patronesAsignatura = {
+    'Matemática': /matemática|matemáticas/i,
+    'Lenguaje y Comunicación': /lenguaje|comunicación|lengua castellana/i,
+    'Ciencias Naturales': /ciencias naturales|biología|física|química/i,
+    'Historia y Geografía': /historia|geografía|ciencias sociales/i,
+    'Inglés': /inglés|english/i,
+    'Artes Visuales': /artes visuales|artes plásticas/i,
+    'Música': /música/i,
+    'Educación Física': /educación física|ed\. física/i,
+    'Tecnología': /tecnología/i,
+    'Religión': /religión|católica|evangélica/i
+  }
+  
+  for (const [asig, patron] of Object.entries(patronesAsignatura)) {
+    if (patron.test(nombreLower)) {
+      asignatura = asig
+      break
+    }
+  }
+  
+  return { año, nivel, modalidad, asignatura }
 }
 
 function inferirNivelPorTipo(tipo: string): string {
@@ -509,11 +630,45 @@ export async function procesarDocumentoNuevo(
   doc: DocumentoDetectado
 ): Promise<any> {
   
+  // Verificación final de duplicados antes de procesar
+  const { data: duplicado } = await supabase
+    .from('documentos_oficiales')
+    .select('id')
+    .eq('url_original', doc.url)
+    .maybeSingle()
+  
+  if (duplicado) {
+    console.log('  ⏭️  Documento ya existe, saltando...')
+    return {
+      documento: doc.nombre,
+      exito: true,
+      documento_id: duplicado.id,
+      duplicado: true
+    }
+  }
+  
   // 1. Descargar documento
   console.log('  📥 Descargando...')
   const response = await fetch(doc.url)
   const pdfBuffer = await response.arrayBuffer()
   const hash = await calcularHash(pdfBuffer)
+  
+  // Verificar duplicado por hash
+  const { data: duplicadoHash } = await supabase
+    .from('documentos_oficiales')
+    .select('id, titulo')
+    .eq('hash_contenido', hash)
+    .maybeSingle()
+  
+  if (duplicadoHash) {
+    console.log(`  ⏭️  Contenido duplicado de: ${duplicadoHash.titulo}`)
+    return {
+      documento: doc.nombre,
+      exito: true,
+      documento_id: duplicadoHash.id,
+      duplicado: true
+    }
+  }
   
   // 2. Subir a Supabase Storage
   console.log('  💾 Subiendo a storage...')
@@ -582,9 +737,10 @@ export async function procesarDocumentoNuevo(
     .from('documentos_oficiales')
     .insert({
       fuente_id: fuenteId,
-      tipo_documento: mapearTipoDocumento(doc.tipo),
+      tipo_documento: mapearTipoDocumento(doc.tipo, doc.subcategoria),
       nivel_educativo: doc.nivel_educativo,
       modalidad: doc.modalidad,
+      asignatura: doc.asignatura || null,
       año_vigencia: doc.año,
       titulo: doc.nombre,
       url_original: doc.url,
@@ -597,7 +753,11 @@ export async function procesarDocumentoNuevo(
       es_version_actual: true,
       estado_procesamiento: 'pendiente',
       etapa_actual: 'descargado',
-      fecha_descarga: new Date().toISOString()
+      fecha_descarga: new Date().toISOString(),
+      metadata: {
+        subcategoria: doc.subcategoria,
+        tipo_original: doc.tipo
+      }
     })
     .select()
     .single()
@@ -653,12 +813,31 @@ async function procesarActualizacionDocumento(
   console.log(`  ✓ Cambio registrado: ${doc.version_anterior} → ${nuevaVersion}`)
 }
 
-function mapearTipoDocumento(tipo: string): string {
+function mapearTipoDocumento(tipo: string, subcategoria?: string): string {
+  // Mapeo por subcategoría (más específico)
+  if (subcategoria) {
+    const mapeoSubcategoria: Record<string, string> = {
+      'Bases curriculares': 'bases_curriculares',
+      'Priorización Curricular': 'priorizacion_curricular',
+      'Programas EMTP': 'programa_emtp',
+      'Marco para la Buena Enseñanza': 'marco_buena_ensenanza',
+      'Rúbricas': 'rubricas',
+      'Manuales de Instrumentos': 'manual_portafolio',
+      'Informes de Resultados': 'informe_resultados',
+      'Documentos Legales': 'documento_legal'
+    }
+    
+    if (mapeoSubcategoria[subcategoria]) {
+      return mapeoSubcategoria[subcategoria]
+    }
+  }
+  
+  // Mapeo por tipo (fallback)
   const mapeo: Record<string, string> = {
     'manuales': 'manual_portafolio',
+    'basesCurriculares': 'bases_curriculares',
     'rubricas': 'rubricas',
     'tiposDeInformesDeResultados': 'informe_resultados',
-    'documentos': 'instructivo',
     'documentosLegales': 'documento_legal'
   }
   return mapeo[tipo] || 'instructivo'
