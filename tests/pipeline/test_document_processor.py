@@ -7,14 +7,14 @@ from unittest.mock import Mock, patch, MagicMock
 from io import BytesIO
 
 # Agregar el directorio de scripts al path
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../scripts/pipeline-document-monitor'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../scripts/pipeline-document-mineduc'))
 
 # Import the DocumentProcessor class from the 01-document-processor.py file
 from importlib.util import spec_from_file_location, module_from_spec
 
 # Load the document processor module
 spec = spec_from_file_location("document_processor", 
-    os.path.join(os.path.dirname(__file__), '../../scripts/pipeline-document-monitor/01-document-processor.py'))
+    os.path.join(os.path.dirname(__file__), '../../scripts/pipeline-document-mineduc/01-document-processor.py'))
 document_processor_module = module_from_spec(spec)
 spec.loader.exec_module(document_processor_module)
 DocumentProcessor = document_processor_module.DocumentProcessor

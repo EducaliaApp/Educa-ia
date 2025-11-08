@@ -151,7 +151,7 @@ ProfeFlow/
 │   │   └── shared/            # Utilidades compartidas
 │   └── migrations/            # Migraciones de BD
 ├── scripts/                    # Scripts de automatización
-│   ├── pipeline-document-monitor/      # Monitor de documentos Python
+│   ├── pipeline-document-mineduc/      # Monitor de documentos Python
 │   └── cron/                  # Tareas programadas
 ├── sql/                        # Esquemas de base de datos
 │   ├── schema/                # Esquemas principales

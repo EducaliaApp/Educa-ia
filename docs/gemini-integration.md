@@ -195,7 +195,7 @@ python -m pytest tests/pipeline/test_rubric_extractor.py -v
 Test the complete fallback cascade:
 
 ```bash
-python scripts/pipeline-document-monitor/rubric-extractor.py --auto --verbose
+python scripts/pipeline-document-mineduc/rubric-extractor.py --auto --verbose
 ```
 
 ## Troubleshooting

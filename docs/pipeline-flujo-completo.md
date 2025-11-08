@@ -38,7 +38,7 @@
 ```
 
 ### 2. Script Python: Pipeline Completo ETL
-**Archivo**: `scripts/pipeline-document-monitor/pipeline-completo.py`
+**Archivo**: `scripts/pipeline-document-mineduc/pipeline-completo.py`
 
 **Responsabilidades**:
 - ✅ Obtener documentos pendientes (`procesado: false`)
@@ -270,7 +270,7 @@ ORDER BY fecha_error DESC;
 
 ### Ejecutar Pipeline Completo
 ```bash
-cd scripts/pipeline-document-monitor
+cd scripts/pipeline-document-mineduc
 python pipeline-completo.py
 ```
 

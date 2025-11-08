@@ -207,7 +207,7 @@ pytest -m "unit and not slow" --maxfail=3
 1. **ImportError en scripts**
    ```bash
    # Asegurar que el path está configurado
-   export PYTHONPATH="${PYTHONPATH}:$(pwd)/scripts/pipeline-document-monitor"
+   export PYTHONPATH="${PYTHONPATH}:$(pwd)/scripts/pipeline-document-mineduc"
    ```
 
 2. **Tests lentos**

@@ -28,7 +28,7 @@
 - **flags/** - Feature flag type definitions
 
 ### Scripts & Automation (`/scripts`)
-- **pipeline-document-monitor/** - Python scripts for document processing and monitoring
+- **pipeline-document-mineduc/** - Python scripts for document processing and monitoring
 - **cron/** - Cron job configurations
 - Administrative utilities for user management and database seeding
 

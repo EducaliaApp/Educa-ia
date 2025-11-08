@@ -7,14 +7,14 @@ import json
 from unittest.mock import Mock, patch, MagicMock
 
 # Agregar el directorio de scripts al path
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../scripts/pipeline-document-monitor'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../scripts/pipeline-document-mineduc'))
 
 # Import the RubricExtractor class from the rubric-extractor.py file
 from importlib.util import spec_from_file_location, module_from_spec
 
 # Load the rubric extractor module
 spec = spec_from_file_location("rubric_extractor", 
-    os.path.join(os.path.dirname(__file__), '../../scripts/pipeline-document-monitor/rubric-extractor.py'))
+    os.path.join(os.path.dirname(__file__), '../../scripts/pipeline-document-mineduc/rubric-extractor.py'))
 rubric_extractor_module = module_from_spec(spec)
 spec.loader.exec_module(rubric_extractor_module)
 RubricExtractor = rubric_extractor_module.RubricExtractor

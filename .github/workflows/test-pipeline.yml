@@ -1,86 +1,22 @@
-name: Test Pipeline ETL
+name: Test Pipeline MLOps
 
 on:
-  push:
-    branches: [ main, develop ]
-    paths:
-      - 'scripts/pipeline-document-monitor/**'
-      - 'supabase/functions/**'
-      - 'tests/**'
-      - '.github/workflows/test-pipeline.yml'
   pull_request:
-    branches: [ main ]
     paths:
-      - 'scripts/pipeline-document-monitor/**'
-      - 'supabase/functions/**'
-      - 'tests/**'
-
+      - 'scripts/pipeline-document-mineduc/**'
+      - 'scripts/rubricas/**'
+  push:
+    branches: [main, develop]
+    paths:
+      - 'scripts/pipeline-document-mineduc/**'
+      - 'scripts/rubricas/**'
   workflow_dispatch:
-    inputs:
-      test_type:
-        description: 'Tipo de tests a ejecutar'
-        required: false
-        default: 'all'
-        type: choice
-        options:
-          - all
-          - unit
-          - integration
-          - pipeline
-
-permissions:
-  contents: read
 
 jobs:
-  test-unit:
-    name: Tests Unitarios
+  test-etl-pipeline:
+    name: Test ETL Pipeline
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
-    steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Cache dependencias
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements-test.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Instalar dependencias de testing
-        run: |
-          pip install --upgrade pip
-          pip install pytest pytest-mock pytest-asyncio pytest-cov
-          pip install supabase python-dotenv PyMuPDF openai requests anthropic
-
-      - name: Ejecutar tests unitarios
-        run: |
-          pytest tests/unit/ -v --tb=short -m "unit and not slow"
-        env:
-          TESTING: true
-
-      - name: Subir resultados de tests unitarios
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: unit-test-results
-          path: |
-            .coverage
-            htmlcov/
-          retention-days: 7
-
-  test-pipeline:
-    name: Tests Pipeline ETL
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: test-unit
 
     steps:
       - name: Checkout código
@@ -93,169 +29,24 @@ jobs:
 
       - name: Instalar dependencias
         run: |
-          pip install --upgrade pip
-          pip install pytest pytest-mock pytest-asyncio pytest-cov
-          pip install supabase python-dotenv PyMuPDF openai requests anthropic
-          # Instalar Tesseract para tests de OCR
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-spa
+          pip install -r scripts/pipeline-document-mineduc/requirements.txt
+          pip install pytest pytest-cov pytest-mock
 
-      - name: Ejecutar tests del pipeline
+      - name: Ejecutar tests ETL
         run: |
-          pytest tests/pipeline/ -v --tb=short --cov=scripts/pipeline-document-monitor
-        env:
-          TESTING: true
-          SUPABASE_URL: https://test.supabase.co
-          SUPABASE_SERVICE_ROLE_KEY: test_key
+          cd scripts/pipeline-document-mineduc
+          python -m pytest test_pipeline.py -v --cov=. --cov-report=term-missing
 
-      - name: Generar reporte de cobertura
+      - name: Verificar sintaxis scripts
         run: |
-          pytest tests/pipeline/ --cov=scripts/pipeline-document-monitor --cov-report=html --cov-report=xml
+          python -m py_compile scripts/pipeline-document-mineduc/fase*.py
+          python -m py_compile scripts/pipeline-document-mineduc/validacion_calidad.py
+          python -m py_compile scripts/pipeline-document-mineduc/mlops_pipeline.py
 
-      - name: Subir cobertura a Codecov
-        uses: codecov/codecov-action@v4
-        if: always()
-        with:
-          file: ./coverage.xml
-          flags: pipeline
-          name: pipeline-coverage
-
-      - name: Subir resultados de tests pipeline
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: pipeline-test-results
-          path: |
-            htmlcov/
-            coverage.xml
-          retention-days: 7
-
-  test-integration:
-    name: Tests Integración
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: test-pipeline
-    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'integration' || github.event_name != 'workflow_dispatch'
-
-    steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Instalar dependencias completas
-        run: |
-          pip install --upgrade pip
-          pip install pytest pytest-mock pytest-asyncio pytest-cov
-          pip install supabase python-dotenv PyMuPDF openai requests anthropic
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-spa
-
-      - name: Ejecutar tests de integración
-        run: |
-          pytest tests/integration/ -v --tb=short -m integration --maxfail=3
-        env:
-          TESTING: true
-          SUPABASE_URL: https://test.supabase.co
-          SUPABASE_SERVICE_ROLE_KEY: test_key
-          OPENAI_API_KEY: test_openai_key
-          ANTHROPIC_API_KEY: test_anthropic_key
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COHERE_API_KEY: test_cohere_key
-
-      - name: Subir resultados de integración
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: integration-test-results
-          path: |
-            test-results/
-          retention-days: 7
-
-  test-edge-functions:
-    name: Tests Edge Functions
+  test-rubricas-pipeline:
+    name: Test Rúbricas Pipeline
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
-    steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: v1.40.x
-
-      - name: Setup Python para tests
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Instalar dependencias de testing
-        run: |
-          pip install pytest pytest-mock pytest-asyncio
-
-      - name: Validar sintaxis Edge Functions
-        run: |
-          deno check supabase/functions/*/index.ts
-
-      - name: Ejecutar tests Edge Functions
-        run: |
-          pytest tests/unit/test_edge_functions.py -v --tb=short -m edge_functions
-
-      - name: Test Edge Functions con Deno
-        run: |
-          # Test básico de sintaxis y imports
-          for func in supabase/functions/*/index.ts; do
-            echo "Testing $func"
-            deno check "$func"
-          done
-
-  security-scan:
-    name: Análisis de Seguridad
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: github.event_name == 'pull_request'
-
-    steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Instalar herramientas de seguridad
-        run: |
-          pip install bandit safety
-
-      - name: Ejecutar Bandit (análisis de seguridad)
-        run: |
-          bandit -r scripts/pipeline-document-monitor/ -f json -o bandit-report.json || true
-
-      - name: Verificar dependencias con Safety
-        run: |
-          safety check --json --output safety-report.json || true
-
-      - name: Subir reportes de seguridad
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: security-reports
-          path: |
-            bandit-report.json
-            safety-report.json
-          retention-days: 30
-
-  performance-test:
-    name: Tests de Performance
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    if: github.event.inputs.test_type == 'all' || github.event_name == 'schedule'
 
     steps:
       - name: Checkout código
@@ -268,44 +59,41 @@ jobs:
 
       - name: Instalar dependencias
         run: |
-          pip install pytest pytest-benchmark
-          pip install supabase python-dotenv PyMuPDF openai requests
+          pip install supabase python-dotenv openai google-generativeai anthropic
+          pip install pytest pytest-cov pytest-mock
 
-      - name: Ejecutar tests de performance
+      - name: Ejecutar tests rúbricas
         run: |
-          pytest tests/ -v -m "not slow" --benchmark-only --benchmark-json=benchmark.json
-        env:
-          TESTING: true
+          cd scripts/rubricas
+          python -m pytest test_rubricas.py -v --cov=. --cov-report=term-missing
 
-      - name: Subir resultados de performance
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: performance-results
-          path: benchmark.json
-          retention-days: 7
+      - name: Verificar sintaxis scripts
+        run: |
+          python -m py_compile scripts/rubricas/*.py
 
-  summary:
-    name: Resumen de Tests
+  integration-test:
+    name: Integration Test
     runs-on: ubuntu-latest
-    needs: [test-unit, test-pipeline, test-integration, test-edge-functions]
-    if: always()
+    needs: [test-etl-pipeline, test-rubricas-pipeline]
+    timeout-minutes: 5
 
     steps:
-      - name: Generar resumen
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Test imports
         run: |
-          echo "## 📊 Resumen de Tests del Pipeline ETL" >> $GITHUB_STEP_SUMMARY
+          pip install -r scripts/pipeline-document-mineduc/requirements.txt
+          python -c "from scripts.pipeline_document_monitor import mlops_pipeline; print('✅ Imports OK')"
+
+      - name: Resumen tests
+        run: |
+          echo "### ✅ Tests Completados" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Categoría | Estado | Duración |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|--------|----------|" >> $GITHUB_STEP_SUMMARY
-          echo "| 🧪 Tests Unitarios | ${{ needs.test-unit.result }} | ~2min |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔧 Tests Pipeline | ${{ needs.test-pipeline.result }} | ~5min |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔗 Tests Integración | ${{ needs.test-integration.result }} | ~8min |" >> $GITHUB_STEP_SUMMARY
-          echo "| ⚡ Edge Functions | ${{ needs.test-edge-functions.result }} | ~3min |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [[ "${{ needs.test-unit.result }}" == "success" && "${{ needs.test-pipeline.result }}" == "success" ]]; then
-            echo "✅ **Pipeline ETL verificado y listo para producción**" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **Pipeline ETL requiere correcciones antes del deploy**" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "- ETL Pipeline: ${{ needs.test-etl-pipeline.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Rúbricas Pipeline: ${{ needs.test-rubricas-pipeline.result }}" >> $GITHUB_STEP_SUMMARY

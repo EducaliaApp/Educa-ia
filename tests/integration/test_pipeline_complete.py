@@ -8,7 +8,7 @@ import tempfile
 import json
 
 # Agregar directorios al path
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../scripts/pipeline-document-monitor'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../scripts/pipeline-document-mineduc'))
 
 class TestPipelineComplete:
     """Tests de integración para el pipeline completo ETL"""
