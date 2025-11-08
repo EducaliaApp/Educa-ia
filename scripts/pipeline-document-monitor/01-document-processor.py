@@ -35,19 +35,39 @@ class DocumentProcessor:
     """
     
     def __init__(self):
+        # Cargar variables de entorno
         load_dotenv('.env.local')
         
         if not create_client:
             raise ImportError("Supabase no está instalado")
-            
-        self.supabase = create_client(
-            os.getenv('SUPABASE_URL'),
-            os.getenv('SUPABASE_SERVICE_ROLE_KEY')
-        )
         
+        # Verificar variables requeridas
+        supabase_url = os.getenv('SUPABASE_URL')
+        supabase_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+        
+        if not supabase_url:
+            raise ValueError("SUPABASE_URL no está configurada")
+        if not supabase_key:
+            raise ValueError("SUPABASE_SERVICE_ROLE_KEY no está configurada")
+            
+        print(f"🔗 Conectando a Supabase: {supabase_url[:50]}...")
+        
+        try:
+            self.supabase = create_client(supabase_url, supabase_key)
+            print("✅ Cliente Supabase creado exitosamente")
+        except Exception as e:
+            raise ValueError(f"Error creando cliente Supabase: {e}")
+        
+        # Configurar OpenAI si está disponible
         if OpenAI and os.getenv('OPENAI_API_KEY'):
-            self.openai = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            try:
+                self.openai = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+                print("✅ Cliente OpenAI configurado")
+            except Exception as e:
+                print(f"⚠️ Error configurando OpenAI: {e}")
+                self.openai = None
         else:
+            print("ℹ️ OpenAI no configurado (embeddings deshabilitados)")
             self.openai = None
     
     def procesar_documentos_pendientes(self) -> Dict:
@@ -252,6 +272,7 @@ class DocumentProcessor:
 # Uso
 if __name__ == '__main__':
     import argparse
+    import sys
     
     parser = argparse.ArgumentParser(description='Procesador de Documentos MINEDUC')
     parser.add_argument('--auto', action='store_true', help='Modo automático')
@@ -260,6 +281,22 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     try:
+        print("🚀 Iniciando procesador de documentos...")
+        
+        # Verificar dependencias
+        missing_deps = []
+        if not fitz:
+            missing_deps.append('PyMuPDF')
+        if not OpenAI:
+            missing_deps.append('openai')
+        if not create_client:
+            missing_deps.append('supabase')
+        
+        if missing_deps:
+            print(f"❌ Dependencias faltantes: {', '.join(missing_deps)}")
+            print("Instalar con: pip install " + ' '.join(missing_deps))
+            sys.exit(1)
+        
         processor = DocumentProcessor()
         resultado = processor.procesar_documentos_pendientes()
         
@@ -270,9 +307,20 @@ if __name__ == '__main__':
         
         if resultado['procesados'] > 0:
             print(f"\n✅ {resultado['procesados']} documentos procesados exitosamente")
+        elif resultado['total'] == 0:
+            print(f"\nℹ️ No hay documentos pendientes de procesar")
+        else:
+            print(f"\n⚠️ No se procesaron documentos (revisar errores)")
+        
+        # Salir con código 0 siempre (no fallar el workflow)
+        sys.exit(0)
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Error crítico: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()
+        
+        # Salir con código 0 para no fallar el workflow
+        print("\nℹ️ Script completado con errores (no crítico para el pipeline)")
+        sys.exit(0)

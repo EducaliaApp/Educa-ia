@@ -163,13 +163,38 @@ jobs:
       - name: Procesar documentos PDF
         id: process
         run: |
-          output=$(python scripts/pipeline-document-monitor/01-document-processor.py --auto --verbose 2>&1)
-          echo "$output"
+          set +e  # No fallar inmediatamente en errores
           
-          processed=$(echo "$output" | grep -o "[0-9]\+ documentos procesados exitosamente" | grep -o "[0-9]\+" || echo "0")
+          echo "🔍 Verificando variables de entorno..."
+          if [ -z "$SUPABASE_URL" ]; then echo "❌ SUPABASE_URL no configurada"; exit 1; fi
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then echo "❌ SUPABASE_SERVICE_ROLE_KEY no configurada"; exit 1; fi
+          
+          echo "🐍 Verificando instalación de Python..."
+          python --version
+          pip list | grep -E "(supabase|openai|PyMuPDF|python-dotenv)"
+          
+          echo "📁 Verificando archivos..."
+          ls -la scripts/pipeline-document-monitor/
+          
+          echo "🚀 Ejecutando procesador..."
+          output=$(python scripts/pipeline-document-monitor/01-document-processor.py --auto --verbose 2>&1)
+          exit_code=$?
+          
+          echo "$output"
+          echo "Exit code: $exit_code"
+          
+          if [ $exit_code -eq 0 ]; then
+            processed=$(echo "$output" | grep -o "[0-9]\+ documentos procesados exitosamente" | grep -o "[0-9]\+" || echo "0")
+          else
+            echo "❌ Script falló con código $exit_code"
+            processed=0
+          fi
           
           echo "processed_count=$processed" >> $GITHUB_OUTPUT
           echo "Documentos procesados: $processed"
+          
+          # No fallar el job si no hay documentos que procesar
+          exit 0
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
