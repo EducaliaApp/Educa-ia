@@ -142,7 +142,7 @@ class PipelineCompleto:
             return None
     
     def _extraer_texto(self, pdf_data: bytes) -> str:
-        """Extrae texto del PDF"""
+        """Extrae texto del PDF usando método correcto"""
         
         print(f"   📄 Extrayendo texto...")
         
@@ -150,25 +150,130 @@ class PipelineCompleto:
             texto_completo = []
             
             with fitz.open(stream=pdf_data, filetype="pdf") as doc:
+                print(f"   📖 PDF: {len(doc)} páginas")
+                
                 for pagina_num, pagina in enumerate(doc, 1):
-                    texto = pagina.get_text()
-                    if texto.strip():
-                        texto_completo.append(texto)
+                    # Usar "text" en lugar de get_text() para mejor extracción
+                    texto = pagina.get_text("text", sort=True)
+                    
+                    if texto and texto.strip():
+                        # Limpiar texto extraído
+                        texto_limpio = self._limpiar_texto_extraido(texto)
+                        if texto_limpio:
+                            texto_completo.append(f"--- Página {pagina_num} ---\n{texto_limpio}")
+                            print(f"   📄 Página {pagina_num}: {len(texto_limpio)} caracteres")
                     
                     # Limitar a 50 páginas para evitar timeout
                     if pagina_num >= 50:
+                        print(f"   ⚠️ Limitado a 50 páginas")
                         break
             
-            resultado = "\n".join(texto_completo)
-            print(f"   ✅ Extraído: {len(resultado):,} caracteres")
-            return resultado
+            resultado = "\n\n".join(texto_completo)
+            
+            # Validar que el texto extraído es legible
+            if self._es_texto_valido(resultado):
+                print(f"   ✅ Extraído: {len(resultado):,} caracteres")
+                return resultado
+            else:
+                print(f"   ⚠️ Texto extraído no es legible, intentando OCR...")
+                return self._extraer_con_ocr_fallback(pdf_data)
             
         except Exception as e:
             print(f"   ❌ Error extrayendo texto: {e}")
             return ""
     
+    def _limpiar_texto_extraido(self, texto: str) -> str:
+        """Limpia texto extraído del PDF"""
+        import re
+        
+        # Remover caracteres de control
+        texto = re.sub(r'[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]', '', texto)
+        
+        # Normalizar espacios en blanco
+        texto = re.sub(r'[ \t]+', ' ', texto)
+        texto = re.sub(r'\n\s*\n\s*\n+', '\n\n', texto)
+        
+        # Remover líneas que son solo metadata de PDF
+        lineas = texto.split('\n')
+        lineas_limpias = []
+        
+        for linea in lineas:
+            linea = linea.strip()
+            # Saltar líneas que parecen metadata
+            if any(keyword in linea.lower() for keyword in [
+                'endobj', 'endstream', 'flatedecode', 'colorspace',
+                'fontdescriptor', 'winansien coding', 'xref', 'trailer'
+            ]):
+                continue
+            
+            # Saltar líneas muy cortas sin contenido útil
+            if len(linea) < 3:
+                continue
+            
+            lineas_limpias.append(linea)
+        
+        return '\n'.join(lineas_limpias)
+    
+    def _es_texto_valido(self, texto: str) -> bool:
+        """Verifica si el texto extraído es legible"""
+        if not texto or len(texto) < 100:
+            return False
+        
+        # Contar palabras legibles (al menos 3 letras)
+        import re
+        palabras = re.findall(r'\b[a-zA-ZÀ-ſ]{3,}\b', texto)
+        
+        # Debe tener al menos 20 palabras legibles
+        if len(palabras) < 20:
+            return False
+        
+        # Verificar que no sea mayormente metadata
+        metadata_keywords = ['endobj', 'endstream', 'flatedecode', 'colorspace']
+        metadata_count = sum(1 for keyword in metadata_keywords if keyword in texto.lower())
+        
+        # Si más del 10% del texto son keywords de metadata, no es válido
+        if metadata_count > len(palabras) * 0.1:
+            return False
+        
+        return True
+    
+    def _extraer_con_ocr_fallback(self, pdf_data: bytes) -> str:
+        """Fallback a OCR si la extracción normal falla"""
+        print(f"   🔍 Intentando OCR como fallback...")
+        
+        try:
+            import pytesseract
+            from PIL import Image
+            import io
+            
+            texto_ocr = []
+            
+            with fitz.open(stream=pdf_data, filetype="pdf") as doc:
+                # Solo procesar primeras 3 páginas con OCR (es lento)
+                for pagina_num in range(min(3, len(doc))):
+                    pagina = doc[pagina_num]
+                    
+                    # Convertir a imagen
+                    pix = pagina.get_pixmap(matrix=fitz.Matrix(2, 2))
+                    img_data = pix.tobytes("png")
+                    img = Image.open(io.BytesIO(img_data))
+                    
+                    # OCR
+                    texto = pytesseract.image_to_string(img, lang='spa+eng')
+                    if texto.strip():
+                        texto_ocr.append(f"--- Página {pagina_num + 1} (OCR) ---\n{texto}")
+                        print(f"   🔍 OCR Página {pagina_num + 1}: {len(texto)} caracteres")
+            
+            resultado = '\n\n'.join(texto_ocr)
+            print(f"   ✅ OCR completado: {len(resultado)} caracteres")
+            return resultado
+            
+        except Exception as e:
+            print(f"   ❌ OCR falló: {e}")
+            return "Documento sin texto extraíble (posiblemente escaneado)"
+    
     def _generar_embedding(self, texto: str) -> List[float]:
-        """Genera embedding con OpenAI"""
+        """Genera embedding con OpenAI para el texto dado. Se usa para búsquedas semánticas."""
         
         print(f"   🔢 Generando embedding...")
         
