@@ -2,6 +2,7 @@
 
 import os
 import hashlib
+import io
 from typing import Dict, List, Optional
 import json
 from datetime import datetime
@@ -24,6 +25,14 @@ try:
 except ImportError:
     print("⚠️ Supabase no instalado. Instalar con: pip install supabase")
     create_client = None
+
+try:
+    import pytesseract
+    from PIL import Image
+except ImportError:
+    print("⚠️ OCR no disponible. Instalar con: pip install pytesseract Pillow")
+    pytesseract = None
+    Image = None
 
 class DocumentProcessor:
     """
@@ -90,7 +99,7 @@ class DocumentProcessor:
         for doc in docs.data:
             try:
                 resultado = self.procesar_documento_individual(doc)
-                if resultado['status'] == 'procesado':
+                if resultado['status'] in ['procesado', 'procesado_sin_texto']:
                     procesados += 1
                     print(f"  ✅ {doc['titulo']}")
                 else:
@@ -126,8 +135,29 @@ class DocumentProcessor:
         
         # 2. Extraer texto
         texto_completo = self._extraer_texto_pdf_data(pdf_data)
+        
+        # Si no hay texto, intentar OCR
         if not texto_completo or len(texto_completo.strip()) < 10:
-            return {'status': 'error_extraccion', 'error': f'Texto extraído muy corto: {len(texto_completo) if texto_completo else 0} chars'}
+            print("    🔍 Intentando OCR para documento escaneado...")
+            texto_ocr = self._extraer_texto_con_ocr(pdf_data)
+            if texto_ocr and len(texto_ocr.strip()) > 50:
+                texto_completo = texto_ocr
+                print(f"    ✅ OCR exitoso: {len(texto_completo)} caracteres")
+            else:
+                # Marcar como procesado pero sin contenido útil
+                print("    ⚠️ Documento sin texto extraíble (probablemente escaneado)")
+                self.supabase.table('documentos_oficiales').update({
+                    'procesado': True,
+                    'contenido_texto': 'Documento escaneado sin texto extraíble',
+                    'fecha_procesamiento': datetime.now().isoformat(),
+                    'tipo_contenido': 'imagen_escaneada'
+                }).eq('id', documento['id']).execute()
+                
+                return {
+                    'status': 'procesado_sin_texto',
+                    'documento_id': documento['id'],
+                    'nota': 'Documento escaneado sin texto extraíble'
+                }
         
         # 3. Generar embedding para búsqueda semántica
         embedding = None
@@ -202,16 +232,43 @@ class DocumentProcessor:
             
         except Exception as e:
             print(f"    ❌ Error con PyMuPDF: {e}")
-            # Intentar fallback si PyMuPDF falla
-            try:
-                texto = pdf_data.decode('utf-8', errors='ignore')
-                import re
-                matches = re.findall(r'[A-Za-zÀ-ſ\s]{10,}', texto)
-                resultado = ' '.join(matches[:500])
-                print(f"    🔄 Fallback después de error: {len(resultado)} caracteres")
-                return resultado
-            except:
-                return "Contenido extraído del PDF (error en procesamiento)"
+            return ""
+    
+    def _extraer_texto_con_ocr(self, pdf_data: bytes) -> str:
+        """Extrae texto usando OCR para documentos escaneados"""
+        
+        if not pytesseract or not Image or not fitz:
+            print("    ⚠️ OCR no disponible")
+            return ""
+        
+        try:
+            texto_ocr = []
+            
+            with fitz.open(stream=pdf_data, filetype="pdf") as doc:
+                for pagina_num, pagina in enumerate(doc, 1):
+                    # Convertir página a imagen
+                    pix = pagina.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom para mejor OCR
+                    img_data = pix.tobytes("png")
+                    
+                    # Procesar con OCR
+                    img = Image.open(io.BytesIO(img_data))
+                    texto_pagina = pytesseract.image_to_string(img, lang='spa+eng')
+                    
+                    if texto_pagina.strip():
+                        texto_ocr.append(f"--- Página {pagina_num} (OCR) ---\n{texto_pagina}")
+                        print(f"    🔍 OCR Página {pagina_num}: {len(texto_pagina)} caracteres")
+                    
+                    # Limitar a 3 páginas para evitar timeout
+                    if pagina_num >= 3:
+                        break
+            
+            resultado = "\n".join(texto_ocr)
+            print(f"    ✅ OCR completado: {len(resultado)} caracteres")
+            return resultado
+            
+        except Exception as e:
+            print(f"    ❌ Error en OCR: {e}")
+            return ""
     
     def _calcular_hash(self, texto: str) -> str:
         """Calcula SHA-256 del contenido"""
@@ -335,6 +392,7 @@ if __name__ == '__main__':
             print(f"\nℹ️ No hay documentos pendientes de procesar")
         else:
             print(f"\n⚠️ No se procesaron documentos (revisar errores)")
+            print("\nℹ️ Nota: Documentos escaneados se marcan como procesados aunque no tengan texto extraíble")
         
         # Salir con código 0 siempre (no fallar el workflow)
         sys.exit(0)
