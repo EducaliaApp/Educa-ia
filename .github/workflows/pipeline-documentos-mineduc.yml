@@ -207,6 +207,10 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
   etl-load:
     name: "FASE 3: Load - Generar Embeddings"
@@ -246,6 +250,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
   validar-calidad:
     name: "FASE 4: Validar Calidad"
@@ -272,7 +279,7 @@ jobs:
       - name: Validar calidad
         id: validate
         run: |
-          output=$(python scripts/pipeline-document-mineduc/validacion_calidad.py 2>&1)
+          output=$(python scripts/pipeline-document-mineduc/fase4_validacion_calidad.py 2>&1)
           echo "$output"
           validated=$(echo "$output" | grep -o "Aprobados: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
           quality=$(echo "$output" | grep -o "Calidad: [0-9.]\+%" | grep -o "[0-9.]\+" || echo "0")
@@ -281,6 +288,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   optimizar-embeddings:
     name: "FASE 5: Optimizar Índices"
@@ -306,6 +315,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   registrar-metricas:
     name: "FASE 6: Registrar Métricas"

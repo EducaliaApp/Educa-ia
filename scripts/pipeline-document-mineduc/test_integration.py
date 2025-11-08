@@ -22,7 +22,7 @@ class TestIntegrationPipeline(unittest.TestCase):
             'fase3_load.py',
             'fase5_optimize.py',
             'fase6_metrics.py',
-            'validacion_calidad.py'
+            'fase4_validacion_calidad.py'
         ]
         for script in scripts:
             self.assertTrue(os.path.exists(script), f"{script} no existe")

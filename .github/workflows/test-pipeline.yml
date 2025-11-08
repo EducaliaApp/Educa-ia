@@ -40,7 +40,7 @@ jobs:
       - name: Verificar sintaxis scripts
         run: |
           python -m py_compile scripts/pipeline-document-mineduc/fase*.py
-          python -m py_compile scripts/pipeline-document-mineduc/validacion_calidad.py
+          python -m py_compile scripts/pipeline-document-mineduc/fase4_validacion_calidad.py
           python -m py_compile scripts/pipeline-document-mineduc/mlops_pipeline.py
 
   test-rubricas-pipeline:

@@ -153,7 +153,7 @@ Costo por documento: $0.00004 USD
 python scripts/pipeline-document-mineduc/mlops_pipeline.py
 
 # Solo validación de calidad
-python scripts/pipeline-document-mineduc/validacion_calidad.py
+python scripts/pipeline-document-mineduc/fase4_validacion_calidad.py
 ```
 
 ### GitHub Actions

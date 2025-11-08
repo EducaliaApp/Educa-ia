@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getDocument } from 'https://esm.sh/pdfjs-dist@3.11.174/legacy/build/pdf.mjs';
 
 interface LogEvent {
   timestamp: string
@@ -115,6 +116,52 @@ export class DocumentProcessor {
     });
 
     return isValid;
+  }
+
+  async extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
+    try {
+      this.log('info', 'PDFExtractor', 'Starting text extraction', { size: arrayBuffer.byteLength });
+      
+      const pdf = await getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+      const numPages = pdf.numPages;
+      let fullText = '';
+      let isScanned = false;
+      
+      this.log('info', 'PDFExtractor', 'PDF loaded', { pages: numPages });
+      
+      for (let i = 1; i <= numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map((item: any) => item.str).join(' ');
+        
+        if (i === 1 && pageText.trim().length < 50) {
+          isScanned = true;
+          this.log('warn', 'PDFExtractor', 'Scanned PDF detected - text extraction limited');
+        }
+        
+        fullText += pageText + '\n';
+      }
+      
+      const cleanText = fullText
+        .replace(/\s+/g, ' ')
+        .replace(/\n+/g, '\n')
+        .trim();
+      
+      this.log('info', 'PDFExtractor', 'Text extraction completed', { 
+        pages: numPages,
+        textLength: cleanText.length,
+        isScanned
+      });
+      
+      if (cleanText.length < 100) {
+        this.log('warn', 'PDFExtractor', 'Insufficient text extracted - may be scanned document');
+      }
+      
+      return cleanText;
+    } catch (error) {
+      this.log('error', 'PDFExtractor', 'Text extraction failed', { error: error.message });
+      throw new Error(`Failed to extract text from PDF: ${error.message}`);
+    }
   }
 
   getLogs(): LogEvent[] {

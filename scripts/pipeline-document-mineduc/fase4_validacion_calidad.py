@@ -19,6 +19,27 @@ except ImportError:
 
 
 class ValidadorCalidad:
+    """
+    Validates the quality of processed documents and their chunks in the document processing pipeline.
+    This class performs comprehensive quality validation on documents stored in the database,
+    checking various criteria including text content, embeddings, and chunk integrity.
+    Attributes:
+        supabase: Supabase client instance for database operations
+    Quality Criteria:
+        - Minimum text length (15% weight)
+        - Readable words count (25% weight) 
+        - Absence of excessive metadata (15% weight)
+        - Valid chunks with embeddings (45% weight total)
+    Usage:
+        validator = ValidadorCalidad()
+        results = validator.validar_todos()
+    The validation process returns a comprehensive report including:
+        - Total documents processed
+        - Approved/rejected counts
+        - Average quality score
+        - Chunk statistics
+        - Detailed breakdown per document
+    """
     """Valida calidad de documentos procesados"""
     
     def __init__(self):
@@ -51,17 +72,20 @@ class ValidadorCalidad:
             'aprobados': 0,
             'rechazados': 0,
             'calidad_promedio': 0.0,
+            'total_chunks': 0,
+            'chunks_sin_embedding': 0,
             'detalles': []
         }
         
         for doc in documentos:
-            calidad = self._calcular_calidad(doc)
+            calidad, chunks_info = self._calcular_calidad(doc)
             
             resultado = {
                 'id': doc['id'],
                 'titulo': doc['titulo'],
                 'calidad': calidad,
-                'aprobado': calidad >= 0.7
+                'aprobado': calidad >= 0.7,
+                'chunks': chunks_info
             }
             
             if resultado['aprobado']:
@@ -70,6 +94,8 @@ class ValidadorCalidad:
                 resultados['rechazados'] += 1
             
             resultados['calidad_promedio'] += calidad
+            resultados['total_chunks'] += chunks_info['total']
+            resultados['chunks_sin_embedding'] += chunks_info['sin_embedding']
             resultados['detalles'].append(resultado)
         
         if resultados['total'] > 0:
@@ -79,46 +105,59 @@ class ValidadorCalidad:
         
         return resultados
     
-    def _calcular_calidad(self, doc: Dict) -> float:
-        """Calcula score de calidad del documento"""
+    def _calcular_calidad(self, doc: Dict) -> tuple:
+        """Calcula score de calidad del documento y valida chunks"""
         
         texto = doc.get('contenido_texto', '')
-        embedding = doc.get('embedding')
         
         if not texto:
-            return 0.0
+            return 0.0, {'total': 0, 'sin_embedding': 0}
         
         score = 0.0
         
-        # Criterio 1: Longitud mínima (20%)
+        # Criterio 1: Longitud mínima (15%)
         if len(texto) >= 500:
-            score += 0.2
+            score += 0.15
         elif len(texto) >= 200:
-            score += 0.1
+            score += 0.08
         
-        # Criterio 2: Palabras legibles (30%)
+        # Criterio 2: Palabras legibles (25%)
         palabras = re.findall(r'\b[a-zA-ZÀ-ſ]{3,}\b', texto)
         if len(palabras) >= 100:
-            score += 0.3
+            score += 0.25
         elif len(palabras) >= 50:
-            score += 0.15
+            score += 0.12
         
-        # Criterio 3: Ratio palabras/caracteres (20%)
-        if len(palabras) > 0:
-            ratio = len(palabras) / (len(texto) / 5)
-            score += min(ratio, 0.2)
-        
-        # Criterio 4: Sin metadata excesiva (15%)
+        # Criterio 3: Sin metadata excesiva (15%)
         metadata_keywords = ['endobj', 'endstream', 'flatedecode']
         metadata_count = sum(1 for kw in metadata_keywords if kw in texto.lower())
         if metadata_count == 0:
             score += 0.15
         
-        # Criterio 5: Tiene embedding (15%)
-        if embedding and len(embedding) > 0:
-            score += 0.15
+        # Criterio 4: Validar chunks (45%)
+        chunks_response = self.supabase.table('chunks_documentos')\
+            .select('id, embedding, contenido')\
+            .eq('documento_id', doc['id'])\
+            .execute()
         
-        return min(score, 1.0)
+        chunks = chunks_response.data or []
+        chunks_info = {
+            'total': len(chunks),
+            'sin_embedding': sum(1 for c in chunks if not c.get('embedding'))
+        }
+        
+        if len(chunks) > 0:
+            # Todos los chunks tienen embedding (25%)
+            if chunks_info['sin_embedding'] == 0:
+                score += 0.25
+            else:
+                score += 0.25 * (1 - chunks_info['sin_embedding'] / len(chunks))
+            
+            # Chunks tienen contenido válido (20%)
+            chunks_validos = sum(1 for c in chunks if len(c.get('contenido', '')) > 100)
+            score += 0.20 * (chunks_validos / len(chunks))
+        
+        return min(score, 1.0), chunks_info
     
     def _mostrar_reporte(self, resultados: Dict):
         """Muestra reporte de validación"""
@@ -130,6 +169,8 @@ class ValidadorCalidad:
         print(f"   ✅ Aprobados:      {resultados['aprobados']}")
         print(f"   ❌ Rechazados:     {resultados['rechazados']}")
         print(f"   📈 Calidad:        {resultados['calidad_promedio']:.2%}")
+        print(f"   📑 Total chunks:   {resultados['total_chunks']}")
+        print(f"   ⚠️  Sin embedding:  {resultados['chunks_sin_embedding']}")
         print("=" * 60)
         
         # Mostrar documentos rechazados
@@ -137,7 +178,8 @@ class ValidadorCalidad:
             print("\n⚠️ DOCUMENTOS CON BAJA CALIDAD:")
             for detalle in resultados['detalles']:
                 if not detalle['aprobado']:
-                    print(f"   - {detalle['titulo'][:60]} ({detalle['calidad']:.2%})")
+                    chunks = detalle['chunks']
+                    print(f"   - {detalle['titulo'][:50]} ({detalle['calidad']:.2%}) - {chunks['total']} chunks, {chunks['sin_embedding']} sin embedding")
 
 
 if __name__ == '__main__':

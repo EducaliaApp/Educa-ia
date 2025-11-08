@@ -215,7 +215,7 @@ export async function handler(req: Request): Promise<Response> {
       console.log(`\n📥 Procesando nuevo documento: ${doc.nombre}`)
       
       try {
-        const resultado = await procesarDocumentoNuevo(supabase, doc)
+        const resultado = await procesarDocumentoNuevo(supabase, doc, processor)
         resultadosProcesamiento.push(resultado)
       } catch (error) {
         console.error(`  ✗ Error procesando ${doc.nombre}:`, error.message)
@@ -533,7 +533,7 @@ async function clasificarConIA(
     }
     
     // 3. Extraer texto de las primeras páginas
-    const textoExtraido = await extraerTextoPDF(buffer)
+    const textoExtraido = await extraerTextoPDF(buffer, processor)
     if (!textoExtraido || textoExtraido.length < 100) {
       console.log(`    ⚠️  No se pudo extraer texto suficiente: ${link.nombre}`)
       return null
@@ -575,36 +575,10 @@ Responde SOLO con JSON válido:
   }
 }
 
-async function extraerTextoPDF(buffer: ArrayBuffer): Promise<string> {
+async function extraerTextoPDF(buffer: ArrayBuffer, processor: DocumentProcessor): Promise<string> {
   try {
-    // Implementación simplificada - en producción usarías una librería como pdf-parse
-    const uint8Array = new Uint8Array(buffer)
-    const decoder = new TextDecoder('utf-8', { fatal: false })
-    let texto = decoder.decode(uint8Array)
-    
-    // Limpiar texto extraído
-    texto = texto
-      .replace(/[\x00-\x1F\x7F-\x9F]/g, ' ') // Remover caracteres de control
-      .replace(/\s+/g, ' ') // Normalizar espacios
-      .trim()
-    
-    // Buscar patrones de texto legible
-    const patronesTexto = [
-      /[A-Za-zÀ-ſ]{3,}/g, // Palabras con al menos 3 caracteres
-      /\d{4}/g, // Años
-      /[A-Za-zÀ-ſ\s]{10,}/g // Frases
-    ]
-    
-    let textoLimpio = ''
-    for (const patron of patronesTexto) {
-      const matches = texto.match(patron)
-      if (matches) {
-        textoLimpio += matches.join(' ') + ' '
-      }
-    }
-    
-    return textoLimpio.substring(0, 3000) // Limitar tamaño
-    
+    const texto = await processor.extractTextFromPDF(buffer)
+    return texto.substring(0, 3000) // Limitar tamaño para clasificación
   } catch (error) {
     console.error('Error extrayendo texto PDF:', error)
     return ''
@@ -627,7 +601,8 @@ async function calcularHashRemoto(url: string): Promise<string | null> {
 
 export async function procesarDocumentoNuevo(
   supabase: any,
-  doc: DocumentoDetectado
+  doc: DocumentoDetectado,
+  processor?: DocumentProcessor
 ): Promise<any> {
   
   // Verificación final de duplicados antes de procesar
@@ -652,6 +627,17 @@ export async function procesarDocumentoNuevo(
   const response = await fetch(doc.url)
   const pdfBuffer = await response.arrayBuffer()
   const hash = await calcularHash(pdfBuffer)
+  
+  // 1.5 Extraer texto del PDF
+  console.log('  📄 Extrayendo texto...')
+  const docProcessor = processor || new DocumentProcessor(supabase)
+  let contenidoTexto = ''
+  try {
+    contenidoTexto = await docProcessor.extractTextFromPDF(pdfBuffer)
+    console.log(`  ✓ Texto extraído: ${contenidoTexto.length} caracteres`)
+  } catch (error) {
+    console.warn(`  ⚠️  Error extrayendo texto: ${error.message}`)
+  }
   
   // Verificar duplicado por hash
   const { data: duplicadoHash } = await supabase
@@ -747,6 +733,7 @@ export async function procesarDocumentoNuevo(
       storage_path: fileName,
       tamaño_bytes: pdfBuffer.byteLength,
       hash_contenido: hash,
+      contenido_texto: contenidoTexto,
       version: `${doc.año}.1`,
       formato: 'pdf',
       procesado: false,
