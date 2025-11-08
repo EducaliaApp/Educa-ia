@@ -2,7 +2,6 @@
 
 import os
 import hashlib
-import requests
 from typing import Dict, List, Optional
 import json
 from datetime import datetime

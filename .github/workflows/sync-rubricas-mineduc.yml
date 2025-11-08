@@ -158,7 +158,7 @@ jobs:
       - name: Instalar dependencias
         run: |
           pip install --upgrade pip
-          pip install supabase python-dotenv PyMuPDF openai
+          pip install supabase python-dotenv PyMuPDF openai requests
 
       - name: Procesar documentos PDF
         id: process
