@@ -467,7 +467,7 @@ jobs:
   # ============================================
   # FASE 5: Optimize
   # ============================================
-  
+
   optimize:
     name: "⚡ FASE 5: Optimizar Índices"
     runs-on: ubuntu-latest
@@ -477,27 +477,27 @@ jobs:
       needs.preflight.outputs.can_proceed == 'true' &&
       needs.validate.outputs.validated > 0
     timeout-minutes: 20
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-      
+
       - name: Instalar dependencias
         run: pip install supabase python-dotenv
-      
+
       - name: Optimizar índices HNSW
         run: |
           python scripts/pipeline-document-mineduc/fase5_optimize.py 2>&1 | tee optimize.log
-          
+
           # Extraer métricas
           chunks=$(grep -oP "Chunks indexados: \K[0-9,]+" optimize.log | tr -d ',' || echo "0")
           size=$(grep -oP "Tamaño índice: ~\K[0-9.]+" optimize.log || echo "0")
-          
+
           echo "### ⚡ Fase 5: Optimización" >> $GITHUB_STEP_SUMMARY
           echo "- **Chunks indexados:** $(printf "%'d" $chunks)" >> $GITHUB_STEP_SUMMARY
           echo "- **Tamaño índice:** ~${size} MB" >> $GITHUB_STEP_SUMMARY
@@ -507,7 +507,7 @@ jobs:
   # ============================================
   # FASE 6: Metrics
   # ============================================
-  
+
   metrics:
     name: "📊 FASE 6: Registrar Métricas"
     runs-on: ubuntu-latest
@@ -517,30 +517,30 @@ jobs:
     outputs:
       estado: ${{ steps.record.outputs.estado }}
       total_cost: ${{ steps.costs.outputs.total }}
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-      
+
       - name: Instalar dependencias
         run: pip install supabase python-dotenv
-      
+
       - name: Calcular costos
         id: costs
         run: |
           cost_transform="${{ needs.transform.outputs.cost || '0' }}"
           cost_load="${{ needs.load.outputs.cost || '0' }}"
           total=$(echo "$cost_transform + $cost_load" | bc -l || echo "0")
-          
+
           echo "total=$total" >> $GITHUB_OUTPUT
           echo "transform=$cost_transform" >> $GITHUB_OUTPUT
           echo "load=$cost_load" >> $GITHUB_OUTPUT
-      
+
       - name: Registrar métricas
         id: record
         run: |
@@ -554,11 +554,11 @@ jobs:
             --cost "${{ steps.costs.outputs.total }}" \
             --workflow-id "${{ github.run_id }}" \
             --export-json 2>&1 | tee metrics.log
-          
+
           # Extraer estado
           estado=$(grep -oP "Estado: .+ \K[A-Z]+" metrics.log || echo "DESCONOCIDO")
           echo "estado=$estado" >> $GITHUB_OUTPUT
-      
+
       - name: Upload metrics
         if: always()
         uses: actions/upload-artifact@v4
@@ -566,7 +566,7 @@ jobs:
           name: pipeline-metrics
           path: metrics_report.json
           retention-days: 90
-      
+
       - name: Generar resumen final
         run: |
           echo "## 📊 RESUMEN PIPELINE ETL" >> $GITHUB_STEP_SUMMARY
@@ -581,7 +581,7 @@ jobs:
           echo "| **TOTAL** | **\$${{ steps.costs.outputs.total }} USD** |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Estado:** ${{ steps.record.outputs.estado }}" >> $GITHUB_STEP_SUMMARY
-          
+
           # Advertencia si hay archivos faltantes
           if [ "${{ needs.check_storage.outputs.sin_archivo || 0 }}" -gt 0 ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -592,13 +592,13 @@ jobs:
   # ============================================
   # Notificaciones
   # ============================================
-  
+
   notify:
     name: "📢 Notificación Final"
     runs-on: ubuntu-latest
     needs: [extract, check_storage, transform, load, validate, metrics]
     if: always()
-    
+    timeout-minutes: 10
     steps:
       - name: Determinar estado final
         id: status
@@ -616,10 +616,10 @@ jobs:
             estado="✅ EXITOSO"
             color="good"
           fi
-          
+
           echo "estado=$estado" >> $GITHUB_OUTPUT
           echo "color=$color" >> $GITHUB_OUTPUT
-      
+
       - name: Notificar Slack
         if: always() && github.event.inputs.notify_slack != 'false'
         uses: slackapi/slack-github-action@v1
