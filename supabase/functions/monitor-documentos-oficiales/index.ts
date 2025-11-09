@@ -1,10 +1,31 @@
 // supabase/functions/monitor-documentos-oficiales/index.ts
 
-// @ts-nocheck
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { DocumentProcessor } from '../shared/document-processor.ts'
 import { AIAnalyzer } from '../shared/ai-analyzer.ts'
 import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.ts'
+import { PDFExtractor, type PDFMetadata } from '../shared/pdf-extractor.ts'
+
+// ============================================
+// CONFIGURACIÓN
+// ============================================
+
+const CONFIG = {
+  // Rate limiting
+  DELAY_BETWEEN_CATEGORIES: 2000, // 2s entre categorías
+  DELAY_BETWEEN_DOCUMENTS: 500,   // 500ms entre docs
+  MAX_RETRIES: 3,
+  
+  // Procesamiento
+  MAX_CONCURRENT_DOWNLOADS: 3,
+  PDF_SAMPLE_PAGES: 3, // Primeras 3 páginas para clasificación IA
+  
+  // Thresholds
+  MIN_AI_CONFIDENCE: 0.70, // Confianza mínima para clasificación IA
+  MIN_PDF_SIZE: 10 * 1024, // 10KB mínimo
+  MAX_PDF_SIZE: 100 * 1024 * 1024, // 100MB máximo
+  PDF_SAMPLE_SIZE: 500000, // 500KB para muestra de clasificación
+}
 
 // URLs oficiales del MINEDUC con subcategorías
 const URLS_OFICIALES = {
@@ -37,229 +58,131 @@ const URLS_OFICIALES = {
 
 export const PROCESAR_DOCUMENTO_FUNCTION = 'procesar-documentos'
 
+// ============================================
+// TIPOS E INTERFACES
+// ============================================
+
 interface DocumentoDetectado {
   nombre: string
   url: string
   tipo: string
-  subcategoria?: string
+  subcategoria: string
   año: number
   nivel_educativo: string
   modalidad: string
   asignatura?: string
   hash?: string
+  confianza_clasificacion?: number
+}
+
+interface ClasificacionMetadata {
+  año: number
+  nivel: string
+  modalidad: string
+  asignatura?: string
+  confianza: number
+}
+
+interface DocumentoActualizado extends DocumentoDetectado {
+  id_existente: string
+  version_anterior: string
+  hash_nuevo: string
+  cambios_detectados?: any
+}
+
+interface AnalisisDocumentos {
+  nuevos: DocumentoDetectado[]
+  actualizados: DocumentoActualizado[]
+  duplicados: DocumentoDetectado[]
+  invalidos: Array<{ doc: DocumentoDetectado; error: string }>
+}
+
+interface ResultadoProcesamiento {
+  documento: string
+  exito: boolean
+  documento_id?: string
+  duplicado?: boolean
+  error?: string
+}
+
+interface Reporte {
+  fecha_monitoreo: string
+  documentos_detectados: number
+  documentos_nuevos: number
+  documentos_actualizados: number
+  documentos_duplicados: number
+  documentos_invalidos: number
+  procesamiento_exitoso: number
+  procesamiento_fallido: number
+  tiempo_total_ms: number
+  detalles: ResultadoProcesamiento[]
 }
 
 export async function handler(req: Request): Promise<Response> {
+  const startTime = Date.now()
+  
   try {
-    console.log('🔍 Iniciando Extraccion de documentos oficiales...')
-
+    console.log('🔍 Iniciando monitoreo documentos MINEDUC...')
+    
     const supabase = crearClienteServicio(req)
     const processor = new DocumentProcessor(supabase)
     const aiAnalyzer = new AIAnalyzer()
-    const documentosDetectados: DocumentoDetectado[] = []
-
-    // 1. Scrapear sitio oficial DocenteMás
-    console.log('📡 Consultando sitio DocenteMás...')
+    const pdfExtractor = new PDFExtractor()
     
-    for (const [tipo, config] of Object.entries(URLS_OFICIALES)) {
-      await processor.processWithRetry(async () => {
-        const response = await fetch(config.url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; ProfeFlow-Bot/1.0)'
-          }
-        })
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-        }
-        
-        const html = await response.text()
-        
-        // Extraer PDFs por subcategoría
-        const pdfsPorSubcategoria = extraerPDFsPorSubcategoria(html, config.subcategorias)
-        
-        console.log(`  📂 ${tipo}: ${Object.keys(pdfsPorSubcategoria).length} subcategorías`)
-        
-        for (const [subcategoria, pdfLinks] of Object.entries(pdfsPorSubcategoria)) {
-          console.log(`    📁 ${subcategoria}: ${pdfLinks.length} documentos`)
-          
-          for (const link of pdfLinks) {
-          let metadata = parsearNombreArchivo(link.nombre, tipo, html)
-          
-          // Si parsing básico falla, intentar clasificación con IA
-          if (!metadata) {
-            console.log(`  🤖 Intentando clasificación con IA para ${link.nombre}...`)
-            metadata = await clasificarConIA(link, aiAnalyzer, processor)
-            
-            // Si IA también falla, usar valores por defecto
-            if (!metadata) {
-              metadata = {
-                año: 2025,
-                nivel: inferirNivelPorTipo(tipo),
-                modalidad: 'regular'
-              }
-              console.log(`  ℹ️  Usando valores por defecto para ${link.nombre} (tipo: ${tipo})`)
-            }
-          }
-          
-          if (metadata && metadata.año >= 2024) {
-            documentosDetectados.push({
-              nombre: link.nombre,
-              url: link.url,
-              tipo,
-              subcategoria,
-              año: metadata.año,
-              nivel_educativo: metadata.nivel,
-              modalidad: metadata.modalidad,
-              asignatura: metadata.asignatura
-            })
-          }
-        }
-      }
-        
-        const totalPDFs = Object.values(pdfsPorSubcategoria).reduce((sum, pdfs) => sum + pdfs.length, 0)
-        console.log(`  ✓ Total ${tipo}: ${totalPDFs} documentos`)
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-      }, `Scraping ${tipo}`).catch(error => {
-        console.error(`  ✗ Error en ${tipo}:`, error.message)
-      })
-    }
+    // Validar request
+    const { force = false } = await req.json().catch(() => ({ force: false }))
     
-    console.log(`📋 Total detectados: ${documentosDetectados.length} documentos`)
+    // 1. SCRAPING con rate limiting
+    const documentosDetectados = await scrapearDocumentos(processor, aiAnalyzer, pdfExtractor)
     
-    // 2. Comparar con base de datos (verificación mejorada de duplicados)
-    const documentosNuevos = []
-    const documentosActualizados = []
-    const documentosDuplicados = []
+    console.log(`\n📋 Total detectados: ${documentosDetectados.length} documentos`)
     
-    for (const doc of documentosDetectados) {
-      // Verificar duplicados por múltiples criterios
-      const { data: existentes } = await supabase
-        .from('documentos_oficiales')
-        .select('id, hash_contenido, version, url_original, titulo')
-        .or(`url_original.eq.${doc.url},and(titulo.eq.${doc.nombre},año_vigencia.eq.${doc.año})`)
-      
-      if (!existentes || existentes.length === 0) {
-        // Documento completamente nuevo
-        documentosNuevos.push(doc)
-        console.log(`  🆕 Nuevo: ${doc.nombre}`)
-      } else if (existentes.length === 1) {
-        const existente = existentes[0]
-        
-        // Verificar si es el mismo documento (misma URL)
-        if (existente.url_original === doc.url) {
-          // Calcular hash para ver si cambió el contenido
-          const hashNuevo = await calcularHashRemoto(doc.url)
-          
-          if (hashNuevo && hashNuevo !== existente.hash_contenido) {
-          // Análisis inteligente de cambios
-          try {
-            const { data: docAnterior } = await supabase
-              .from('documentos_oficiales')
-              .select('contenido_texto')
-              .eq('id', existente.id)
-              .single()
-            
-            if (docAnterior?.contenido_texto) {
-              const response = await fetch(doc.url)
-              const buffer = await response.arrayBuffer()
-              // Extraer texto nuevo (simplificado para el ejemplo)
-              const textoNuevo = new TextDecoder().decode(buffer).substring(0, 5000)
-              
-              const cambios = await aiAnalyzer.detectarCambios(
-                docAnterior.contenido_texto.substring(0, 5000),
-                textoNuevo
-              )
-              
-              documentosActualizados.push({
-                ...doc,
-                id_existente: existente.id,
-                version_anterior: existente.version,
-                hash_nuevo: hashNuevo,
-                cambios_detectados: cambios
-              })
-            }
-          } catch (error) {
-            console.warn(`Error analizando cambios en ${doc.nombre}:`, error.message)
-            documentosActualizados.push({
-              ...doc,
-              id_existente: existente.id,
-              version_anterior: existente.version,
-              hash_nuevo: hashNuevo
-            })
-          }
-          
-            console.log(`  🔄 Actualizado: ${doc.nombre}`)
-          } else {
-            // Mismo documento, mismo contenido (duplicado)
-            documentosDuplicados.push(doc)
-            console.log(`  ⏭️  Ya existe: ${doc.nombre}`)
-          }
-        } else {
-          // Mismo título/año pero URL diferente (posible duplicado)
-          console.log(`  ⚠️  Posible duplicado: ${doc.nombre} (URL diferente)`)
-          documentosDuplicados.push(doc)
-        }
-      } else {
-        // Múltiples coincidencias (duplicados en BD)
-        console.log(`  ⚠️  Múltiples coincidencias para: ${doc.nombre} (${existentes.length} registros)`)
-        documentosDuplicados.push(doc)
-      }
-    }
+    // 2. COMPARACIÓN con BD (detección de duplicados mejorada)
+    const analisisDocumentos = await analizarDocumentos(
+      supabase, 
+      documentosDetectados,
+      pdfExtractor,
+      aiAnalyzer
+    )
     
-    // 3. Procesar nuevos documentos
-    const resultadosProcesamiento = []
+    console.log(`\n📊 Análisis completado:`)
+    console.log(`  🆕 Nuevos: ${analisisDocumentos.nuevos.length}`)
+    console.log(`  🔄 Actualizados: ${analisisDocumentos.actualizados.length}`)
+    console.log(`  ⏭️  Duplicados: ${analisisDocumentos.duplicados.length}`)
+    console.log(`  ❌ Inválidos: ${analisisDocumentos.invalidos.length}`)
     
-    for (const doc of documentosNuevos) {
-      console.log(`\n📥 Procesando nuevo documento: ${doc.nombre}`)
-      
-      try {
-        const resultado = await procesarDocumentoNuevo(supabase, doc, processor)
-        resultadosProcesamiento.push(resultado)
-      } catch (error) {
-        console.error(`  ✗ Error procesando ${doc.nombre}:`, error.message)
-        resultadosProcesamiento.push({
-          documento: doc.nombre,
-          exito: false,
-          error: error.message
-        })
-      }
-    }
+    // 3. PROCESAMIENTO de nuevos documentos
+    const resultadosProcesamiento = await procesarDocumentosNuevos(
+      supabase,
+      analisisDocumentos.nuevos,
+      processor
+    )
     
-    // 4. Procesar documentos actualizados
-    for (const doc of documentosActualizados) {
-      console.log(`\n🔄 Procesando actualización: ${doc.nombre}`)
-      
-      try {
-        await procesarActualizacionDocumento(supabase, doc)
-      } catch (error) {
-        console.error(`  ✗ Error procesando actualización:`, error.message)
-      }
-    }
+    // 4. ACTUALIZACIÓN de documentos modificados
+    await procesarActualizaciones(
+      supabase,
+      analisisDocumentos.actualizados
+    )
     
-    // 5. Enviar reporte
-    const reporte = {
-      fecha_monitoreo: new Date().toISOString(),
-      documentos_detectados: documentosDetectados.length,
-      documentos_nuevos: documentosNuevos.length,
-      documentos_actualizados: documentosActualizados.length,
-      documentos_duplicados: documentosDuplicados.length,
-      procesamiento_exitoso: resultadosProcesamiento.filter(r => r.exito).length,
-      procesamiento_fallido: resultadosProcesamiento.filter(r => !r.exito).length,
-      detalles: resultadosProcesamiento
-    }
+    // 5. REPORTE final
+    const reporte = generarReporte(
+      documentosDetectados,
+      analisisDocumentos,
+      resultadosProcesamiento,
+      Date.now() - startTime
+    )
     
     console.log('\n✅ Monitoreo completado')
-    console.log(`  📊 Nuevos: ${documentosNuevos.length}`)
-    console.log(`  🔄 Actualizados: ${documentosActualizados.length}`)
-    console.log(`  ⏭️  Duplicados (saltados): ${documentosDuplicados.length}`)
+    console.log(`  ⏱️  Tiempo total: ${((reporte.tiempo_total_ms) / 1000).toFixed(2)}s`)
+    console.log(`  📊 Nuevos: ${analisisDocumentos.nuevos.length}`)
+    console.log(`  🔄 Actualizados: ${analisisDocumentos.actualizados.length}`)
+    console.log(`  ⏭️  Duplicados: ${analisisDocumentos.duplicados.length}`)
     
-    // 6. Notificar a administradores si hay cambios
-    if (documentosNuevos.length > 0 || documentosActualizados.length > 0) {
+    // 6. NOTIFICACIONES si hay cambios
+    if (analisisDocumentos.nuevos.length > 0 || analisisDocumentos.actualizados.length > 0) {
       await notificarAdministradores(supabase, reporte)
     }
-
+    
     return new Response(
       JSON.stringify({
         success: true,
@@ -270,7 +193,7 @@ export async function handler(req: Request): Promise<Response> {
         headers: { 'Content-Type': 'application/json' }
       }
     )
-
+    
   } catch (error) {
     if (error instanceof UnauthorizedError) {
       return new Response(
@@ -283,11 +206,13 @@ export async function handler(req: Request): Promise<Response> {
     }
 
     console.error('❌ Error en monitoreo:', error)
+    
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
 
     return new Response(
       JSON.stringify({
         error: 'Error en monitoreo de documentos',
-        details: error.message
+        details: errorMessage
       }),
       {
         status: 500,
@@ -299,6 +224,267 @@ export async function handler(req: Request): Promise<Response> {
 
 if (import.meta.main) {
   serve(handler)
+}
+
+// ============================================
+// FUNCIONES PRINCIPALES
+// ============================================
+
+/**
+ * Scrapea documentos del sitio DocenteMás con rate limiting
+ */
+async function scrapearDocumentos(
+  processor: DocumentProcessor,
+  aiAnalyzer: AIAnalyzer,
+  pdfExtractor: PDFExtractor
+): Promise<DocumentoDetectado[]> {
+  
+  const documentosDetectados: DocumentoDetectado[] = []
+  
+  for (const [tipo, config] of Object.entries(URLS_OFICIALES)) {
+    console.log(`\n📡 Procesando categoría: ${tipo}`)
+    
+    try {
+      const response = await fetch(config.url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; ProfeFlow-Bot/1.0; +https://profeflow.cl)',
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'es-CL,es;q=0.9'
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      
+      const html = await response.text()
+      
+      // Extraer PDFs por subcategoría
+      const pdfsPorSubcategoria = extraerPDFsPorSubcategoria(html, config.subcategorias)
+      
+      // Procesar cada PDF
+      for (const [subcategoria, pdfLinks] of Object.entries(pdfsPorSubcategoria)) {
+        console.log(`  📁 ${subcategoria}: ${pdfLinks.length} documentos`)
+        
+        for (const link of pdfLinks) {
+          // Validación básica
+          if (!link.url || !link.nombre) {
+            console.log(`    ⚠️  Link inválido, saltando...`)
+            continue
+          }
+          
+          // 1. Intentar parsing básico del nombre
+          let metadata = parsearNombreArchivo(link.nombre, tipo, html)
+          
+          // 2. Si falla, usar IA con contexto mejorado
+          if (!metadata || (metadata as any).confianza < 0.7) {
+            console.log(`    🤖 Clasificación IA para: ${link.nombre}`)
+            const metadataIA = await clasificarConIAMejorada(
+              link,
+              tipo,
+              subcategoria,
+              aiAnalyzer,
+              pdfExtractor
+            )
+            
+            if (metadataIA) {
+              metadata = {
+                año: metadataIA.año,
+                nivel: metadataIA.nivel,
+                modalidad: metadataIA.modalidad,
+                asignatura: metadataIA.asignatura
+              }
+            }
+          }
+          
+          // 3. Si todo falla, usar defaults inteligentes
+          if (!metadata) {
+            metadata = {
+              año: 2025,
+              nivel: inferirNivelPorTipo(tipo),
+              modalidad: 'regular'
+            }
+            console.log(`    ℹ️  Usando defaults (baja confianza)`)
+          }
+          
+          // Solo agregar si tiene año reciente y metadata válida
+          if (metadata && metadata.año >= 2024) {
+            documentosDetectados.push({
+              nombre: link.nombre,
+              url: link.url,
+              tipo,
+              subcategoria,
+              año: metadata.año,
+              nivel_educativo: metadata.nivel,
+              modalidad: metadata.modalidad,
+              asignatura: metadata.asignatura,
+              confianza_clasificacion: 0.5 // Default si no es de IA
+            })
+          } else if (metadata) {
+            console.log(`    ⏭️  Documento antiguo (${metadata.año}), saltando`)
+          }
+          
+          // Rate limiting entre documentos
+          await new Promise(r => setTimeout(r, CONFIG.DELAY_BETWEEN_DOCUMENTS))
+        }
+      }
+      
+      // Rate limiting entre categorías
+      await new Promise(r => setTimeout(r, CONFIG.DELAY_BETWEEN_CATEGORIES))
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      console.error(`  ❌ Error en ${tipo}:`, errorMessage)
+    }
+  }
+  
+  return documentosDetectados
+}
+
+/**
+ * Analiza documentos detectados vs base de datos
+ */
+async function analizarDocumentos(
+  supabase: any,
+  documentosDetectados: DocumentoDetectado[],
+  pdfExtractor: PDFExtractor,
+  aiAnalyzer: AIAnalyzer
+): Promise<AnalisisDocumentos> {
+  
+  const resultado: AnalisisDocumentos = {
+    nuevos: [],
+    actualizados: [],
+    duplicados: [],
+    invalidos: []
+  }
+  
+  for (const doc of documentosDetectados) {
+    try {
+      // Buscar por múltiples criterios
+      const { data: existentes } = await supabase
+        .from('documentos_oficiales')
+        .select('id, hash_contenido, version, url_original, titulo, storage_path')
+        .or(`url_original.eq.${doc.url},and(titulo.ilike.%${doc.nombre}%,año_vigencia.eq.${doc.año})`)
+      
+      if (!existentes || existentes.length === 0) {
+        // ✅ NUEVO
+        resultado.nuevos.push(doc)
+        console.log(`  🆕 ${doc.nombre}`)
+        
+      } else if (existentes.length === 1) {
+        const existente = existentes[0]
+        
+        if (existente.url_original === doc.url) {
+          // Mismo URL - verificar si cambió contenido
+          const hashNuevo = await calcularHashRemoto(doc.url)
+          
+          if (hashNuevo && hashNuevo !== existente.hash_contenido) {
+            // ✅ ACTUALIZADO
+            resultado.actualizados.push({
+              ...doc,
+              id_existente: existente.id,
+              version_anterior: existente.version,
+              hash_nuevo: hashNuevo
+            })
+            console.log(`  🔄 ${doc.nombre} (hash cambió)`)
+          } else {
+            // ⏭️ DUPLICADO (mismo contenido)
+            resultado.duplicados.push(doc)
+          }
+        } else {
+          // Mismo título/año pero URL diferente
+          console.log(`  ⚠️  URL diferente para: ${doc.nombre}`)
+          resultado.duplicados.push(doc)
+        }
+        
+      } else {
+        // Múltiples coincidencias
+        console.log(`  ⚠️  ${existentes.length} coincidencias para: ${doc.nombre}`)
+        resultado.duplicados.push(doc)
+      }
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      console.error(`  ❌ Error analizando ${doc.nombre}:`, errorMessage)
+      resultado.invalidos.push({ doc, error: errorMessage })
+    }
+  }
+  
+  return resultado
+}
+
+/**
+ * Procesa documentos nuevos
+ */
+async function procesarDocumentosNuevos(
+  supabase: any,
+  documentosNuevos: DocumentoDetectado[],
+  processor: DocumentProcessor
+): Promise<ResultadoProcesamiento[]> {
+  
+  const resultados: ResultadoProcesamiento[] = []
+  
+  for (const doc of documentosNuevos) {
+    console.log(`\n📥 Procesando nuevo documento: ${doc.nombre}`)
+    
+    try {
+      const resultado = await procesarDocumentoNuevo(supabase, doc, processor)
+      resultados.push(resultado)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      console.error(`  ✗ Error procesando ${doc.nombre}:`, errorMessage)
+      resultados.push({
+        documento: doc.nombre,
+        exito: false,
+        error: errorMessage
+      })
+    }
+  }
+  
+  return resultados
+}
+
+/**
+ * Procesa actualizaciones de documentos
+ */
+async function procesarActualizaciones(
+  supabase: any,
+  documentosActualizados: DocumentoActualizado[]
+): Promise<void> {
+  
+  for (const doc of documentosActualizados) {
+    console.log(`\n🔄 Procesando actualización: ${doc.nombre}`)
+    
+    try {
+      await procesarActualizacionDocumento(supabase, doc)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      console.error(`  ✗ Error procesando actualización:`, errorMessage)
+    }
+  }
+}
+
+/**
+ * Genera reporte final
+ */
+function generarReporte(
+  documentosDetectados: DocumentoDetectado[],
+  analisis: AnalisisDocumentos,
+  resultados: ResultadoProcesamiento[],
+  tiempoMs: number
+): Reporte {
+  return {
+    fecha_monitoreo: new Date().toISOString(),
+    documentos_detectados: documentosDetectados.length,
+    documentos_nuevos: analisis.nuevos.length,
+    documentos_actualizados: analisis.actualizados.length,
+    documentos_duplicados: analisis.duplicados.length,
+    documentos_invalidos: analisis.invalidos.length,
+    procesamiento_exitoso: resultados.filter(r => r.exito).length,
+    procesamiento_fallido: resultados.filter(r => !r.exito).length,
+    tiempo_total_ms: tiempoMs,
+    detalles: resultados
+  }
 }
 
 // ============================================
@@ -501,6 +687,243 @@ function parsearNombreArchivo(nombre: string, tipo?: string, html?: string): {
   return { año, nivel, modalidad, asignatura }
 }
 
+/**
+ * Clasificación IA MEJORADA - con contenido real del PDF
+ */
+async function clasificarConIAMejorada(
+  link: { nombre: string; url: string },
+  tipo: string,
+  subcategoria: string,
+  aiAnalyzer: AIAnalyzer,
+  pdfExtractor: PDFExtractor
+): Promise<ClasificacionMetadata | null> {
+  
+  try {
+    // 1. Validar que es PDF y obtener metadata
+    const headResponse = await fetch(link.url, { 
+      method: 'HEAD',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; ProfeFlow-Bot/1.0)'
+      }
+    })
+    
+    if (!headResponse.ok) {
+      console.log(`      ⚠️  No accesible (HTTP ${headResponse.status})`)
+      return null
+    }
+    
+    const contentType = headResponse.headers.get('content-type')
+    const contentLength = parseInt(headResponse.headers.get('content-length') || '0')
+    
+    if (!contentType?.includes('pdf')) {
+      console.log(`      ⚠️  No es PDF (${contentType})`)
+      return null
+    }
+    
+    if (contentLength < CONFIG.MIN_PDF_SIZE || contentLength > CONFIG.MAX_PDF_SIZE) {
+      console.log(`      ⚠️  Tamaño inválido (${(contentLength / 1024).toFixed(2)} KB)`)
+      return null
+    }
+    
+    // 2. Descargar y extraer texto de primeras páginas
+    console.log(`      📥 Descargando muestra (${(contentLength / 1024).toFixed(2)} KB)...`)
+    
+    const response = await fetch(link.url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; ProfeFlow-Bot/1.0)',
+        'Range': `bytes=0-${Math.min(contentLength, CONFIG.PDF_SAMPLE_SIZE)}`
+      }
+    })
+    
+    const pdfBuffer = await response.arrayBuffer()
+    
+    // Extraer texto de primeras páginas
+    const textoMuestra = await pdfExtractor.extractFirstPages(
+      pdfBuffer,
+      CONFIG.PDF_SAMPLE_PAGES
+    )
+    
+    if (!textoMuestra || textoMuestra.length < 100) {
+      console.log(`      ⚠️  No se pudo extraer texto suficiente`)
+      return null
+    }
+    
+    console.log(`      ✓ Texto extraído: ${textoMuestra.length} chars`)
+    
+    // 3. Clasificar con IA usando contenido real
+    const prompt = `Clasifica este documento educativo chileno del MINEDUC.
+
+**CONTEXTO:**
+- Categoría: ${tipo}
+- Subcategoría: ${subcategoria}
+- Nombre archivo: ${link.nombre}
+
+**CONTENIDO (primeras páginas):**
+${textoMuestra.substring(0, 2000)}
+
+**INSTRUCCIONES:**
+Analiza el contenido y clasifica el documento. Responde SOLO con JSON válido (sin markdown):
+
+{
+  "año": 2024 o 2025,
+  "nivel_educativo": "parvularia|basica_1_6|basica_7_8_media|media_tp|especial_regular|especial_neep|hospitalaria|encierro|lengua_indigena|epja|regular",
+  "modalidad": "regular|especial|hospitalaria|encierro|lengua_indigena",
+  "asignatura": "Matemática|Lenguaje|Historia|etc o null",
+  "confianza": 0.0 a 1.0,
+  "razonamiento": "breve explicación"
+}`
+    
+    const resultadoIA = await aiAnalyzer.clasificarDocumento(prompt)
+    
+    // 4. Validar respuesta de IA
+    const clasificacion = validarRespuestaIA(resultadoIA)
+    
+    if (!clasificacion) {
+      console.log(`      ⚠️  Respuesta IA inválida`)
+      return null
+    }
+    
+    if (clasificacion.confianza < CONFIG.MIN_AI_CONFIDENCE) {
+      console.log(`      ⚠️  Confianza baja (${clasificacion.confianza})`)
+      return null
+    }
+    
+    console.log(`      ✅ Clasificado: ${clasificacion.nivel_educativo} (${clasificacion.confianza})`)
+    
+    return {
+      año: clasificacion.año,
+      nivel: clasificacion.nivel_educativo,
+      modalidad: clasificacion.modalidad,
+      asignatura: clasificacion.asignatura,
+      confianza: clasificacion.confianza
+    }
+    
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+    console.log(`      ❌ Error clasificación IA: ${errorMessage}`)
+    return null
+  }
+}
+
+/**
+ * Valida respuesta de IA y extrae JSON
+ */
+function validarRespuestaIA(resultado: any): any | null {
+  try {
+    // Si es string, intentar parsear JSON
+    let data = resultado
+    if (typeof resultado === 'string') {
+      // Limpiar markdown si está presente
+      const jsonMatch = resultado.match(/```json\n?([\s\S]*?)\n?```/) || 
+                       resultado.match(/\{[\s\S]*\}/)
+      
+      if (jsonMatch) {
+        data = JSON.parse(jsonMatch[1] || jsonMatch[0])
+      } else {
+        return null
+      }
+    }
+    
+    // Validar campos requeridos
+    if (!data.año || !data.nivel_educativo || !data.confianza) {
+      return null
+    }
+    
+    // Validar rangos
+    if (data.año < 2020 || data.año > 2026) {
+      return null
+    }
+    
+    if (data.confianza < 0 || data.confianza > 1) {
+      return null
+    }
+    
+    // Validar valores de nivel educativo
+    const nivelesValidos = [
+      'parvularia', 'basica_1_6', 'basica_7_8_media', 'media_tp',
+      'especial_regular', 'especial_neep', 'hospitalaria', 'encierro',
+      'lengua_indigena', 'epja', 'regular'
+    ]
+    
+    if (!nivelesValidos.includes(data.nivel_educativo)) {
+      return null
+    }
+    
+    return data
+    
+  } catch (error) {
+    console.error('Error validando respuesta IA:', error)
+    return null
+  }
+}
+
+function parsearNombreArchivo_OLD(nombre: string, tipo?: string, html?: string): {
+  año: number
+  nivel: string
+  modalidad: string
+  asignatura?: string
+} | null {
+  
+  const nombreLower = nombre.toLowerCase()
+  
+  // Detectar año con múltiples patrones
+  const añoMatch = nombre.match(/202[0-9]/) || nombre.match(/\b(2024|2025|2026)\b/)
+  const año = añoMatch ? parseInt(añoMatch[0]) : 2025 // Default a 2025 si no se encuentra
+  
+  // Patrones mejorados para nivel educativo
+  let nivel = 'regular'
+  const patronesNivel = {
+    'parvularia': /parvularia|párvulo|pre\s*escolar/,
+    'basica_1_6': /1°?\s*a\s*6°?|básica.*1.*6|primero.*sexto/,
+    'basica_7_8_media': /7°?.*8°?|séptimo.*octavo|media|secundaria/,
+    'media_tp': /técnico\s*profesional|tp|medio.*técnico/,
+    'especial_regular': /especial.*regular|integración/,
+    'especial_neep': /especial.*neep|escuela.*especial/,
+    'hospitalaria': /hospitalaria|hospital/,
+    'encierro': /encierro|cárcel|penitenciar/,
+    'lengua_indigena': /lengua.*indígena|mapuche|quechua|aymara/,
+    'epja': /adultos|jóvenes.*adultas|epja/
+  }
+  
+  for (const [key, patron] of Object.entries(patronesNivel)) {
+    if (patron.test(nombreLower)) {
+      nivel = key
+      break
+    }
+  }
+  
+  // Detectar modalidad
+  let modalidad = 'regular'
+  if (/especial/.test(nombreLower)) modalidad = 'especial'
+  if (/hospitalaria/.test(nombreLower)) modalidad = 'hospitalaria'
+  if (/encierro/.test(nombreLower)) modalidad = 'encierro'
+  if (/lengua.*indígena/.test(nombreLower)) modalidad = 'lengua_indigena'
+  
+  // Detectar asignatura
+  let asignatura: string | undefined
+  const patronesAsignatura = {
+    'Matemática': /matemática|matemáticas/i,
+    'Lenguaje y Comunicación': /lenguaje|comunicación|lengua castellana/i,
+    'Ciencias Naturales': /ciencias naturales|biología|física|química/i,
+    'Historia y Geografía': /historia|geografía|ciencias sociales/i,
+    'Inglés': /inglés|english/i,
+    'Artes Visuales': /artes visuales|artes plásticas/i,
+    'Música': /música/i,
+    'Educación Física': /educación física|ed\. física/i,
+    'Tecnología': /tecnología/i,
+    'Religión': /religión|católica|evangélica/i
+  }
+  
+  for (const [asig, patron] of Object.entries(patronesAsignatura)) {
+    if (patron.test(nombreLower)) {
+      asignatura = asig
+      break
+    }
+  }
+  
+  return { año, nivel, modalidad, asignatura }
+}
+
 function inferirNivelPorTipo(tipo: string): string {
   // Inferir nivel educativo basado en el tipo de documento
   const mapeoNivel: Record<string, string> = {
@@ -512,59 +935,6 @@ function inferirNivelPorTipo(tipo: string): string {
     'documentosLegales': 'regular'
   }
   return mapeoNivel[tipo] || 'regular'
-}
-
-async function clasificarConIA(
-  link: { nombre: string; url: string },
-  aiAnalyzer: any,
-  processor: any
-): Promise<{ año: number; nivel: string; modalidad: string } | null> {
-  try {
-    // Clasificación simplificada basada solo en metadata
-    // La extracción de texto PDF se hace en el pipeline Python
-    
-    // 1. Validar que es un PDF
-    const response = await fetch(link.url, { method: 'HEAD' })
-    if (!response.ok) return null
-    
-    const contentType = response.headers.get('content-type')
-    if (!contentType?.includes('pdf')) {
-      console.log(`    ⚠️  Archivo no es PDF: ${link.nombre}`)
-      return null
-    }
-    
-    // 2. Clasificar basado en nombre y URL solamente
-    const prompt = `Analiza este documento educativo chileno basándote SOLO en el nombre del archivo:
-
-Nombre del archivo: ${link.nombre}
-URL: ${link.url}
-
-Responde SOLO con JSON válido:
-{
-  "año": 2025,
-  "nivel_educativo": "basica_1_6|basica_7_8_media|media_tp|parvularia|especial_regular|especial_neep|hospitalaria|encierro|lengua_indigena|epja|regular",
-  "modalidad": "regular|especial|hospitalaria|encierro|lengua_indigena",
-  "confianza": 0.8
-}`
-    
-    // 3. Llamar a la IA
-    const clasificacion = await aiAnalyzer.clasificarDocumento(prompt)
-    
-    if (clasificacion && clasificacion.confianza > 0.6) {
-      console.log(`    ✅ Clasificado con IA: ${link.nombre} (confianza: ${clasificacion.confianza})`)
-      return {
-        año: clasificacion.año || 2025,
-        nivel: clasificacion.nivel_educativo || 'regular',
-        modalidad: clasificacion.modalidad || 'regular'
-      }
-    }
-    
-    return null
-    
-  } catch (error) {
-    console.log(`    ⚠️  Error en clasificación IA para ${link.nombre}: ${error.message}`)
-    return null
-  }
 }
 
 async function calcularHashRemoto(url: string): Promise<string | null> {
@@ -688,7 +1058,8 @@ export async function procesarDocumentoNuevo(
     }
   } catch (error) {
     console.error('Error con fuente:', error)
-    throw new Error(`No se pudo obtener fuente_id: ${error.message}`)
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+    throw new Error(`No se pudo obtener fuente_id: ${errorMessage}`)
   }
   
   if (!fuenteId) {
@@ -864,6 +1235,7 @@ async function crearBucketSiNoExiste(supabase: any): Promise<void> {
       }
     }
   } catch (error) {
-    console.warn('  ⚠️  Error verificando bucket:', error.message)
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+    console.warn('  ⚠️  Error verificando bucket:', errorMessage)
   }
 }
