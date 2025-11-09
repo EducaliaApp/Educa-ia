@@ -31,10 +31,12 @@ on:
 env:
   PYTHON_VERSION: '3.11'
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }} # CUENTA GEMINI FREE
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # SIN CREDITOS DISPONIBLES
   SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
   SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+  SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+  COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }} # CUENTA COHERE TRIAL.
   AI_EXTRACTION_ENABLED: 'true'
 
 permissions:
@@ -206,14 +208,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-      
+
       - name: Instalar dependencias
-        run: pip install supabase python-dotenv
+        run: pip install supabase python-dotenv jq requests
       - name: Ejecutar Verificar y sincronizar Storage
         id: check
         run: |
           python scripts/pipeline-document-mineduc/fase1.5_verify_storage.py 2>&1 | tee verify.log
-          
           # Extraer métricas del JSON
           if [ -f verify_storage_metrics.json ]; then
             validados=$(jq -r '.validados // 0' verify_storage_metrics.json)
@@ -225,19 +226,21 @@ jobs:
             resincronizados=$(grep -oP "Re-sincronizados: \K[0-9]+" verify.log || echo "0")
             errores=$(grep -oP "Errores: \K[0-9]+" verify.log || echo "0")
           fi
-          
+
           echo "validados=$validados" >> $GITHUB_OUTPUT
           echo "resincronizados=$resincronizados" >> $GITHUB_OUTPUT
           echo "errores=$errores" >> $GITHUB_OUTPUT
-          
+
           echo "### 📦 Fase 1.5: Verify Storage" >> $GITHUB_STEP_SUMMARY
           echo "- **Validados:** $validados" >> $GITHUB_STEP_SUMMARY
           echo "- **Re-sincronizados:** $resincronizados" >> $GITHUB_STEP_SUMMARY
           echo "- **Errores:** $errores" >> $GITHUB_STEP_SUMMARY
+
+          # Fallback a grep
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
       - name: Upload verify report
         if: always()
         uses: actions/upload-artifact@v4
