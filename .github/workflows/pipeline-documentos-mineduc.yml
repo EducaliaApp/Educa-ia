@@ -547,13 +547,29 @@ jobs:
       - name: Registrar métricas
         id: record
         run: |
+          # Sanitizar valores null
+          downloaded="${{ needs.extract.outputs.nuevos }}"
+          transformed="${{ needs.transform.outputs.transformed }}"
+          loaded="${{ needs.load.outputs.loaded }}"
+          validated="${{ needs.validate.outputs.validated }}"
+          quality="${{ needs.validate.outputs.quality }}"
+          tokens="${{ needs.load.outputs.tokens }}"
+          
+          # Convertir null/vacío a 0
+          [ "$downloaded" == "null" ] || [ -z "$downloaded" ] && downloaded="0"
+          [ "$transformed" == "null" ] || [ -z "$transformed" ] && transformed="0"
+          [ "$loaded" == "null" ] || [ -z "$loaded" ] && loaded="0"
+          [ "$validated" == "null" ] || [ -z "$validated" ] && validated="0"
+          [ "$quality" == "null" ] || [ -z "$quality" ] && quality="0"
+          [ "$tokens" == "null" ] || [ -z "$tokens" ] && tokens="0"
+          
           python scripts/pipeline-document-mineduc/fase6_metrics.py \
-            --downloaded "${{ needs.extract.outputs.nuevos || '0' }}" \
-            --transformed "${{ needs.transform.outputs.transformed || '0' }}" \
-            --loaded "${{ needs.load.outputs.loaded || '0' }}" \
-            --validated "${{ needs.validate.outputs.validated || '0' }}" \
-            --quality "${{ needs.validate.outputs.quality || '0' }}" \
-            --tokens "${{ needs.load.outputs.tokens || '0' }}" \
+            --downloaded "$downloaded" \
+            --transformed "$transformed" \
+            --loaded "$loaded" \
+            --validated "$validated" \
+            --quality "$quality" \
+            --tokens "$tokens" \
             --cost "${{ steps.costs.outputs.total }}" \
             --workflow-id "${{ github.run_id }}" \
             --export-json 2>&1 | tee metrics.log
