@@ -209,80 +209,45 @@ jobs:
       
       - name: Instalar dependencias
         run: pip install supabase python-dotenv
-      
-      - name: Verificar archivos en Storage
+      - name: Ejecutar Verificar y sincronizar Storage
         id: check
         run: |
-          python - <<'PYTHON'
-          import os
-          from supabase import create_client
+          python scripts/pipeline-document-mineduc/fase1.5_verify_storage.py 2>&1 | tee verify.log
           
-          supabase = create_client(
-              os.getenv('SUPABASE_URL'),
-              os.getenv('SUPABASE_SERVICE_ROLE_KEY')
-          )
-          
-          # Obtener documentos con storage_path
-          docs = supabase.table('documentos_oficiales')\
-              .select('id, titulo, storage_path')\
-              .eq('etapa_actual', 'descargado')\
-              .not_.is_('storage_path', 'null')\
-              .execute().data or []
-          
-          print(f"📋 Verificando {len(docs)} documentos...")
-          
-          sin_archivo = []
-          
-          for doc in docs:
-              try:
-                  # Intentar descargar
-                  supabase.storage.from_('documentos-mineduc').download(doc['storage_path'])
-                  print(f"  ✅ {doc['titulo'][:50]}")
-              except Exception as e:
-                  # Archivo no existe
-                  print(f"  ❌ {doc['titulo'][:50]} - {str(e)[:50]}")
-                  sin_archivo.append(doc)
-          
-          print(f"\n📊 Resultados:")
-          print(f"  ✅ Con archivo: {len(docs) - len(sin_archivo)}")
-          print(f"  ❌ Sin archivo: {len(sin_archivo)}")
-          
-          # Outputs para GitHub Actions
-          print(f"::set-output name=verificados::{len(docs)}")
-          print(f"::set-output name=sin_archivo::{len(sin_archivo)}")
-          
-          if sin_archivo:
-              print(f"\n🔧 Marcando {len(sin_archivo)} documentos para re-descarga...")
-              
-              for doc in sin_archivo:
-                  try:
-                      supabase.table('documentos_oficiales').update({
-                          'etapa_actual': 'pendiente',
-                          'metadata': {
-                              'requiere_redownload': True,
-                              'storage_path_invalido': doc['storage_path'],
-                              'marcado_para_redownload': True
-                          }
-                      }).eq('id', doc['id']).execute()
-                      print(f"  ✅ Marcado: {doc['titulo'][:40]}")
-                  except Exception as e:
-                      print(f"  ⚠️ Error marcando {doc['id']}: {str(e)[:50]}")
-              
-              print(f"\n✅ Marcados exitosamente")
-              print(f"📢 RECOMENDACIÓN: Ejecutar Edge Function con force=true para re-descargar")
-          PYTHON
-      
-      - name: Generar summary
-        run: |
-          echo "### 🔍 Fase 1.5: Verificación Storage" >> $GITHUB_STEP_SUMMARY
-          echo "- **Documentos verificados:** ${{ steps.check.outputs.verificados }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Sin archivo en Storage:** ${{ steps.check.outputs.sin_archivo }}" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ steps.check.outputs.sin_archivo }}" -gt 0 ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "⚠️ **Acción requerida:** ${{ steps.check.outputs.sin_archivo }} documentos marcados para re-descarga" >> $GITHUB_STEP_SUMMARY
-            echo "💡 **Solución:** Ejecutar workflow con \`force_full_sync=true\`" >> $GITHUB_STEP_SUMMARY
+          # Extraer métricas del JSON
+          if [ -f verify_storage_metrics.json ]; then
+            validados=$(jq -r '.validados // 0' verify_storage_metrics.json)
+            resincronizados=$(jq -r '.resincronizados // 0' verify_storage_metrics.json)
+            errores=$(jq -r '.errores // 0' verify_storage_metrics.json)
+          else
+            # Fallback a grep
+            validados=$(grep -oP "Validados.*: \K[0-9]+" verify.log || echo "0")
+            resincronizados=$(grep -oP "Re-sincronizados: \K[0-9]+" verify.log || echo "0")
+            errores=$(grep -oP "Errores: \K[0-9]+" verify.log || echo "0")
           fi
+          
+          echo "validados=$validados" >> $GITHUB_OUTPUT
+          echo "resincronizados=$resincronizados" >> $GITHUB_OUTPUT
+          echo "errores=$errores" >> $GITHUB_OUTPUT
+          
+          echo "### 📦 Fase 1.5: Verify Storage" >> $GITHUB_STEP_SUMMARY
+          echo "- **Validados:** $validados" >> $GITHUB_STEP_SUMMARY
+          echo "- **Re-sincronizados:** $resincronizados" >> $GITHUB_STEP_SUMMARY
+          echo "- **Errores:** $errores" >> $GITHUB_STEP_SUMMARY
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      
+      - name: Upload verify report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-storage-report
+          path: |
+            verify.log
+            verify_storage_metrics.json
+          if-no-files-found: ignore
+          retention-days: 30
 
   # ============================================
   # FASE 2: Transform
