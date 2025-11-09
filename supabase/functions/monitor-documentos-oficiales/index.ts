@@ -1010,7 +1010,7 @@ export async function procesarDocumentoNuevo(
   await crearBucketSiNoExiste(supabase)
   
   const { error: uploadError } = await supabase.storage
-    .from('documentos-mineduc')
+    .from('documentos-oficiales')
     .upload(fileName, pdfBuffer, {
       contentType: 'application/pdf',
       upsert: true
@@ -1218,11 +1218,11 @@ async function crearBucketSiNoExiste(supabase: any): Promise<void> {
   try {
     // Verificar si el bucket existe
     const { data: buckets } = await supabase.storage.listBuckets()
-    const bucketExiste = buckets?.some((bucket: any) => bucket.name === 'documentos-mineduc')
+    const bucketExiste = buckets?.some((bucket: any) => bucket.name === 'documentos-oficiales')
     
     if (!bucketExiste) {
-      console.log('  📁 Creando bucket documentos-mineduc...')
-      const { error } = await supabase.storage.createBucket('documentos-mineduc', {
+      console.log('  📁 Creando bucket documentos-oficiales...')
+      const { error } = await supabase.storage.createBucket('documentos-oficiales', {
         public: false,
         allowedMimeTypes: ['application/pdf'],
         fileSizeLimit: 50 * 1024 * 1024 // 50MB

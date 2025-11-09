@@ -67,7 +67,7 @@ export class HealthMonitor {
   async checkStorage(): Promise<HealthCheck> {
     const start = Date.now();
     try {
-      await this.supabase.storage.from('documentos-mineduc').list('', { limit: 1 });
+      await this.supabase.storage.from('documentos-oficiales').list('', { limit: 1 });
       return {
         component: 'storage',
         status: 'healthy',
