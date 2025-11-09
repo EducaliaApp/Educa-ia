@@ -391,7 +391,8 @@ def extraer_con_ia_vision(pdf_bytes, tipo_documento):
 def _extraer_con_gemini(prompt, imagenes_base64):
     """Extrae con Gemini 1.5 Flash (prioridad 1: gratis + rápido)"""
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Usar gemini-1.5-flash-latest en lugar de gemini-1.5-flash para API v1
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     
     # Convertir imágenes base64 a formato Gemini
     partes = [prompt]
@@ -405,7 +406,7 @@ def _extraer_con_gemini(prompt, imagenes_base64):
     response = model.generate_content(partes)
     contenido = response.text
     
-    # Gemini Flash: Gratis hasta 1500 req/día
+    # Gemini Flash: Gratis hasta 1500 req/día (15 RPM)
     # Después: $0.075/1M tokens input, $0.30/1M output
     costo = 0.0  # Asumimos quota gratuita
     
