@@ -23,6 +23,10 @@ on:
         description: 'Modo prueba (no escribe en BD)'
         type: boolean
         default: false
+      notify_slack:
+        description: 'Enviar notificación a Slack al finalizar'
+        type: boolean
+        default: false
 
 env:
   PYTHON_VERSION: '3.11'
@@ -652,7 +656,7 @@ jobs:
           echo "color=$color" >> $GITHUB_OUTPUT
       
       - name: Notificar Slack
-        if: always()
+        if: always() && github.event.inputs.notify_slack != 'false'
         uses: slackapi/slack-github-action@v1
         with:
           payload: |
