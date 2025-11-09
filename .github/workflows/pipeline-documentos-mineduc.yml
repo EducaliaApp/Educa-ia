@@ -1,449 +1,562 @@
-name: Sync Datos MINEDUC - Base de Conocimientos
+name: Pipeline RAG MINEDUC - Producción
 
 on:
   schedule:
-    # Ejecutar los domingos a las 2 AM UTC (11 PM Chile)
+    # Domingos 2 AM UTC (11 PM Chile Sábado)
     - cron: '0 2 * * 0'
-
+  
   workflow_dispatch:
-    # Permitir ejecución manual
     inputs:
       force_full_sync:
-        description: 'Forzar sincronización completa (ignora cache)'
-        required: false
-        default: false
+        description: 'Forzar sincronización completa'
         type: boolean
-      slack_notification:
-        description: 'Enviar notificación por Slack'
-        required: false
         default: false
+      force_reindex:
+        description: 'Forzar reindexación HNSW'
         type: boolean
+        default: false
+      skip_validation:
+        description: 'Saltar validación (solo para debugging)'
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Modo prueba (no escribe en BD)'
+        type: boolean
+        default: false
 
 env:
+  PYTHON_VERSION: '3.11'
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-  COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
   SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+  AI_EXTRACTION_ENABLED: 'true'
 
 permissions:
-  models: read
   contents: read
+  actions: write
 
 jobs:
-  extraccion-documentos:
-    name: Extraer Documentos Oficiales
+  # ============================================
+  # FASE 0: Pre-flight Checks
+  # ============================================
+  
+  preflight:
+    name: "🔍 Pre-flight: Verificar Sistema"
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      system_healthy: ${{ steps.health.outputs.healthy }}
+      can_proceed: ${{ steps.health.outputs.can_proceed }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Instalar dependencias mínimas
+        run: pip install supabase python-dotenv
+      
+      - name: Verificar salud del sistema
+        id: health
+        run: |
+          python - <<'PYTHON'
+          import os
+          from supabase import create_client
+          
+          supabase = create_client(
+              os.getenv('SUPABASE_URL'),
+              os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+          )
+          
+          # Verificar conectividad
+          try:
+              result = supabase.table('documentos_oficiales').select('id').limit(1).execute()
+              print("✅ Conexión Supabase OK")
+              healthy = True
+          except Exception as e:
+              print(f"❌ Error Supabase: {e}")
+              healthy = False
+          
+          # Verificar índices críticos (vía RPC)
+          try:
+              indices = supabase.rpc('verificar_indice_hnsw_existe').execute()
+              if indices.data and indices.data.get('existe'):
+                  print("✅ Índice HNSW presente")
+              else:
+                  print("⚠️ Índice HNSW faltante (se creará)")
+          except:
+              pass
+          
+          # Output
+          print(f"::set-output name=healthy::{str(healthy).lower()}")
+          print(f"::set-output name=can_proceed::{str(healthy).lower()}")
+          PYTHON
+      
+      - name: Bloquear si sistema no está saludable
+        if: steps.health.outputs.healthy == 'false'
+        run: |
+          echo "❌ Sistema no está operativo - abortando pipeline"
+          exit 1
+
+  # ============================================
+  # FASE 1: Extracción
+  # ============================================
+  
+  extract:
+    name: "📥 FASE 1: Extracción Documentos"
+    runs-on: ubuntu-latest
+    needs: preflight
+    if: needs.preflight.outputs.can_proceed == 'true'
     timeout-minutes: 30
     outputs:
-      has_changes: ${{ steps.check_nuevos.outputs.has_changes }}
-      nuevos: ${{ steps.check_nuevos.outputs.nuevos }}
-      actualizados: ${{ steps.check_nuevos.outputs.actualizados }}
-
+      has_changes: ${{ steps.monitor.outputs.has_changes }}
+      nuevos: ${{ steps.monitor.outputs.nuevos }}
+      actualizados: ${{ steps.monitor.outputs.actualizados }}
+      
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
           deno-version: v1.40.x
-
-      - name: Invocar Edge Function de monitoreo
+      
+      - name: Monitorear documentos oficiales
         id: monitor
         run: |
-          response=$(curl -X POST \
+          response=$(curl -s -X POST \
             "${{ secrets.SUPABASE_URL }}/functions/v1/monitor-documentos-oficiales" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
-            -d '{"force": ${{ github.event.inputs.force_full_sync || false }}}')
-
-          echo "response=$response" >> $GITHUB_OUTPUT
-          echo "### 📊 Reporte de Monitoreo" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
-          echo "$response" | jq '.' >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-
-      - name: Verificar documentos nuevos
-        id: check_nuevos
-        run: |
-          response='${{ steps.monitor.outputs.response }}'
-
-          # Verificar si hay error en la respuesta
+            -d "{\"force\": ${{ github.event.inputs.force_full_sync || false }}}")
+          
+          # Guardar respuesta completa
+          echo "$response" > monitor_response.json
+          
+          # Validar respuesta
           if echo "$response" | jq -e '.error' > /dev/null; then
-            echo "❌ Error en Edge Function: $(echo "$response" | jq -r '.error')"
+            echo "❌ Edge Function error: $(echo "$response" | jq -r '.error')"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
             echo "nuevos=0" >> $GITHUB_OUTPUT
             echo "actualizados=0" >> $GITHUB_OUTPUT
-            echo "has_changes=false" >> $GITHUB_OUTPUT
             exit 0
           fi
           
-          # Extraer valores con defaults
+          # Extraer métricas con validación
           nuevos=$(echo "$response" | jq -r '.reporte.documentos_nuevos // 0')
           actualizados=$(echo "$response" | jq -r '.reporte.documentos_actualizados // 0')
           
-          # Validar que son números
-          if ! [[ "$nuevos" =~ ^[0-9]+$ ]]; then nuevos=0; fi
-          if ! [[ "$actualizados" =~ ^[0-9]+$ ]]; then actualizados=0; fi
-
+          # Validar números
+          [[ "$nuevos" =~ ^[0-9]+$ ]] || nuevos=0
+          [[ "$actualizados" =~ ^[0-9]+$ ]] || actualizados=0
+          
           echo "nuevos=$nuevos" >> $GITHUB_OUTPUT
           echo "actualizados=$actualizados" >> $GITHUB_OUTPUT
-
-          if [ "$nuevos" -gt 0 ] || [ "$actualizados" -gt 0 ]; then
+          
+          if [ $nuevos -gt 0 ] || [ $actualizados -gt 0 ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Notificar cambios por Slack
-        if: steps.check_nuevos.outputs.has_changes == 'true' && github.event.inputs.slack_notification == 'true'
-        uses: slackapi/slack-github-action@v1.25.0
+          
+          # Summary
+          echo "### 📊 Fase 1: Extracción" >> $GITHUB_STEP_SUMMARY
+          echo "- **Documentos nuevos:** $nuevos" >> $GITHUB_STEP_SUMMARY
+          echo "- **Actualizados:** $actualizados" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload monitor response
+        uses: actions/upload-artifact@v4
         with:
-          payload: |
-            {
-              "text": "🔔 Nuevos documentos MINEDUC detectados",
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "📚 Actualización de Documentos MINEDUC"
-                  }
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Documentos nuevos:* ${{ steps.check_nuevos.outputs.nuevos }}\n*Documentos actualizados:* ${{ steps.check_nuevos.outputs.actualizados }}"
-                  }
-                },
-                {
-                  "type": "actions",
-                  "elements": [
-                    {
-                      "type": "button",
-                      "text": {
-                        "type": "plain_text",
-                        "text": "Ver en GitHub"
-                      },
-                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                    }
-                  ]
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+          name: extract-response
+          path: monitor_response.json
+          retention-days: 7
 
-  etl-transform:
-    name: "FASE 1: Transform - Extraer Texto"
+  # ============================================
+  # FASE 2: Transform
+  # ============================================
+  
+  transform:
+    name: "🔄 FASE 2: Transform con IA"
     runs-on: ubuntu-latest
-    needs: extraccion-documentos
-    if: always() && (needs.extraccion-documentos.outputs.has_changes == 'true' || github.event.inputs.force_full_sync == 'true')
-    timeout-minutes: 20
+    needs: [preflight, extract]
+    if: |
+      always() && 
+      needs.preflight.outputs.can_proceed == 'true' &&
+      (needs.extract.outputs.has_changes == 'true' || github.event.inputs.force_full_sync == 'true')
+    timeout-minutes: 30
     outputs:
+      success: ${{ steps.transform.outputs.success }}
       transformed: ${{ steps.transform.outputs.count }}
-
+      cost: ${{ steps.transform.outputs.cost }}
+      
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
       - name: Instalar dependencias
         run: |
           pip install -r scripts/pipeline-document-mineduc/requirements.txt
           sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-spa
-
-      - name: Extraer texto
+      
+      - name: Ejecutar transformación
         id: transform
         run: |
-          output=$(python scripts/pipeline-document-mineduc/fase2_transform_multiproveedor.py 2>&1)
-          echo "$output"
-          transformed=$(echo "$output" | grep -o "Transformados: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
+          # Ejecutar con output JSON estructurado
+          python scripts/pipeline-document-mineduc/fase2_transform_multiproveedor.py \
+            --export-json 2>&1 | tee transform.log
+          
+          # Verificar si se generó JSON
+          if [ -f transform_metrics.json ]; then
+            # Extraer de JSON (más robusto)
+            transformed=$(jq -r '.transformed' transform_metrics.json)
+            cost=$(jq -r '.cost_usd' transform_metrics.json)
+            success="true"
+          else
+            # Fallback a regex (legacy)
+            transformed=$(grep -oP "Transformados: \K[0-9]+" transform.log || echo "0")
+            cost=$(grep -oP "Costo total IA: \\$\K[0-9.]+" transform.log || echo "0")
+            success="false"
+          fi
+          
+          # Outputs
+          echo "success=$success" >> $GITHUB_OUTPUT
           echo "count=$transformed" >> $GITHUB_OUTPUT
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # IA Multi-Proveedor (orden de prioridad: Gemini → OpenAI → Claude)
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          AI_EXTRACTION_ENABLED: 'true'  # Habilitar IA para rúbricas
+          echo "cost=$cost" >> $GITHUB_OUTPUT
+          
+          # Summary
+          echo "### 🔄 Fase 2: Transform" >> $GITHUB_STEP_SUMMARY
+          echo "- **Transformados:** $transformed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Costo IA:** \$$cost USD" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload transform metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: transform-metrics
+          path: |
+            transform.log
+            transform_metrics.json
+          if-no-files-found: ignore
+          retention-days: 30
 
-  etl-load:
-    name: "FASE 2: Load - Generar Embeddings"
+  # ============================================
+  # FASE 3: Load
+  # ============================================
+  
+  load:
+    name: "📦 FASE 3: Load Embeddings"
     runs-on: ubuntu-latest
-    needs: etl-transform
-    if: needs.etl-transform.outputs.transformed > 0
-    timeout-minutes: 20
+    needs: [preflight, transform]
+    if: |
+      always() &&
+      needs.preflight.outputs.can_proceed == 'true' &&
+      needs.transform.outputs.transformed > 0
+    timeout-minutes: 45
     outputs:
+      success: ${{ steps.load.outputs.success }}
       loaded: ${{ steps.load.outputs.count }}
       tokens: ${{ steps.load.outputs.tokens }}
       cost: ${{ steps.load.outputs.cost }}
-
+      
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
       - name: Instalar dependencias
         run: pip install -r scripts/pipeline-document-mineduc/requirements.txt
-
-      - name: Generar embeddings y cargar
+      
+      - name: Ejecutar carga de embeddings
         id: load
         run: |
-          output=$(python scripts/pipeline-document-mineduc/fase3_load.py 2>&1)
-          echo "$output"
-          loaded=$(echo "$output" | grep -o "Cargados: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-          tokens=$(echo "$output" | grep -o "Tokens: [0-9,]\+" | grep -o "[0-9,]\+" | tr -d ',' || echo "0")
-          cost=$(echo "$output" | grep -o "Costo: \$[0-9.]\+" | grep -o "[0-9.]\+" || echo "0")
+          python scripts/pipeline-document-mineduc/fase3_load.py \
+            --export-json 2>&1 | tee load.log
+          
+          # Extraer de JSON si existe
+          if [ -f load_metrics.json ]; then
+            loaded=$(jq -r '.loaded' load_metrics.json)
+            tokens=$(jq -r '.tokens' load_metrics.json)
+            cost=$(jq -r '.cost_usd' load_metrics.json)
+            success="true"
+          else
+            # Fallback
+            loaded=$(grep -oP "Cargados: \K[0-9]+" load.log || echo "0")
+            tokens=$(grep -oP "Tokens: \K[0-9,]+" load.log | tr -d ',' || echo "0")
+            cost=$(grep -oP "Costo: \\$\K[0-9.]+" load.log || echo "0")
+            success="false"
+          fi
+          
+          echo "success=$success" >> $GITHUB_OUTPUT
           echo "count=$loaded" >> $GITHUB_OUTPUT
           echo "tokens=$tokens" >> $GITHUB_OUTPUT
           echo "cost=$cost" >> $GITHUB_OUTPUT
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          
+          echo "### 📦 Fase 3: Load" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cargados:** $loaded" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tokens:** $(printf "%'d" $tokens)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Costo:** \$$cost USD" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload load metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-metrics
+          path: |
+            load.log
+            load_metrics.json
+          if-no-files-found: ignore
+          retention-days: 30
 
-  validar-calidad:
-    name: "FASE 3: Validar Calidad"
+  # ============================================
+  # FASE 4: Validate
+  # ============================================
+  
+  validate:
+    name: "✅ FASE 4: Validación Calidad"
     runs-on: ubuntu-latest
-    needs: etl-load
-    if: needs.etl-load.outputs.loaded > 0
-    timeout-minutes: 10
+    needs: [preflight, load]
+    if: |
+      always() &&
+      needs.preflight.outputs.can_proceed == 'true' &&
+      needs.load.outputs.loaded > 0 &&
+      github.event.inputs.skip_validation != 'true'
+    timeout-minutes: 20
     outputs:
+      success: ${{ steps.validate.outputs.success }}
       validated: ${{ steps.validate.outputs.count }}
       quality: ${{ steps.validate.outputs.quality }}
-
+      alertas: ${{ steps.validate.outputs.alertas }}
+      
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
       - name: Instalar dependencias
         run: pip install -r scripts/pipeline-document-mineduc/requirements.txt
-
-      - name: Validar calidad
+      
+      - name: Validar calidad integral
         id: validate
         run: |
-          output=$(python scripts/pipeline-document-mineduc/fase4_validacion_calidad.py 2>&1)
-          echo "$output"
-          validated=$(echo "$output" | grep -o "Aprobados: [0-9]\+" | grep -o "[0-9]\+" || echo "0")
-          quality=$(echo "$output" | grep -o "Calidad: [0-9.]\+%" | grep -o "[0-9.]\+" || echo "0")
+          python scripts/pipeline-document-mineduc/fase4_validacion_calidad.py 2>&1 | tee validate.log
+          
+          # Extraer de JSON
+          if [ -f validation_report.json ]; then
+            validated=$(jq -r '.chunks.total' validation_report.json)
+            quality=$(jq -r '.chunks.calidad_promedio' validation_report.json)
+            alertas=$(jq -r '.alertas | length' validation_report.json)
+            success="true"
+          else
+            validated=$(grep -oP "Total chunks: \K[0-9]+" validate.log || echo "0")
+            quality_pct=$(grep -oP "Calidad: \K[0-9.]+%" validate.log | tr -d '%' || echo "0")
+            quality=$(echo "scale=4; $quality_pct / 100" | bc -l || echo "0")
+            alertas=$(grep -oP "ALERTAS \\(\K[0-9]+" validate.log || echo "0")
+            success="false"
+          fi
+          
+          echo "success=$success" >> $GITHUB_OUTPUT
           echo "count=$validated" >> $GITHUB_OUTPUT
           echo "quality=$quality" >> $GITHUB_OUTPUT
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "alertas=$alertas" >> $GITHUB_OUTPUT
+          
+          echo "### ✅ Fase 4: Validación" >> $GITHUB_STEP_SUMMARY
+          echo "- **Chunks validados:** $validated" >> $GITHUB_STEP_SUMMARY
+          echo "- **Calidad:** $(echo "$quality * 100" | bc)%" >> $GITHUB_STEP_SUMMARY
+          echo "- **Alertas:** $alertas" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report
+          path: validation_report.json
+          if-no-files-found: ignore
+          retention-days: 90
 
-  optimizar-embeddings:
-    name: "FASE 4: Optimizar Índices"
+  # ============================================
+  # FASE 5: Optimize
+  # ============================================
+  
+  optimize:
+    name: "⚡ FASE 5: Optimizar Índices"
     runs-on: ubuntu-latest
-    needs: validar-calidad
-    if: needs.validar-calidad.outputs.validated > 0
-    timeout-minutes: 10
-
+    needs: [preflight, validate]
+    if: |
+      always() &&
+      needs.preflight.outputs.can_proceed == 'true' &&
+      needs.validate.outputs.validated > 0
+    timeout-minutes: 20
+    
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
       - name: Instalar dependencias
         run: pip install supabase python-dotenv
-
-      - name: Optimizar índices
-        run: python scripts/pipeline-document-mineduc/fase5_optimize.py
+      
+      - name: Optimizar índices HNSW
+        run: |
+          python scripts/pipeline-document-mineduc/fase5_optimize.py 2>&1 | tee optimize.log
+          
+          # Extraer métricas
+          chunks=$(grep -oP "Chunks indexados: \K[0-9,]+" optimize.log | tr -d ',' || echo "0")
+          size=$(grep -oP "Tamaño índice: ~\K[0-9.]+" optimize.log || echo "0")
+          
+          echo "### ⚡ Fase 5: Optimización" >> $GITHUB_STEP_SUMMARY
+          echo "- **Chunks indexados:** $(printf "%'d" $chunks)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tamaño índice:** ~${size} MB" >> $GITHUB_STEP_SUMMARY
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_REINDEX: ${{ github.event.inputs.force_reindex }}
 
-  registrar-metricas:
-    name: "FASE 5: Registrar Métricas"
+  # ============================================
+  # FASE 6: Metrics
+  # ============================================
+  
+  metrics:
+    name: "📊 FASE 6: Registrar Métricas"
     runs-on: ubuntu-latest
-    needs: [etl-transform, etl-load, validar-calidad, optimizar-embeddings]
+    needs: [extract, transform, load, validate, optimize]
     if: always()
-    timeout-minutes: 5
-
+    timeout-minutes: 10
+    outputs:
+      estado: ${{ steps.record.outputs.estado }}
+      total_cost: ${{ steps.costs.outputs.total }}
+    
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
       - name: Instalar dependencias
         run: pip install supabase python-dotenv
-
+      
+      - name: Calcular costos
+        id: costs
+        run: |
+          cost_transform="${{ needs.transform.outputs.cost || '0' }}"
+          cost_load="${{ needs.load.outputs.cost || '0' }}"
+          total=$(echo "$cost_transform + $cost_load" | bc -l || echo "0")
+          
+          echo "total=$total" >> $GITHUB_OUTPUT
+          echo "transform=$cost_transform" >> $GITHUB_OUTPUT
+          echo "load=$cost_load" >> $GITHUB_OUTPUT
+      
       - name: Registrar métricas
+        id: record
         run: |
           python scripts/pipeline-document-mineduc/fase6_metrics.py \
-            --transformed "${{ needs.etl-transform.outputs.transformed || 0 }}" \
-            --loaded "${{ needs.etl-load.outputs.loaded || 0 }}" \
-            --validated "${{ needs.validar-calidad.outputs.validated || 0 }}" \
-            --quality "${{ needs.validar-calidad.outputs.quality || 0 }}" \
-            --tokens "${{ needs.etl-load.outputs.tokens || 0 }}" \
-            --cost "${{ needs.etl-load.outputs.cost || 0 }}" \
-            --workflow-id "${{ github.run_id }}"
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-
-      - name: Resumen final
+            --downloaded "${{ needs.extract.outputs.nuevos || '0' }}" \
+            --transformed "${{ needs.transform.outputs.transformed || '0' }}" \
+            --loaded "${{ needs.load.outputs.loaded || '0' }}" \
+            --validated "${{ needs.validate.outputs.validated || '0' }}" \
+            --quality "${{ needs.validate.outputs.quality || '0' }}" \
+            --tokens "${{ needs.load.outputs.tokens || '0' }}" \
+            --cost "${{ steps.costs.outputs.total }}" \
+            --workflow-id "${{ github.run_id }}" \
+            --export-json 2>&1 | tee metrics.log
+          
+          # Extraer estado
+          estado=$(grep -oP "Estado: .+ \K[A-Z]+" metrics.log || echo "DESCONOCIDO")
+          echo "estado=$estado" >> $GITHUB_OUTPUT
+      
+      - name: Upload metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metrics
+          path: metrics_report.json
+          retention-days: 90
+      
+      - name: Generar resumen final
         run: |
-          echo "### 📊 Resumen Pipeline ETL" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 RESUMEN PIPELINE ETL" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Fase | Resultado |" >> $GITHUB_STEP_SUMMARY
           echo "|------|-----------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Transform | ${{ needs.etl-transform.outputs.transformed || 0 }} transformados |" >> $GITHUB_STEP_SUMMARY
-          echo "| Load | ${{ needs.etl-load.outputs.loaded || 0 }} cargados |" >> $GITHUB_STEP_SUMMARY
-          echo "| Validación | ${{ needs.validar-calidad.outputs.validated || 0 }} validados (${{ needs.validar-calidad.outputs.quality || 0 }}%) |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tokens | ${{ needs.etl-load.outputs.tokens || 0 }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Costo | \$${{ needs.etl-load.outputs.cost || 0 }} USD |" >> $GITHUB_STEP_SUMMARY
+          echo "| Extract | ${{ needs.extract.outputs.nuevos || 0 }} nuevos, ${{ needs.extract.outputs.actualizados || 0 }} actualizados |" >> $GITHUB_STEP_SUMMARY
+          echo "| Transform | ${{ needs.transform.outputs.transformed || 0 }} docs (\$${{ needs.transform.outputs.cost || 0 }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Load | ${{ needs.load.outputs.loaded || 0 }} docs, ${{ needs.load.outputs.tokens || 0 }} tokens (\$${{ needs.load.outputs.cost || 0 }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Validate | ${{ needs.validate.outputs.validated || 0 }} chunks, calidad ${{ needs.validate.outputs.quality || 0 }}% |" >> $GITHUB_STEP_SUMMARY
+          echo "| **TOTAL** | **\$${{ steps.costs.outputs.total }} USD** |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Estado:** ${{ steps.record.outputs.estado }}" >> $GITHUB_STEP_SUMMARY
 
-
-
-      - name: Resultados de validación
-        run: |
-          echo "### ✅ Validación de Datos RAG" >> $GITHUB_STEP_SUMMARY
-          if [ -f validation-results.md ]; then
-            cat validation-results.md >> $GITHUB_STEP_SUMMARY
-          else
-            echo "No hay reporte de validación disponible" >> $GITHUB_STEP_SUMMARY
-          fi
-
-      - name: Fallar si hay errores críticos
-        if: steps.validate.outputs.critical_errors > 0
-        run: |
-          echo "❌ Se encontraron ${{ steps.validate.outputs.critical_errors }} errores críticos"
-          exit 1
-
-  update-metrics:
-    name: Actualizar Métricas RAG
+  # ============================================
+  # Notificaciones
+  # ============================================
+  
+  notify:
+    name: "📢 Notificación Final"
     runs-on: ubuntu-latest
-    needs: [etl-transform, etl-load, validar-calidad, optimizar-embeddings, registrar-metricas]
+    needs: [extract, transform, load, validate, metrics]
     if: always()
-
+    
     steps:
-      - name: Registrar métricas en Supabase
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          curl -X POST \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/metricas_pipeline_rag" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Content-Type: application/json" \
-            -H "Prefer: return=representation" \
-            -d '{
-              "fecha": "'$(date -I)'",
-              "documentos_monitoreados": ${{ needs.extraccion-documentos.outputs.nuevos || 0 }},
-              "documentos_procesados": ${{ needs.etl-load.outputs.loaded || 0 }},
-              "chunks_validados": ${{ needs.validar-calidad.outputs.validated || 0 }},
-              "errores_criticos": 0,
-              "workflow_run_id": "${{ github.run_id }}"
-            }'
-
-  notify-completion:
-    name: Notificar Completado
-    runs-on: ubuntu-latest
-    needs: [extraccion-documentos, etl-transform, etl-load, validar-calidad, update-metrics]
-    if: always()
-
-    steps:
-      - name: Determinar estado
+      - name: Determinar estado final
         id: status
         run: |
-          if [ "${{ needs.validar-calidad.result }}" == "failure" ]; then
-            echo "status=❌ Falló" >> $GITHUB_OUTPUT
-            echo "color=#dc2626" >> $GITHUB_OUTPUT
-          elif [ "${{ needs.etl-load.result }}" == "failure" ]; then
-            echo "status=⚠️ Completado con errores" >> $GITHUB_OUTPUT
-            echo "color=#f59e0b" >> $GITHUB_OUTPUT
+          if [ "${{ needs.validate.result }}" == "failure" ]; then
+            estado="❌ FALLÓ"
+            color="danger"
+          elif [ "${{ needs.load.result }}" == "failure" ]; then
+            estado="❌ FALLÓ"
+            color="danger"
+          elif [ "${{ needs.validate.outputs.alertas }}" -gt 5 ]; then
+            estado="⚠️ ALERTAS"
+            color="warning"
           else
-            echo "status=✅ Exitoso" >> $GITHUB_OUTPUT
-            echo "color=#16a34a" >> $GITHUB_OUTPUT
+            estado="✅ EXITOSO"
+            color="good"
           fi
-
-      - name: Enviar notificación final
-        if: ${{ github.event.inputs.slack_notification == 'true' }}
-        uses: slackapi/slack-github-action@v1.25.0
+          
+          echo "estado=$estado" >> $GITHUB_OUTPUT
+          echo "color=$color" >> $GITHUB_OUTPUT
+      
+      - name: Notificar Slack
+        if: always()
+        uses: slackapi/slack-github-action@v1
         with:
           payload: |
             {
-              "attachments": [
-                {
-                  "color": "${{ steps.status.outputs.color }}",
-                  "blocks": [
-                    {
-                      "type": "header",
-                      "text": {
-                        "type": "plain_text",
-                        "text": "${{ steps.status.outputs.status }} Sync Rúbricas MINEDUC"
-                      }
-                    },
-                    {
-                      "type": "section",
-                      "fields": [
-                        {
-                          "type": "mrkdwn",
-                          "text": "*Documentos Nuevos:*\n${{ needs.extraccion-documentos.outputs.nuevos || 0 }}"
-                        },
-                        {
-                          "type": "mrkdwn",
-                          "text": "*Documentos Actualizados:*\n${{ needs.extraccion-documentos.outputs.actualizados || 0 }}"
-                        },
-                        {
-                          "type": "mrkdwn",
-                          "text": "*Documentos Cargados:*\n${{ needs.etl-load.outputs.loaded || 0 }}"
-                        },
-                        {
-                          "type": "mrkdwn",
-                          "text": "*Documentos Validados:*\n${{ needs.validar-calidad.outputs.validated || 0 }}"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "context",
-                      "elements": [
-                        {
-                          "type": "mrkdwn",
-                          "text": "Triggered by: ${{ github.event_name }} | Run: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|#${{ github.run_number }}>"
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
+              "text": "${{ steps.status.outputs.estado }} Pipeline RAG MINEDUC",
+              "attachments": [{
+                "color": "${{ steps.status.outputs.color }}",
+                "fields": [
+                  {"title": "Nuevos", "value": "${{ needs.extract.outputs.nuevos || 0 }}", "short": true},
+                  {"title": "Transformados", "value": "${{ needs.transform.outputs.transformed || 0 }}", "short": true},
+                  {"title": "Cargados", "value": "${{ needs.load.outputs.loaded || 0 }}", "short": true},
+                  {"title": "Costo", "value": "\$${{ needs.metrics.outputs.total_cost || 0 }}", "short": true},
+                  {"title": "Workflow", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|#${{ github.run_number }}>", "short": false}
+                ]
+              }]
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

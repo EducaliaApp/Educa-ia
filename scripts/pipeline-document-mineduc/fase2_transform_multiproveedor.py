@@ -46,6 +46,7 @@ CREATE POLICY "Service role access" ON extraccion_cache FOR ALL USING (auth.role
 import os, sys, fitz, re, json, base64, time, hashlib, asyncio
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client
 
@@ -1114,3 +1115,48 @@ print(f"\n⚡ Beneficio paralelismo:")
 print(f"   Secuencial estimado: {tiempo_secuencial_estimado:.1f}s")
 print(f"   Paralelo real: {tiempo_total:.1f}s")
 print(f"   Speedup: {speedup:.1f}x más rápido")
+
+# ============================================
+# EXPORTAR MÉTRICAS JSON
+# ============================================
+
+def export_metrics_json(metrics: dict, filepath: str):
+    """Exporta métricas en formato JSON para GitHub Actions"""
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(metrics, f, indent=2, ensure_ascii=False)
+        print(f"\n📄 Métricas exportadas: {filepath}")
+    except Exception as e:
+        print(f"\n⚠️ Error exportando métricas: {e}")
+
+# Preparar métricas para exportación
+metrics = {
+    'timestamp': datetime.now().isoformat(),
+    'fase': 'transform',
+    'documentos_procesados': len(docs),
+    'transformados': transformed,
+    'fallidos': len(docs) - transformed,
+    'tasa_exito': (transformed / len(docs) * 100) if len(docs) > 0 else 0,
+    'tiempo_total_segundos': round(tiempo_total, 2),
+    'tiempo_promedio_por_doc': round(tiempo_promedio, 2),
+    'speedup_paralelismo': round(speedup, 2),
+    'costo_ia': {
+        'total_usd': round(total_costo_ia, 4),
+        'promedio_por_doc_usd': round(total_costo_ia / transformed, 4) if transformed > 0 else 0
+    },
+    'proveedores_usados': {
+        proveedor: {
+            'count': count,
+            'porcentaje': round(count / transformed * 100, 1) if transformed > 0 else 0
+        }
+        for proveedor, count in stats_proveedores.items()
+    },
+    'cache_stats': {
+        'cache_hits': sum(1 for s in stats_proveedores if s == 'cache'),
+        'cache_miss': transformed - sum(1 for s in stats_proveedores if s == 'cache')
+    }
+}
+
+export_metrics_json(metrics, 'transform_metrics.json')
+
+print("\n" + "="*60)

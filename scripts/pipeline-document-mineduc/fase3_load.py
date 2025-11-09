@@ -1,98 +1,471 @@
 #!/usr/bin/env python3
 """
-FASE 3: Load - Generar embeddings y cargar
-Este script procesa documentos oficiales almacenados en Supabase, generando embeddings
-de OpenAI para cada documento y dividiéndolos en chunks manejables.
-Funcionalidad:
-- Obtiene hasta 50 documentos no procesados de la tabla 'documentos_oficiales'
-- Divide el contenido de texto en chunks de 8000 caracteres con overlap de 1000
-- Genera embeddings usando el modelo 'text-embedding-3-small' de OpenAI
-- Almacena cada chunk con su embedding en la tabla 'chunks_documentos'
-- Marca los documentos como procesados con metadata de procesamiento
-- Calcula y reporta el costo total basado en tokens utilizados
-Variables de entorno requeridas:
-- SUPABASE_URL: URL de la instancia de Supabase
-- SUPABASE_SERVICE_ROLE_KEY: Clave de servicio de Supabase
-- OPENAI_API_KEY: Clave de API de OpenAI
-Estructura de datos:
-- Documentos de entrada: tabla 'documentos_oficiales' con campos id, contenido_texto, procesado
-- Chunks de salida: tabla 'chunks_documentos' con embedding, metadata y referencia al documento
-Costos:
-- Modelo text-embedding-3-small: $0.02 por 1M tokens
-- Reporta tokens totales utilizados y costo estimado
-Salida:
-- Código de salida 0 si se procesó al menos un documento
-- Código de salida 1 si no se procesaron documentos
+FASE 3: Load - Chunking Inteligente + Embeddings Optimizados
+
+MEJORAS IMPLEMENTADAS:
+1. Chunking semántico respetando estructura Markdown
+2. Metadata rica para filtrado preciso
+3. Embeddings con text-embedding-3-large (mejor calidad)
+4. Caché de embeddings para re-ejecuciones
+5. Procesamiento por lotes (batch)
+6. Validación de calidad
 """
 
-"""FASE 3: Load - Generar embeddings y cargar"""
-import os, sys
+import os, sys, re, hashlib, json
 from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client
 from openai import OpenAI
+from typing import List, Dict, Tuple
 
 load_dotenv('.env.local')
 supabase = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
 openai = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-docs = supabase.table('documentos_oficiales').select('id, contenido_texto').eq('etapa_actual', 'texto_extraido').not_.is_('contenido_texto', 'null').limit(50).execute().data or []
-print(f"🔢 Generando embeddings para {len(docs)} documentos...")
+# Configuración optimizada
+EMBEDDING_MODEL = 'text-embedding-3-large'  # 3072 dimensiones, mejor calidad, costo moderado, Para reducción a 1536 dimensiones escoger el modelo text-embedding-3-small
+EMBEDDING_DIMENSIONS = 1536  # Reducción dimensional para eficiencia
+MAX_CHUNK_SIZE = 6000  # Chars por chunk (balance calidad/costo)
+MIN_CHUNK_SIZE = 500   # Evita chunks muy pequeños
+OVERLAP_SIZE = 200     # Overlap mínimo para contexto
 
-if len(docs) == 0:
-    print("ℹ️  No hay documentos pendientes de carga")
-    print("\nCargados: 0")
-    print("Tokens: 0")
-    print("Costo: $0.0000")
-    sys.exit(0)
+# ============================================
+# CHUNKING SEMÁNTICO INTELIGENTE
+# ============================================
 
-loaded, total_tokens, total_cost = 0, 0, 0.0
-
-for doc in docs:
-    try:
-        supabase.table('documentos_oficiales').update({'estado_procesamiento': 'procesando'}).eq('id', doc['id']).execute()
-        texto_completo = doc['contenido_texto'].replace("\n", " ")
-        chunks = [texto_completo[i:i+8000] for i in range(0, len(texto_completo), 7000)]
+def extraer_metadata_documento(contenido: str, doc_info: dict) -> dict:
+    """Extrae metadata del contenido para enriquecer búsqueda"""
+    
+    metadata = {
+        'tipo_documento': doc_info.get('tipo_documento', 'desconocido'),
+        'titulo': doc_info.get('titulo', ''),
+        'año': '2025',
+        'sistema': 'carrera_docente_chile'
+    }
+    
+    # Detectar tipo específico de contenido
+    contenido_lower = contenido.lower()
+    
+    if 'rúbrica' in contenido_lower or 'rubrica' in contenido_lower:
+        metadata['categoria'] = 'rubrica_evaluacion'
         
-        if len(chunks) > 1:
-            print(f"  📑 Dividido en {len(chunks)} chunks")
+        # Extraer niveles mencionados
+        niveles = []
+        if 'insatisfactorio' in contenido_lower:
+            niveles.append('insatisfactorio')
+        if 'básico' in contenido_lower:
+            niveles.append('basico')
+        if 'competente' in contenido_lower:
+            niveles.append('competente')
+        if 'destacado' in contenido_lower:
+            niveles.append('destacado')
         
-        # Procesar cada chunk
-        for idx, chunk_texto in enumerate(chunks):
-            resp = openai.embeddings.create(model="text-embedding-3-small", input=chunk_texto)
-            embedding = resp.data[0].embedding
-            tokens = resp.usage.total_tokens
-            cost = (tokens / 1_000_000) * 0.02
+        metadata['niveles_desempeno'] = niveles
+    
+    elif 'módulo' in contenido_lower or 'modulo' in contenido_lower:
+        metadata['categoria'] = 'manual_portafolio'
+        
+        # Extraer número de módulo
+        modulo_match = re.search(r'módulo\s+(\d+)', contenido_lower)
+        if modulo_match:
+            metadata['modulo'] = int(modulo_match.group(1))
+    
+    # Detectar nivel educativo
+    if any(nivel in contenido_lower for nivel in ['educación básica', 'educacion basica', '1° a 6°']):
+        metadata['nivel_educativo'] = 'basica_1_6'
+    elif '7° básico' in contenido_lower or '4° medio' in contenido_lower:
+        metadata['nivel_educativo'] = 'basica_7_media_4'
+    elif 'educación parvularia' in contenido_lower:
+        metadata['nivel_educativo'] = 'parvularia'
+    elif 'educación media técnico' in contenido_lower:
+        metadata['nivel_educativo'] = 'media_tecnico_profesional'
+    
+    # Detectar referencias al MBE
+    dominios_mbe = []
+    if re.search(r'dominio\s+[a-d]', contenido_lower):
+        dominios_mbe = re.findall(r'dominio\s+([a-d])', contenido_lower)
+    metadata['dominios_mbe'] = list(set(dominios_mbe))
+    
+    return metadata
+
+
+def chunking_semantico_markdown(contenido: str, doc_metadata: dict) -> List[Dict]:
+    """
+    Divide contenido respetando estructura Markdown
+    NUNCA parte un indicador o sección a la mitad
+    """
+    
+    chunks_finales = []
+    
+    # Detectar si es rúbrica (estructura especial)
+    es_rubrica = doc_metadata.get('tipo_documento') == 'rubricas'
+    
+    if es_rubrica:
+        chunks_finales = chunking_rubricas(contenido, doc_metadata)
+    else:
+        chunks_finales = chunking_generico(contenido, doc_metadata)
+    
+    return chunks_finales
+
+
+def chunking_rubricas(contenido: str, doc_metadata: dict) -> List[Dict]:
+    """
+    Chunking especializado para rúbricas MINEDUC
+    Cada indicador completo = 1 chunk (con todos sus niveles)
+    """
+    
+    chunks = []
+    
+    # Dividir por indicadores (## Indicador...)
+    # Patrón: ## Indicador... hasta el siguiente ## Indicador o fin
+    indicadores = re.split(r'(?=## Indicador)', contenido)
+    
+    for idx, indicador_texto in enumerate(indicadores):
+        if not indicador_texto.strip():
+            continue
+        
+        # Extraer nombre del indicador
+        nombre_match = re.search(r'## Indicador:?\s*(.+?)(?:\n|$)', indicador_texto)
+        nombre_indicador = nombre_match.group(1).strip() if nombre_match else f"Indicador {idx+1}"
+        
+        # Metadata específica del chunk
+        chunk_metadata = {
+            **doc_metadata,
+            'chunk_type': 'indicador_completo',
+            'indicador_nombre': nombre_indicador,
+            'indicador_numero': idx + 1,
+            'tiene_4_niveles': all(nivel in indicador_texto.lower() 
+                                   for nivel in ['insatisfactorio', 'básico', 'competente', 'destacado'])
+        }
+        
+        # Si el indicador es muy largo, dividir por niveles
+        if len(indicador_texto) > MAX_CHUNK_SIZE:
+            # Dividir por niveles manteniendo contexto
+            niveles = re.split(r'(?=### Nivel)', indicador_texto)
             
-            # Guardar chunk con embedding
+            # Primer chunk: header del indicador
+            if niveles[0].strip():
+                chunks.append({
+                    'contenido': niveles[0],
+                    'metadata': {**chunk_metadata, 'parte': 'descripcion'}
+                })
+            
+            # Chunks siguientes: cada nivel
+            for nivel_idx, nivel_texto in enumerate(niveles[1:], 1):
+                nivel_nombre = re.search(r'### Nivel:?\s*(\w+)', nivel_texto)
+                nivel_nombre = nivel_nombre.group(1) if nivel_nombre else f"Nivel {nivel_idx}"
+                
+                chunks.append({
+                    'contenido': f"## {nombre_indicador}\n\n{nivel_texto}",  # Incluir contexto
+                    'metadata': {
+                        **chunk_metadata,
+                        'parte': f'nivel_{nivel_nombre.lower()}',
+                        'nivel_desempeno': nivel_nombre.lower()
+                    }
+                })
+        else:
+            # Indicador cabe completo en un chunk
+            chunks.append({
+                'contenido': indicador_texto,
+                'metadata': chunk_metadata
+            })
+    
+    return chunks
+
+
+def chunking_generico(contenido: str, doc_metadata: dict) -> List[Dict]:
+    """
+    Chunking para manuales y otros documentos
+    Respeta estructura de headers (##, ###)
+    """
+    
+    chunks = []
+    
+    # Dividir por secciones principales (##)
+    secciones = re.split(r'(?=^## )', contenido, flags=re.MULTILINE)
+    
+    chunk_actual = ""
+    metadata_actual = doc_metadata.copy()
+    
+    for seccion in secciones:
+        if not seccion.strip():
+            continue
+        
+        # Extraer título de la sección
+        titulo_match = re.search(r'^##\s+(.+?)(?:\n|$)', seccion, re.MULTILINE)
+        titulo_seccion = titulo_match.group(1).strip() if titulo_match else "Sin título"
+        
+        # Si agregar esta sección excede el límite, guardar chunk actual
+        if len(chunk_actual) + len(seccion) > MAX_CHUNK_SIZE and len(chunk_actual) > MIN_CHUNK_SIZE:
+            chunks.append({
+                'contenido': chunk_actual,
+                'metadata': metadata_actual
+            })
+            
+            # Iniciar nuevo chunk con overlap (últimas líneas del anterior)
+            lineas_anteriores = chunk_actual.split('\n')[-5:]  # Últimas 5 líneas
+            chunk_actual = '\n'.join(lineas_anteriores) + '\n\n' + seccion
+            metadata_actual = {
+                **doc_metadata,
+                'seccion': titulo_seccion
+            }
+        else:
+            chunk_actual += '\n\n' + seccion if chunk_actual else seccion
+            metadata_actual['seccion'] = titulo_seccion
+    
+    # Agregar último chunk
+    if chunk_actual.strip() and len(chunk_actual) > MIN_CHUNK_SIZE:
+        chunks.append({
+            'contenido': chunk_actual,
+            'metadata': metadata_actual
+        })
+    
+    return chunks
+
+
+# ============================================
+# GENERACIÓN DE EMBEDDINGS CON CACHÉ
+# ============================================
+
+def generar_embedding_con_cache(texto: str, chunk_hash: str) -> Tuple[List[float], int, float]:
+    """
+    Genera embedding con sistema de caché
+    Evita re-calcular embeddings idénticos
+    """
+    
+    # Buscar en caché
+    cache_result = supabase.table('embeddings_cache')\
+        .select('embedding, tokens_usados')\
+        .eq('content_hash', chunk_hash)\
+        .eq('model', EMBEDDING_MODEL)\
+        .maybeSingle()\
+        .execute()
+    
+    if cache_result.data:
+        return cache_result.data['embedding'], cache_result.data['tokens_usados'], 0.0
+    
+    # Generar embedding nuevo
+    try:
+        resp = openai.embeddings.create(
+            model=EMBEDDING_MODEL,
+            input=texto,
+            dimensions=EMBEDDING_DIMENSIONS  # Reducción dimensional
+        )
+        
+        embedding = resp.data[0].embedding
+        tokens = resp.usage.total_tokens
+        
+        # text-embedding-3-large: $0.13 por 1M tokens
+        cost = (tokens / 1_000_000) * 0.13
+        
+        # Guardar en caché
+        supabase.table('embeddings_cache').insert({
+            'content_hash': chunk_hash,
+            'model': EMBEDDING_MODEL,
+            'embedding': embedding,
+            'tokens_usados': tokens,
+            'dimensions': EMBEDDING_DIMENSIONS,
+            'created_at': datetime.now().isoformat()
+        }).execute()
+        
+        return embedding, tokens, cost
+        
+    except Exception as e:
+        print(f"  ⚠️  Error generando embedding: {e}")
+        raise
+
+
+def procesar_documento_batch(doc: dict) -> Tuple[int, int, float]:
+    """
+    Procesa un documento completo:
+    1. Extrae metadata
+    2. Chunking semántico
+    3. Genera embeddings
+    4. Guarda en BD
+    """
+    
+    try:
+        # Marcar como procesando
+        supabase.table('documentos_oficiales')\
+            .update({'estado_procesamiento': 'procesando'})\
+            .eq('id', doc['id'])\
+            .execute()
+        
+        contenido = doc.get('contenido_markdown') or doc.get('contenido_texto', '')
+        
+        if not contenido:
+            raise ValueError("Documento sin contenido")
+        
+        # 1. Extraer metadata del documento
+        doc_metadata = extraer_metadata_documento(contenido, doc)
+        
+        # 2. Chunking semántico
+        chunks = chunking_semantico_markdown(contenido, doc_metadata)
+        
+        print(f"  📑 {len(chunks)} chunks semánticos generados")
+        
+        # 3. Generar embeddings para cada chunk
+        total_tokens = 0
+        total_cost = 0.0
+        chunks_guardados = 0
+        
+        for idx, chunk_data in enumerate(chunks):
+            chunk_texto = chunk_data['contenido']
+            chunk_metadata = chunk_data['metadata']
+            
+            # Hash del contenido para caché
+            chunk_hash = hashlib.sha256(chunk_texto.encode()).hexdigest()
+            
+            # Generar embedding con caché
+            embedding, tokens, cost = generar_embedding_con_cache(chunk_texto, chunk_hash)
+            
+            # 4. Guardar chunk en BD
             supabase.table('chunks_documentos').insert({
                 'documento_id': doc['id'],
                 'contenido': chunk_texto,
                 'chunk_index': idx,
+                'chunk_hash': chunk_hash,
                 'embedding': embedding,
-                'metadata': {'tokens': tokens, 'length': len(chunk_texto)}
+                'metadata': {
+                    **chunk_metadata,
+                    'tokens': tokens,
+                    'length': len(chunk_texto),
+                    'embedding_model': EMBEDDING_MODEL,
+                    'embedding_dimensions': EMBEDDING_DIMENSIONS
+                }
             }).execute()
             
             total_tokens += tokens
             total_cost += cost
+            chunks_guardados += 1
         
-        # Marcar documento como procesado
+        # 5. Marcar documento como completado
         supabase.table('documentos_oficiales').update({
             'procesado': True,
             'fecha_procesamiento': datetime.now().isoformat(),
-            'embedding_model': 'text-embedding-3-small',
+            'embedding_model': EMBEDDING_MODEL,
             'etapa_actual': 'completado',
             'progreso_procesamiento': 100,
-            'estado_procesamiento': 'exitoso'
+            'estado_procesamiento': 'exitoso',
+            'metadata': {
+                'chunks_generados': chunks_guardados,
+                'tokens_embeddings': total_tokens,
+                'costo_embeddings_usd': round(total_cost, 4)
+            }
         }).eq('id', doc['id']).execute()
         
-        loaded += 1
-        print(f"✅ {doc['id']}: {len(chunks)} chunks, {total_tokens} tokens")
+        print(f"  ✅ {chunks_guardados} chunks guardados | {total_tokens:,} tokens | ${total_cost:.4f}")
+        
+        return chunks_guardados, total_tokens, total_cost
+        
     except Exception as e:
-        supabase.table('documentos_oficiales').update({'estado_procesamiento': 'fallido', 'error_procesamiento': str(e), 'etapa_fallida': 'embeddings'}).eq('id', doc['id']).execute()
-        print(f"❌ {doc['id']}: {e}")
+        # Marcar como fallido
+        supabase.table('documentos_oficiales').update({
+            'estado_procesamiento': 'fallido',
+            'error_procesamiento': str(e),
+            'etapa_fallida': 'embeddings'
+        }).eq('id', doc['id']).execute()
+        
+        print(f"  ❌ Error: {e}")
+        raise
 
-print(f"\nCargados: {loaded}")
-print(f"Tokens: {total_tokens}")
-print(f"Costo: ${total_cost:.4f}")
-sys.exit(0)
+
+# ============================================
+# PROCESAMIENTO PRINCIPAL
+# ============================================
+
+# Buscar documentos listos para embeddings
+# IMPORTANTE: Buscar en 'transformado' no en 'texto_extraido'
+docs = supabase.table('documentos_oficiales')\
+    .select('id, contenido_markdown, contenido_texto, titulo, tipo_documento')\
+    .eq('etapa_actual', 'transformado')\
+    .eq('procesado', False)\
+    .limit(50)\
+    .execute().data or []
+
+print(f"🔢 Generando embeddings para {len(docs)} documentos...")
+print(f"🤖 Modelo: {EMBEDDING_MODEL} ({EMBEDDING_DIMENSIONS}D)")
+print(f"📏 Chunking: semántico adaptativo")
+
+if len(docs) == 0:
+    print("\nℹ️  No hay documentos pendientes de carga")
+    print("\nCargados: 0")
+    print("Chunks: 0")
+    print("Tokens: 0")
+    print("Costo: $0.0000")
+    sys.exit(0)
+
+# Procesar documentos
+loaded = 0
+total_chunks = 0
+total_tokens = 0
+total_cost = 0.0
+
+for doc in docs:
+    try:
+        print(f"\n📄 {doc['titulo']}")
+        chunks, tokens, cost = procesar_documento_batch(doc)
+        
+        loaded += 1
+        total_chunks += chunks
+        total_tokens += tokens
+        total_cost += cost
+        
+    except Exception as e:
+        print(f"  ❌ Error procesando documento: {e}")
+        continue
+
+# Reporte final
+print("\n" + "="*60)
+print(f"✅ Documentos cargados: {loaded}/{len(docs)}")
+print(f"📦 Chunks generados: {total_chunks:,}")
+print(f"🎯 Tokens totales: {total_tokens:,}")
+print(f"💰 Costo total: ${total_cost:.4f} USD")
+print(f"📊 Promedio: {total_chunks//max(loaded,1)} chunks/doc, ${total_cost/max(loaded,1):.4f}/doc")
+
+# ============================================
+# EXPORTAR MÉTRICAS JSON
+# ============================================
+
+def export_metrics_json(metrics: dict, filepath: str):
+    """Exporta métricas en formato JSON para GitHub Actions"""
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(metrics, f, indent=2, ensure_ascii=False)
+        print(f"\n📄 Métricas exportadas: {filepath}")
+    except Exception as e:
+        print(f"\n⚠️ Error exportando métricas: {e}")
+
+# Preparar métricas para exportación
+metrics = {
+    'timestamp': datetime.now().isoformat(),
+    'fase': 'load',
+    'documentos_procesados': len(docs),
+    'documentos_cargados': loaded,
+    'documentos_fallidos': len(docs) - loaded,
+    'tasa_exito': round(loaded / max(len(docs), 1) * 100, 2),
+    'chunks': {
+        'total_generados': total_chunks,
+        'promedio_por_documento': total_chunks // max(loaded, 1)
+    },
+    'embeddings': {
+        'modelo': EMBEDDING_MODEL,
+        'dimensiones': EMBEDDING_DIMENSIONS,
+        'tokens_totales': total_tokens,
+        'tokens_promedio_por_doc': total_tokens // max(loaded, 1)
+    },
+    'costos': {
+        'total_usd': round(total_cost, 4),
+        'promedio_por_documento_usd': round(total_cost / max(loaded, 1), 4),
+        'costo_por_1k_tokens_usd': 0.00013  # text-embedding-3-large
+    },
+    'configuracion': {
+        'max_chunk_size': MAX_CHUNK_SIZE,
+        'min_chunk_size': MIN_CHUNK_SIZE,
+        'overlap_size': OVERLAP_SIZE
+    }
+}
+
+export_metrics_json(metrics, 'load_metrics.json')
+
+sys.exit(0 if loaded > 0 else 1)
