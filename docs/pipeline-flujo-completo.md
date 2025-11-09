@@ -122,7 +122,7 @@ DocenteMás Website
     │   └─> Detectar: "Manual Ed. Básica 2025.pdf"
     │
     ├─> Descargar PDF
-    │   └─> Guardar en Storage: documentos-oficiales/manuales/2025/...
+    │   └─> Guardar en Storage: documentos-mineduc/manuales/2025/...
     │
     └─> Registrar en BD
         INSERT INTO documentos_oficiales (
@@ -208,7 +208,7 @@ Si tipo_documento = 'rubricas':
 ### 1. Sin Almacenamiento Redundante
 ```python
 # ❌ ANTES: Descargar desde Storage
-pdf_data = supabase.storage.from_('documentos-oficiales').download(storage_path)
+pdf_data = supabase.storage.from_('documentos-mineduc').download(storage_path)
 
 # ✅ AHORA: Descargar desde URL original
 pdf_data = requests.get(url_original).content

@@ -188,7 +188,7 @@ CREATE EXTENSION IF NOT EXISTS pg_cron;
 ```sql
 -- Bucket para documentos oficiales
 INSERT INTO storage.buckets (id, name, public) 
-VALUES ('documentos-oficiales', 'documentos-oficiales', false);
+VALUES ('documentos-mineduc', 'documentos-mineduc', false);
 ```
 
 ## 🛡️ Seguridad y Permisos

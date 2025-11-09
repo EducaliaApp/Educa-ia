@@ -55,7 +55,7 @@ async function handler(req: Request): Promise<Response> {
     if (!documento.storage_path) throw new Error('Documento no tiene storage_path');
     
     const download = await supabase.storage
-      .from('documentos-oficiales')
+      .from('documentos-mineduc')
       .download(documento.storage_path);
       
     if (download.error) throw download.error;
