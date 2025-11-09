@@ -178,13 +178,116 @@ jobs:
           retention-days: 7
 
   # ============================================
+  # FASE 1.5: Verificar Storage
+  # ============================================
+  
+  check_storage:
+    name: "🔍 FASE 1.5: Verificar Storage"
+    runs-on: ubuntu-latest
+    needs: [preflight, extract]
+    if: |
+      always() && 
+      needs.preflight.outputs.can_proceed == 'true' &&
+      (needs.extract.outputs.has_changes == 'true' || github.event.inputs.force_full_sync == 'true')
+    timeout-minutes: 10
+    outputs:
+      docs_sin_archivo: ${{ steps.check.outputs.sin_archivo }}
+      docs_verificados: ${{ steps.check.outputs.verificados }}
+      
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Instalar dependencias
+        run: pip install supabase python-dotenv
+      
+      - name: Verificar archivos en Storage
+        id: check
+        run: |
+          python - <<'PYTHON'
+          import os
+          from supabase import create_client
+          
+          supabase = create_client(
+              os.getenv('SUPABASE_URL'),
+              os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+          )
+          
+          # Obtener documentos con storage_path
+          docs = supabase.table('documentos_oficiales')\
+              .select('id, titulo, storage_path')\
+              .eq('etapa_actual', 'descargado')\
+              .not_.is_('storage_path', 'null')\
+              .execute().data or []
+          
+          print(f"📋 Verificando {len(docs)} documentos...")
+          
+          sin_archivo = []
+          
+          for doc in docs:
+              try:
+                  # Intentar descargar
+                  supabase.storage.from_('documentos-mineduc').download(doc['storage_path'])
+                  print(f"  ✅ {doc['titulo'][:50]}")
+              except Exception as e:
+                  # Archivo no existe
+                  print(f"  ❌ {doc['titulo'][:50]} - {str(e)[:50]}")
+                  sin_archivo.append(doc)
+          
+          print(f"\n📊 Resultados:")
+          print(f"  ✅ Con archivo: {len(docs) - len(sin_archivo)}")
+          print(f"  ❌ Sin archivo: {len(sin_archivo)}")
+          
+          # Outputs para GitHub Actions
+          print(f"::set-output name=verificados::{len(docs)}")
+          print(f"::set-output name=sin_archivo::{len(sin_archivo)}")
+          
+          if sin_archivo:
+              print(f"\n🔧 Marcando {len(sin_archivo)} documentos para re-descarga...")
+              
+              for doc in sin_archivo:
+                  try:
+                      supabase.table('documentos_oficiales').update({
+                          'etapa_actual': 'pendiente',
+                          'metadata': {
+                              'requiere_redownload': True,
+                              'storage_path_invalido': doc['storage_path'],
+                              'marcado_para_redownload': True
+                          }
+                      }).eq('id', doc['id']).execute()
+                      print(f"  ✅ Marcado: {doc['titulo'][:40]}")
+                  except Exception as e:
+                      print(f"  ⚠️ Error marcando {doc['id']}: {str(e)[:50]}")
+              
+              print(f"\n✅ Marcados exitosamente")
+              print(f"📢 RECOMENDACIÓN: Ejecutar Edge Function con force=true para re-descargar")
+          PYTHON
+      
+      - name: Generar summary
+        run: |
+          echo "### 🔍 Fase 1.5: Verificación Storage" >> $GITHUB_STEP_SUMMARY
+          echo "- **Documentos verificados:** ${{ steps.check.outputs.verificados }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Sin archivo en Storage:** ${{ steps.check.outputs.sin_archivo }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.check.outputs.sin_archivo }}" -gt 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **Acción requerida:** ${{ steps.check.outputs.sin_archivo }} documentos marcados para re-descarga" >> $GITHUB_STEP_SUMMARY
+            echo "💡 **Solución:** Ejecutar workflow con \`force_full_sync=true\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # ============================================
   # FASE 2: Transform
   # ============================================
   
   transform:
     name: "🔄 FASE 2: Transform con IA"
     runs-on: ubuntu-latest
-    needs: [preflight, extract]
+    needs: [preflight, extract, check_storage]
     if: |
       always() && 
       needs.preflight.outputs.can_proceed == 'true' &&
@@ -439,7 +542,7 @@ jobs:
   metrics:
     name: "📊 FASE 6: Registrar Métricas"
     runs-on: ubuntu-latest
-    needs: [extract, transform, load, validate, optimize]
+    needs: [extract, check_storage, transform, load, validate, optimize]
     if: always()
     timeout-minutes: 10
     outputs:
@@ -502,12 +605,20 @@ jobs:
           echo "| Fase | Resultado |" >> $GITHUB_STEP_SUMMARY
           echo "|------|-----------|" >> $GITHUB_STEP_SUMMARY
           echo "| Extract | ${{ needs.extract.outputs.nuevos || 0 }} nuevos, ${{ needs.extract.outputs.actualizados || 0 }} actualizados |" >> $GITHUB_STEP_SUMMARY
+          echo "| Check Storage | ${{ needs.check_storage.outputs.verificados || 0 }} verificados, ${{ needs.check_storage.outputs.sin_archivo || 0 }} sin archivo |" >> $GITHUB_STEP_SUMMARY
           echo "| Transform | ${{ needs.transform.outputs.transformed || 0 }} docs (\$${{ needs.transform.outputs.cost || 0 }}) |" >> $GITHUB_STEP_SUMMARY
           echo "| Load | ${{ needs.load.outputs.loaded || 0 }} docs, ${{ needs.load.outputs.tokens || 0 }} tokens (\$${{ needs.load.outputs.cost || 0 }}) |" >> $GITHUB_STEP_SUMMARY
           echo "| Validate | ${{ needs.validate.outputs.validated || 0 }} chunks, calidad ${{ needs.validate.outputs.quality || 0 }}% |" >> $GITHUB_STEP_SUMMARY
           echo "| **TOTAL** | **\$${{ steps.costs.outputs.total }} USD** |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Estado:** ${{ steps.record.outputs.estado }}" >> $GITHUB_STEP_SUMMARY
+          
+          # Advertencia si hay archivos faltantes
+          if [ "${{ needs.check_storage.outputs.sin_archivo || 0 }}" -gt 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **ADVERTENCIA:** ${{ needs.check_storage.outputs.sin_archivo }} documentos sin archivo en Storage" >> $GITHUB_STEP_SUMMARY
+            echo "💡 **Acción recomendada:** Re-ejecutar con \`force_full_sync=true\`" >> $GITHUB_STEP_SUMMARY
+          fi
 
   # ============================================
   # Notificaciones
@@ -516,7 +627,7 @@ jobs:
   notify:
     name: "📢 Notificación Final"
     runs-on: ubuntu-latest
-    needs: [extract, transform, load, validate, metrics]
+    needs: [extract, check_storage, transform, load, validate, metrics]
     if: always()
     
     steps:

@@ -154,59 +154,70 @@ def intentar_resubir_desde_url(doc_id, url_original, storage_path):
     """
     Intenta descargar PDF de URL original y re-subirlo a Storage
     
-    Returns:
-        (bool, bytes|None): (exito, pdf_bytes)
+    🔧 FIX: Separar headers de file_options correctamente
     """
     try:
         print(f"  🔄 Descargando desde URL original...")
         
-        # Descargar de URL original con timeout
+        # Descargar de URL original
         response = requests.get(url_original, timeout=30, stream=True)
         response.raise_for_status()
         
         pdf_bytes = response.content
         
-        # Validar que es un PDF
+        # Validar PDF
         if not pdf_bytes.startswith(b'%PDF'):
             print(f"  ⚠️  No es un PDF válido")
             return False, None
         
         print(f"  ✅ Descargado: {len(pdf_bytes):,} bytes")
         
-        # Re-subir a Storage
+        # 🔧 FIX CRÍTICO: Usar file_options correctamente
         print(f"  💾 Re-subiendo a Storage...")
+        
         upload_result = supabase.storage.from_('documentos-mineduc').upload(
-            storage_path,
-            pdf_bytes,
-            {'content-type': 'application/pdf', 'upsert': True}
+            path=storage_path,
+            file=pdf_bytes,
+            file_options={
+                'content-type': 'application/pdf',
+                'upsert': 'true'  # 🔧 Como string, no bool
+            }
         )
         
+        # Verificar error
         if hasattr(upload_result, 'error') and upload_result.error:
             print(f"  ⚠️  Error subiendo: {upload_result.error}")
             return False, None
         
         print(f"  ✅ Re-subido exitosamente")
         
-        # Actualizar BD con fecha de re-subida
-        supabase.table('documentos_oficiales').update({
-            'metadata': {
-                'resubido_en': datetime.now().isoformat(),
-                'razon': 'archivo_faltante_en_storage'
-            }
-        }).eq('id', doc_id).execute()
+        # Actualizar metadata en BD
+        try:
+            supabase.table('documentos_oficiales').update({
+                'fecha_actualizacion': datetime.now().isoformat(),
+                'metadata': supabase.rpc('jsonb_set', {
+                    'target': supabase.table('documentos_oficiales').select('metadata').eq('id', doc_id),
+                    'path': '{resubido}',
+                    'value': json.dumps({
+                        'fecha': datetime.now().isoformat(),
+                        'razon': 'archivo_faltante_storage'
+                    })
+                })
+            }).eq('id', doc_id).execute()
+        except Exception as e:
+            print(f"  ⚠️  No se pudo actualizar metadata: {e}")
         
         return True, pdf_bytes
     
     except requests.Timeout:
-        print(f"  ❌ Timeout descargando URL original")
+        print(f"  ❌ Timeout descargando URL")
         return False, None
     except requests.RequestException as e:
         print(f"  ❌ Error HTTP: {e}")
         return False, None
     except Exception as e:
-        print(f"  ❌ Error re-subiendo: {e}")
+        print(f"  ❌ Error: {str(e)[:100]}")
         return False, None
-
 
 def descargar_pdf_con_verificacion(doc):
     """
