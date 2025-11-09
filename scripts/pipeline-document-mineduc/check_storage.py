@@ -32,7 +32,7 @@ def marcar_documentos_sin_storage():
     for doc in docs:
         try:
             # Intentar descargar
-            supabase.storage.from_('documentos-mineduc').download(doc['storage_path'])
+            supabase.storage.from_('documentos-oficiales').download(doc['storage_path'])
             print(f"  ✅ {doc['titulo'][:50]}")
         except:
             # Archivo no existe

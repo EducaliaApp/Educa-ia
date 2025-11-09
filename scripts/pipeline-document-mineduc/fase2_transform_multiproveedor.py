@@ -134,7 +134,7 @@ def verificar_archivo_storage(storage_path):
     """
     try:
         # Intentar obtener URL pública
-        url = supabase.storage.from_('documentos-mineduc').get_public_url(storage_path)
+        url = supabase.storage.from_('documentos-oficiales').get_public_url(storage_path)
         
         # Hacer HEAD request para verificar existencia
         response = requests.head(url, timeout=5)
@@ -175,7 +175,7 @@ def intentar_resubir_desde_url(doc_id, url_original, storage_path):
         # 🔧 FIX CRÍTICO: Usar file_options correctamente
         print(f"  💾 Re-subiendo a Storage...")
         
-        upload_result = supabase.storage.from_('documentos-mineduc').upload(
+        upload_result = supabase.storage.from_('documentos-oficiales').upload(
             path=storage_path,
             file=pdf_bytes,
             file_options={
@@ -254,7 +254,7 @@ def descargar_pdf_con_verificacion(doc):
     
     # 3. Descargar normalmente
     try:
-        pdf_bytes = supabase.storage.from_('documentos-mineduc').download(storage_path)
+        pdf_bytes = supabase.storage.from_('documentos-oficiales').download(storage_path)
         return True, pdf_bytes
     
     except Exception as e:

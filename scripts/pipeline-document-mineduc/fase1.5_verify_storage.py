@@ -47,7 +47,7 @@ def verificar_archivo_existe(storage_path):
     """
     try:
         # Obtener URL pública
-        url = supabase.storage.from_('documentos-mineduc').get_public_url(storage_path)
+        url = supabase.storage.from_('documentos-oficiales').get_public_url(storage_path)
         
         # HEAD request para verificar existencia
         response = requests.head(url, timeout=5)
@@ -122,7 +122,7 @@ def redownload_y_upload(doc_id, url_original, storage_path, titulo):
             # Subir a Storage
             print(f"      💾 Subiendo a Storage...")
             
-            upload_result = supabase.storage.from_('documentos-mineduc').upload(
+            upload_result = supabase.storage.from_('documentos-oficiales').upload(
                 path=storage_path,
                 file=pdf_bytes,
                 file_options={
