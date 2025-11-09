@@ -1,0 +1,46 @@
+# ============================================
+# SETUP: Sistema de Caché
+# ============================================
+
+IMPORTANTE: Ejecutar este SQL en Supabase ANTES de usar fase2_transform_multiproveedor.py
+
+## Paso 1: Ir a Supabase SQL Editor
+
+1. Abrir https://supabase.com/dashboard
+2. Seleccionar tu proyecto
+3. Ir a "SQL Editor"
+4. Crear nueva query
+
+## Paso 2: Ejecutar este SQL
+
+```sql
+CREATE TABLE IF NOT EXISTS extraccion_cache (
+    pdf_hash TEXT PRIMARY KEY,
+    tipo_documento TEXT NOT NULL,
+    contenido_markdown TEXT NOT NULL,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_accessed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    access_count INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_cache_lookup 
+ON extraccion_cache(pdf_hash, tipo_documento);
+
+ALTER TABLE extraccion_cache ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Service role access" ON extraccion_cache
+    FOR ALL
+    USING (auth.role() = 'service_role');
+```
+
+## Paso 3: Verificar
+
+```sql
+SELECT COUNT(*) FROM extraccion_cache;
+-- Debería retornar 0 (tabla vacía pero creada)
+```
+
+## Listo!
+
+Ahora puedes ejecutar el pipeline y el caché funcionará automáticamente.
