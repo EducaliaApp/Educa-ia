@@ -13,20 +13,22 @@ import { PDFExtractor, type PDFMetadata } from '../shared/pdf-extractor.ts'
 const CONFIG = {
   // Rate limiting
   DELAY_BETWEEN_CATEGORIES: 2000, // 2s entre categorías
-  DELAY_BETWEEN_DOCUMENTS: 500,   // 500ms entre docs
+  DELAY_BETWEEN_DOCUMENTS: 100,   // Reducido a 100ms para scraping más rápido
   MAX_RETRIES: 3,
   RETRY_DELAY_BASE: 1000, // Base para exponential backoff (1s, 2s, 4s)
 
   // Procesamiento
-  MAX_CONCURRENT_DOWNLOADS: 3,
-  PDF_SAMPLE_PAGES: 3, // Primeras 3 páginas para clasificación IA
-  PDF_DOWNLOAD_TIMEOUT: 30000, // 30s timeout para descargas
+  MAX_CONCURRENT_DOWNLOADS: 5, // Aumentado para procesamiento paralelo
+  MAX_DOCS_PER_EXECUTION: 20, // Límite por ejecución para evitar timeouts
+  PDF_SAMPLE_PAGES: 2, // Solo 2 páginas para clasificación IA (reducido)
+  PDF_DOWNLOAD_TIMEOUT: 15000, // Reducido a 15s timeout
+  ENABLE_AI_CLASSIFICATION: false, // ⚠️ DESHABILITADO temporalmente para acelerar scraping
 
   // Thresholds
   MIN_AI_CONFIDENCE: 0.70, // Confianza mínima para clasificación IA
   MIN_PDF_SIZE: 10 * 1024, // 10KB mínimo
   MAX_PDF_SIZE: 100 * 1024 * 1024, // 100MB máximo
-  PDF_SAMPLE_SIZE: 500000, // 500KB para muestra de clasificación
+  PDF_SAMPLE_SIZE: 200000, // Reducido a 200KB (era 500KB)
 }
 
 // URLs oficiales del MINEDUC con subcategorías
@@ -111,6 +113,8 @@ interface Reporte {
   fecha_monitoreo: string
   documentos_detectados: number
   documentos_nuevos: number
+  documentos_nuevos_procesados: number
+  documentos_nuevos_pendientes: number
   documentos_actualizados: number
   documentos_duplicados: number
   documentos_invalidos: number
@@ -212,7 +216,11 @@ export async function handler(req: Request): Promise<Response> {
     
     console.log('\n✅ Monitoreo completado')
     console.log(`  ⏱️  Tiempo total: ${((reporte.tiempo_total_ms) / 1000).toFixed(2)}s`)
-    console.log(`  📊 Nuevos: ${analisisDocumentos.nuevos.length}`)
+    console.log(`  📊 Nuevos detectados: ${analisisDocumentos.nuevos.length}`)
+    console.log(`     ✅ Procesados: ${reporte.documentos_nuevos_procesados}`)
+    if (reporte.documentos_nuevos_pendientes > 0) {
+      console.log(`     ⏳ Pendientes: ${reporte.documentos_nuevos_pendientes} (próxima ejecución)`)
+    }
     console.log(`  🔄 Actualizados: ${analisisDocumentos.actualizados.length}`)
     console.log(`  ⏭️  Duplicados: ${analisisDocumentos.duplicados.length}`)
     
@@ -314,8 +322,8 @@ async function scrapearDocumentos(
           // 1. Intentar parsing básico del nombre
           let metadata = parsearNombreArchivo(link.nombre, tipo, html)
 
-          // 2. Si falla, usar IA con contexto mejorado (con retry)
-          if (!metadata || (metadata as any).confianza < 0.7) {
+          // 2. Si falla Y la IA está habilitada, usar clasificación IA
+          if (CONFIG.ENABLE_AI_CLASSIFICATION && (!metadata || (metadata as any).confianza < 0.7)) {
             console.log(`    🤖 Clasificación IA para: ${link.nombre}`)
             const metadataIA = await retryWithBackoff(
               () => clasificarConIAMejorada(
@@ -347,7 +355,7 @@ async function scrapearDocumentos(
               nivel: inferirNivelPorTipo(tipo),
               modalidad: 'regular'
             }
-            console.log(`    ℹ️  Usando defaults (baja confianza)`)
+            console.log(`    ℹ️  Usando defaults (parsing básico)`)
           }
 
           // Solo agregar si tiene año reciente y metadata válida
@@ -517,7 +525,7 @@ async function analizarDocumentos(
 }
 
 /**
- * Procesa documentos nuevos
+ * Procesa documentos nuevos en lotes con paralelismo controlado
  */
 async function procesarDocumentosNuevos(
   supabase: any,
@@ -527,21 +535,43 @@ async function procesarDocumentosNuevos(
   
   const resultados: ResultadoProcesamiento[] = []
   
-  for (const doc of documentosNuevos) {
-    console.log(`\n📥 Procesando nuevo documento: ${doc.nombre}`)
+  // Limitar procesamiento por ejecución para evitar timeout
+  const documentosAProcesar = documentosNuevos.slice(0, CONFIG.MAX_DOCS_PER_EXECUTION)
+  const documentosPendientes = documentosNuevos.length - documentosAProcesar.length
+  
+  if (documentosPendientes > 0) {
+    console.log(`\n⚠️  Procesando ${documentosAProcesar.length} de ${documentosNuevos.length} documentos`)
+    console.log(`   ${documentosPendientes} documentos quedarán pendientes para próxima ejecución`)
+  }
+  
+  // Procesamiento paralelo con límite de concurrencia
+  const concurrencia = CONFIG.MAX_CONCURRENT_DOWNLOADS
+  
+  for (let i = 0; i < documentosAProcesar.length; i += concurrencia) {
+    const lote = documentosAProcesar.slice(i, i + concurrencia)
+    console.log(`\n� Procesando lote ${Math.floor(i / concurrencia) + 1}/${Math.ceil(documentosAProcesar.length / concurrencia)} (${lote.length} docs)`)
     
-    try {
-      const resultado = await procesarDocumentoNuevo(supabase, doc, processor)
-      resultados.push(resultado)
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
-      console.error(`  ✗ Error procesando ${doc.nombre}:`, errorMessage)
-      resultados.push({
-        documento: doc.nombre,
-        exito: false,
-        error: errorMessage
-      })
-    }
+    // Procesar lote en paralelo
+    const promesas = lote.map(async (doc) => {
+      console.log(`  📥 ${doc.nombre}`)
+      
+      try {
+        const resultado = await procesarDocumentoNuevo(supabase, doc, processor)
+        console.log(`     ✅ Completado`)
+        return resultado
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+        console.error(`     ❌ Error: ${errorMessage}`)
+        return {
+          documento: doc.nombre,
+          exito: false,
+          error: errorMessage
+        }
+      }
+    })
+    
+    const resultadosLote = await Promise.all(promesas)
+    resultados.push(...resultadosLote)
   }
   
   return resultados
@@ -576,10 +606,15 @@ function generarReporte(
   resultados: ResultadoProcesamiento[],
   tiempoMs: number
 ): Reporte {
+  const documentosProcesados = resultados.length
+  const documentosPendientes = Math.max(0, analisis.nuevos.length - documentosProcesados)
+  
   return {
     fecha_monitoreo: new Date().toISOString(),
     documentos_detectados: documentosDetectados.length,
     documentos_nuevos: analisis.nuevos.length,
+    documentos_nuevos_procesados: documentosProcesados,
+    documentos_nuevos_pendientes: documentosPendientes,
     documentos_actualizados: analisis.actualizados.length,
     documentos_duplicados: analisis.duplicados.length,
     documentos_invalidos: analisis.invalidos.length,
@@ -605,65 +640,71 @@ function extraerPDFsPorSubcategoria(
     resultado[subcategoria] = []
   }
   
-  // Buscar tabs de Elementor
-  const patronTab = /<div[^>]*id="elementor-tab-title-\d+"[^>]*>([^<]+)<\/div>[\s\S]*?<div[^>]*id="elementor-tab-content-\d+"[^>]*role="tabpanel"[^>]*>([\s\S]*?)<\/div>/gi
+  // ESTRATEGIA: Extraer TODOS los PDFs primero, luego clasificar por URL/nombre
+  const todosPDFs = extraerLinksPDF(html)
   
-  let matchTab
-  while ((matchTab = patronTab.exec(html)) !== null) {
-    const tituloTab = matchTab[1].trim()
-    const contenidoTab = matchTab[2]
+  console.log(`      📄 Total PDFs encontrados: ${todosPDFs.length}`)
+  
+  // Clasificar cada PDF por su URL/nombre
+  for (const pdf of todosPDFs) {
+    const urlLower = pdf.url.toLowerCase()
+    const nombreLower = pdf.nombre.toLowerCase()
+    const textoCompleto = `${urlLower} ${nombreLower}`
     
-    // Matching mejorado con palabras clave
-    let subcategoriaDestino = subcategorias[0] // Default: primera subcategoría
+    let subcategoriaAsignada = subcategorias[0] // Default
     
-    const tituloLower = tituloTab.toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Eliminar tildes para comparación
+    // Patrones de clasificación basados en URL/nombre
+    const clasificadores: Record<string, RegExp[]> = {
+      'Programas EMTP': [
+        /programa.*estudio.*especialidad/i,
+        /emtp/i,
+        /tecnico.*profesional/i,
+        /especialidad-/i
+      ],
+      'Priorización Curricular': [
+        /priorizacion/i,
+        /priorizaci[oó]n/i,
+        /actualizacion.*priorizacion/i
+      ],
+      'Marco para la Buena Enseñanza': [
+        /marco.*buena.*ensenanza/i,
+        /marco.*buena.*enseñanza/i,
+        /mbe/i,
+        /\/marco-para-la-buena/i
+      ],
+      'Bases curriculares': [
+        /bases.*curriculares/i,
+        /programa.*estudio(?!.*especialidad)/i, // Programa de estudio (no especialidad)
+        /curricul/i
+      ],
+      'Rúbricas Portafolio': [
+        /rubrica/i,
+        /rúbrica/i,
+        /evaluacion.*docente/i
+      ]
+    }
     
-    // Buscar la mejor coincidencia
-    for (const sub of subcategorias) {
-      const subLower = sub.toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-      
-      // Patrones específicos por subcategoría
-      const patterns: Record<string, RegExp[]> = {
-        'programas emtp': [/emtp/i, /tecnico.*profesional/i, /tp/i],
-        'priorizacion curricular': [/priorizacion/i, /priorizaci[oó]n/i],
-        'marco para la buena ensenanza': [/marco/i, /buena.*ensenanza/i, /mbe/i],
-        'bases curriculares': [/bases.*curriculares/i, /curricul/i]
-      }
-      
-      // Primero intentar match directo
-      if (tituloLower.includes(subLower) || subLower.includes(tituloLower)) {
-        subcategoriaDestino = sub
-        break
-      }
-      
-      // Luego intentar patrones específicos
-      const subKey = subLower.replace(/\s+/g, ' ')
-      const relevantPatterns = patterns[subKey] || []
-      
-      if (relevantPatterns.some(pattern => pattern.test(tituloTab))) {
-        subcategoriaDestino = sub
-        break
+    // Buscar match
+    for (const [subcategoria, patrones] of Object.entries(clasificadores)) {
+      if (subcategorias.includes(subcategoria)) {
+        if (patrones.some(patron => patron.test(textoCompleto))) {
+          subcategoriaAsignada = subcategoria
+          break
+        }
       }
     }
     
-    const pdfs = extraerLinksPDF(contenidoTab)
-    if (pdfs.length > 0) {
-      resultado[subcategoriaDestino].push(...pdfs)
-      console.log(`      📝 Tab "${tituloTab}" → ${subcategoriaDestino}: ${pdfs.length} PDFs`)
+    // Agregar a la subcategoría correspondiente
+    if (!resultado[subcategoriaAsignada]) {
+      resultado[subcategoriaAsignada] = []
     }
+    resultado[subcategoriaAsignada].push(pdf)
   }
   
-  // Si no se encontraron tabs, extraer todos los PDFs sin categoría
-  const totalEncontrados = Object.values(resultado).reduce((sum, arr) => sum + arr.length, 0)
-  if (totalEncontrados === 0) {
-    console.log(`      ⚠️ No se encontraron tabs, extrayendo todos los PDFs`)
-    const todosPDFs = extraerLinksPDF(html)
-    if (subcategorias.length > 0) {
-      resultado[subcategorias[0]] = todosPDFs
+  // Mostrar resumen
+  for (const [subcategoria, pdfs] of Object.entries(resultado)) {
+    if (pdfs.length > 0) {
+      console.log(`      📁 ${subcategoria}: ${pdfs.length} PDFs`)
     }
   }
   
@@ -909,6 +950,9 @@ async function clasificarConIAMejorada(
       
       console.log(`      ✓ Texto extraído: ${textoMuestra.length} chars`)
       
+      // Limitar texto a máximo 1500 caracteres para evitar exceder contexto de IA
+      const textoLimitado = textoMuestra.substring(0, 1500)
+      
       // 3. Clasificar con IA usando contenido real
       const prompt = `Clasifica este documento educativo chileno del MINEDUC.
 
@@ -918,7 +962,7 @@ async function clasificarConIAMejorada(
 - Nombre archivo: ${link.nombre}
 
 **CONTENIDO (primeras páginas):**
-${textoMuestra.substring(0, 2000)}
+${textoLimitado}
 
 **INSTRUCCIONES:**
 Analiza el contenido y clasifica el documento. Responde SOLO con JSON válido (sin markdown):
