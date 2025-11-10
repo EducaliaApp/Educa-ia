@@ -11,18 +11,18 @@ import { PDFExtractor, type PDFMetadata } from '../shared/pdf-extractor.ts'
 // ============================================
 
 const CONFIG = {
-  // Rate limiting
-  DELAY_BETWEEN_CATEGORIES: 500, // 500ms entre categorías
-  DELAY_BETWEEN_DOCUMENTS: 100,   // Reducido a 100ms para scraping más rápido
-  MAX_RETRIES: 3,
-  RETRY_DELAY_BASE: 1000, // Base para exponential backoff (1s, 2s, 4s)
+  // Rate limiting - OPTIMIZADO para velocidad
+  DELAY_BETWEEN_CATEGORIES: 200, // Reducido de 500ms a 200ms
+  DELAY_BETWEEN_DOCUMENTS: 50,   // Reducido de 100ms a 50ms
+  MAX_RETRIES: 2, // Reducido de 3 a 2 reintentos
+  RETRY_DELAY_BASE: 500, // Reducido de 1000ms a 500ms
 
   // Procesamiento
   MAX_CONCURRENT_DOWNLOADS: 5, // Aumentado para procesamiento paralelo
   MAX_DOCS_PER_EXECUTION: 20, // Límite por ejecución para evitar timeouts
   PDF_SAMPLE_PAGES: 2, // Solo 2 páginas para clasificación IA (reducido)
-  PDF_DOWNLOAD_TIMEOUT: 15000, // Reducido a 15s timeout
-  ENABLE_AI_CLASSIFICATION: false, // ⚠️ DESHABILITADO temporalmente para acelerar scraping
+  PDF_DOWNLOAD_TIMEOUT: 10000, // Reducido a 10s timeout (era 15s)
+  ENABLE_AI_CLASSIFICATION: false, // ⚠️ DESHABILITADO para acelerar scraping
 
   // Thresholds
   MIN_AI_CONFIDENCE: 0.70, // Confianza mínima para clasificación IA
@@ -178,35 +178,56 @@ export async function handler(req: Request): Promise<Response> {
     const pdfExtractor = new PDFExtractor()
     
     // Validar request
-    const { force = false } = await req.json().catch(() => ({ force: false }))
+    const { force = false, skipScraping = false } = await req.json().catch(() => ({ force: false, skipScraping: false }))
     
-    // 1. SCRAPING con rate limiting
-    const documentosDetectados = await scrapearDocumentos(processor, aiAnalyzer, pdfExtractor)
+    let documentosDetectados: DocumentoDetectado[] = []
+    let analisisDocumentos: AnalisisDocumentos = {
+      nuevos: [],
+      actualizados: [],
+      duplicados: [],
+      invalidos: []
+    }
     
-    console.log(`\n📋 Total detectados: ${documentosDetectados.length} documentos`)
+    // OPTIMIZACIÓN: Solo scrapear si force=true o no hay documentos pendientes
+    const { count: pendientesCount } = await supabase
+      .from('documentos_oficiales')
+      .select('*', { count: 'exact', head: true })
+      .eq('etapa_actual', 'pendiente_descarga')
     
-    // 2. COMPARACIÓN con BD (detección de duplicados mejorada)
-    const analisisDocumentos = await analizarDocumentos(
-      supabase, 
-      documentosDetectados,
-      pdfExtractor,
-      aiAnalyzer
-    )
+    const debeScrapear = force || !skipScraping || (pendientesCount === 0)
     
-    console.log(`\n📊 Análisis completado:`)
-    console.log(`  🆕 Nuevos: ${analisisDocumentos.nuevos.length}`)
-    console.log(`  🔄 Actualizados: ${analisisDocumentos.actualizados.length}`)
-    console.log(`  ⏭️  Duplicados: ${analisisDocumentos.duplicados.length}`)
-    console.log(`  ❌ Inválidos: ${analisisDocumentos.invalidos.length}`)
-    
-    // 3. REGISTRO RÁPIDO: Insertar documentos nuevos en BD sin descargar
-    console.log(`\n📝 Registrando documentos nuevos en BD...`)
-    const documentosRegistrados = await registrarDocumentosNuevos(
-      supabase,
-      analisisDocumentos.nuevos
-    )
-    
-    console.log(`  ✅ ${documentosRegistrados.length} documentos registrados con etapa 'pendiente_descarga'`)
+    if (debeScrapear) {
+      console.log('📡 Ejecutando scraping de sitio web...')
+      // 1. SCRAPING con rate limiting
+      documentosDetectados = await scrapearDocumentos(processor, aiAnalyzer, pdfExtractor)
+      
+      console.log(`\n📋 Total detectados: ${documentosDetectados.length} documentos`)
+      
+      // 2. COMPARACIÓN con BD (detección de duplicados mejorada)
+      analisisDocumentos = await analizarDocumentos(
+        supabase, 
+        documentosDetectados,
+        pdfExtractor,
+        aiAnalyzer
+      )
+      
+      console.log(`\n📊 Análisis completado:`)
+      console.log(`  🆕 Nuevos: ${analisisDocumentos.nuevos.length}`)
+      console.log(`  🔄 Actualizados: ${analisisDocumentos.actualizados.length}`)
+      console.log(`  ⏭️  Duplicados: ${analisisDocumentos.duplicados.length}`)
+      console.log(`  ❌ Inválidos: ${analisisDocumentos.invalidos.length}`)
+      
+      // 3. REGISTRO RÁPIDO: Insertar documentos nuevos en BD sin descargar
+      console.log(`\n📝 Registrando documentos nuevos en BD...`)
+      const documentosRegistrados = await registrarDocumentosNuevos(
+        supabase,
+        analisisDocumentos.nuevos
+      )
+      
+      console.log(`  ✅ ${documentosRegistrados.length} documentos registrados con etapa 'pendiente_descarga'`)
+    } else {
+      console.log(`⏭️  Saltando scraping (${pendientesCount} documentos ya pendientes)`)
+    }
     
     // 4. PROCESAMIENTO: Descargar y procesar documentos pendientes (límite: MAX_DOCS_PER_EXECUTION)
     // Primero obtener estadísticas totales
@@ -247,24 +268,25 @@ export async function handler(req: Request): Promise<Response> {
     const reporte = {
       fecha_monitoreo: new Date().toISOString(),
       documentos_detectados: documentosDetectados.length,
-      documentos_nuevos: documentosNuevos.length,
-      documentos_actualizados: documentosActualizados.length,
-      documentos_duplicados: documentosDuplicados.length,
+      documentos_nuevos: analisisDocumentos.nuevos.length,
+      documentos_actualizados: analisisDocumentos.actualizados.length,
+      documentos_duplicados: analisisDocumentos.duplicados.length,
       procesamiento_exitoso: resultadosProcesamiento.filter(r => r.exito).length,
       procesamiento_fallido: resultadosProcesamiento.filter(r => !r.exito).length,
       pipeline_pendientes_descarga: totalPendientes || 0,
       pipeline_descargados: totalDescargados || 0,
       pipeline_total: (totalPendientes || 0) + (totalDescargados || 0),
+      tiempo_total_ms: Date.now() - startTime,
       detalles: resultadosProcesamiento
     }
     
     console.log('\n✅ Monitoreo completado')
-    console.log(`  📊 Nuevos: ${documentosNuevos.length}`)
-    console.log(`  🔄 Actualizados: ${documentosActualizados.length}`)
-    console.log(`  ⏭️  Duplicados (saltados): ${documentosDuplicados.length}`)
+    console.log(`  📊 Nuevos: ${analisisDocumentos.nuevos.length}`)
+    console.log(`  🔄 Actualizados: ${analisisDocumentos.actualizados.length}`)
+    console.log(`  ⏭️  Duplicados (saltados): ${analisisDocumentos.duplicados.length}`)
     
     // 6. Notificar a administradores si hay cambios
-    if (documentosNuevos.length > 0 || documentosActualizados.length > 0) {
+    if (analisisDocumentos.nuevos.length > 0 || analisisDocumentos.actualizados.length > 0) {
       await notificarAdministradores(supabase, reporte)
     }
 

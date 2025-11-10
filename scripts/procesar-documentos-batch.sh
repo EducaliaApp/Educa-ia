@@ -16,13 +16,23 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   echo "📦 Ejecución $i de $MAX_ITERATIONS"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   
+  # OPTIMIZACIÓN: Solo scrapear en la primera ejecución
+  if [ $i -eq 1 ]; then
+    echo "⏳ Ejecutando scraping + descarga... (timeout: 300s)"
+    payload='{"skipScraping": false}'
+  else
+    echo "⏳ Ejecutando solo descarga... (timeout: 60s)"
+    payload='{"skipScraping": true}'
+    timeout=60
+  fi
+  
   # Ejecutar Edge Function
   response=$(curl -s -X POST \
     "${SUPABASE_URL}/functions/v1/monitor-documentos-oficiales" \
     -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
     -H "Content-Type: application/json" \
-    --data '{}' \
-    --max-time 180)
+    --data "${payload}" \
+    --max-time ${timeout:-300})
   
   # Verificar si falló
   if [ $? -ne 0 ]; then
