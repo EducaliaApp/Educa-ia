@@ -15,10 +15,12 @@ const CONFIG = {
   DELAY_BETWEEN_CATEGORIES: 2000, // 2s entre categorías
   DELAY_BETWEEN_DOCUMENTS: 500,   // 500ms entre docs
   MAX_RETRIES: 3,
+  RETRY_DELAY_BASE: 1000, // Base para exponential backoff (1s, 2s, 4s)
   
   // Procesamiento
   MAX_CONCURRENT_DOWNLOADS: 3,
   PDF_SAMPLE_PAGES: 3, // Primeras 3 páginas para clasificación IA
+  PDF_DOWNLOAD_TIMEOUT: 30000, // 30s timeout para descargas
   
   // Thresholds
   MIN_AI_CONFIDENCE: 0.70, // Confianza mínima para clasificación IA
@@ -116,6 +118,42 @@ interface Reporte {
   procesamiento_fallido: number
   tiempo_total_ms: number
   detalles: ResultadoProcesamiento[]
+}
+
+// ============================================
+// UTILIDADES
+// ============================================
+
+/**
+ * Ejecuta una función con retry y exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = CONFIG.MAX_RETRIES,
+  baseDelay: number = CONFIG.RETRY_DELAY_BASE,
+  context: string = 'operación'
+): Promise<T | null> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      const isLastAttempt = attempt === maxRetries - 1
+      
+      if (isLastAttempt) {
+        console.log(`      ❌ ${context} falló después de ${maxRetries} intentos`)
+        return null
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt)
+      console.log(`      ⚠️  ${context} falló (intento ${attempt + 1}/${maxRetries}), reintentando en ${delay}ms...`)
+      console.log(`         Error: ${errorMessage}`)
+      
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+  
+  return null
 }
 
 export async function handler(req: Request): Promise<Response> {
@@ -276,15 +314,20 @@ async function scrapearDocumentos(
           // 1. Intentar parsing básico del nombre
           let metadata = parsearNombreArchivo(link.nombre, tipo, html)
           
-          // 2. Si falla, usar IA con contexto mejorado
+          // 2. Si falla, usar IA con contexto mejorado (con retry)
           if (!metadata || (metadata as any).confianza < 0.7) {
             console.log(`    🤖 Clasificación IA para: ${link.nombre}`)
-            const metadataIA = await clasificarConIAMejorada(
-              link,
-              tipo,
-              subcategoria,
-              aiAnalyzer,
-              pdfExtractor
+            const metadataIA = await retryWithBackoff(
+              () => clasificarConIAMejorada(
+                link,
+                tipo,
+                subcategoria,
+                aiAnalyzer,
+                pdfExtractor
+              ),
+              CONFIG.MAX_RETRIES,
+              CONFIG.RETRY_DELAY_BASE,
+              'Clasificación IA'
             )
             
             if (metadataIA) {
@@ -728,30 +771,38 @@ async function clasificarConIAMejorada(
     // 2. Descargar y extraer texto de primeras páginas
     console.log(`      📥 Descargando muestra (${(contentLength / 1024).toFixed(2)} KB)...`)
     
-    const response = await fetch(link.url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; ProfeFlow-Bot/1.0)',
-        'Range': `bytes=0-${Math.min(contentLength, CONFIG.PDF_SAMPLE_SIZE)}`
+    // Crear AbortController con timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), CONFIG.PDF_DOWNLOAD_TIMEOUT)
+    
+    try {
+      const response = await fetch(link.url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; ProfeFlow-Bot/1.0)',
+          'Range': `bytes=0-${Math.min(contentLength, CONFIG.PDF_SAMPLE_SIZE)}`
+        },
+        signal: controller.signal
+      })
+      
+      clearTimeout(timeoutId)
+      
+      const pdfBuffer = await response.arrayBuffer()
+      
+      // Extraer texto de primeras páginas
+      const textoMuestra = await pdfExtractor.extractFirstPages(
+        pdfBuffer,
+        CONFIG.PDF_SAMPLE_PAGES
+      )
+      
+      if (!textoMuestra || textoMuestra.length < 100) {
+        console.log(`      ⚠️  No se pudo extraer texto suficiente`)
+        return null
       }
-    })
-    
-    const pdfBuffer = await response.arrayBuffer()
-    
-    // Extraer texto de primeras páginas
-    const textoMuestra = await pdfExtractor.extractFirstPages(
-      pdfBuffer,
-      CONFIG.PDF_SAMPLE_PAGES
-    )
-    
-    if (!textoMuestra || textoMuestra.length < 100) {
-      console.log(`      ⚠️  No se pudo extraer texto suficiente`)
-      return null
-    }
-    
-    console.log(`      ✓ Texto extraído: ${textoMuestra.length} chars`)
-    
-    // 3. Clasificar con IA usando contenido real
-    const prompt = `Clasifica este documento educativo chileno del MINEDUC.
+      
+      console.log(`      ✓ Texto extraído: ${textoMuestra.length} chars`)
+      
+      // 3. Clasificar con IA usando contenido real
+      const prompt = `Clasifica este documento educativo chileno del MINEDUC.
 
 **CONTEXTO:**
 - Categoría: ${tipo}
@@ -765,13 +816,20 @@ ${textoMuestra.substring(0, 2000)}
 Analiza el contenido y clasifica el documento. Responde SOLO con JSON válido (sin markdown):
 
 {
-  "año": 2024 o 2025,
+  "año": número entre 2020-2026 (busca en encabezados, pie de página, o contenido),
+  "justificacion_año": "explica de dónde se obtuvo el año (ej: 'Encabezado dice 2025', 'Decreto 67/2018')",
   "nivel_educativo": "parvularia|basica_1_6|basica_7_8_media|media_tp|especial_regular|especial_neep|hospitalaria|encierro|lengua_indigena|epja|regular",
+  "justificacion_nivel": "explica por qué este nivel (ej: 'Menciona 1° a 6° básico', 'Documento para TP')",
   "modalidad": "regular|especial|hospitalaria|encierro|lengua_indigena",
-  "asignatura": "Matemática|Lenguaje|Historia|etc o null",
-  "confianza": 0.0 a 1.0,
-  "razonamiento": "breve explicación"
-}`
+  "asignatura": "Matemática|Lenguaje y Comunicación|Historia y Geografía|Ciencias Naturales|Inglés|Artes Visuales|Música|Educación Física|Tecnología|Religión|null",
+  "confianza": 0.0 a 1.0 (qué tan seguro estás de la clasificación),
+  "razonamiento": "resumen breve del análisis (max 100 palabras)"
+}
+
+**NOTAS:**
+- Si no encuentras año explícito, usa contexto (ej: "Priorización 2020-2022" = 2020)
+- Si el documento menciona múltiples niveles, elige el más prominente
+- confianza < 0.7 solo si hay mucha ambigüedad`
     
     const resultadoIA = await aiAnalyzer.clasificarDocumento(prompt)
     
@@ -789,6 +847,12 @@ Analiza el contenido y clasifica el documento. Responde SOLO con JSON válido (s
     }
     
     console.log(`      ✅ Clasificado: ${clasificacion.nivel_educativo} (${clasificacion.confianza})`)
+    if (clasificacion.justificacion_año) {
+      console.log(`         📅 Año: ${clasificacion.justificacion_año}`)
+    }
+    if (clasificacion.justificacion_nivel) {
+      console.log(`         🎓 Nivel: ${clasificacion.justificacion_nivel}`)
+    }
     
     return {
       año: clasificacion.año,
@@ -796,6 +860,17 @@ Analiza el contenido y clasifica el documento. Responde SOLO con JSON válido (s
       modalidad: clasificacion.modalidad,
       asignatura: clasificacion.asignatura,
       confianza: clasificacion.confianza
+    }
+    
+    } catch (downloadError) {
+      clearTimeout(timeoutId)
+      const errorMessage = downloadError instanceof Error ? downloadError.message : 'Error desconocido'
+      if (downloadError instanceof Error && downloadError.name === 'AbortError') {
+        console.log(`      ⚠️  Timeout descargando PDF (>${CONFIG.PDF_DOWNLOAD_TIMEOUT}ms)`)
+      } else {
+        console.log(`      ❌ Error descargando PDF: ${errorMessage}`)
+      }
+      return null
     }
     
   } catch (error) {
@@ -857,73 +932,6 @@ function validarRespuestaIA(resultado: any): any | null {
   }
 }
 
-function parsearNombreArchivo_OLD(nombre: string, tipo?: string, html?: string): {
-  año: number
-  nivel: string
-  modalidad: string
-  asignatura?: string
-} | null {
-  
-  const nombreLower = nombre.toLowerCase()
-  
-  // Detectar año con múltiples patrones
-  const añoMatch = nombre.match(/202[0-9]/) || nombre.match(/\b(2024|2025|2026)\b/)
-  const año = añoMatch ? parseInt(añoMatch[0]) : 2025 // Default a 2025 si no se encuentra
-  
-  // Patrones mejorados para nivel educativo
-  let nivel = 'regular'
-  const patronesNivel = {
-    'parvularia': /parvularia|párvulo|pre\s*escolar/,
-    'basica_1_6': /1°?\s*a\s*6°?|básica.*1.*6|primero.*sexto/,
-    'basica_7_8_media': /7°?.*8°?|séptimo.*octavo|media|secundaria/,
-    'media_tp': /técnico\s*profesional|tp|medio.*técnico/,
-    'especial_regular': /especial.*regular|integración/,
-    'especial_neep': /especial.*neep|escuela.*especial/,
-    'hospitalaria': /hospitalaria|hospital/,
-    'encierro': /encierro|cárcel|penitenciar/,
-    'lengua_indigena': /lengua.*indígena|mapuche|quechua|aymara/,
-    'epja': /adultos|jóvenes.*adultas|epja/
-  }
-  
-  for (const [key, patron] of Object.entries(patronesNivel)) {
-    if (patron.test(nombreLower)) {
-      nivel = key
-      break
-    }
-  }
-  
-  // Detectar modalidad
-  let modalidad = 'regular'
-  if (/especial/.test(nombreLower)) modalidad = 'especial'
-  if (/hospitalaria/.test(nombreLower)) modalidad = 'hospitalaria'
-  if (/encierro/.test(nombreLower)) modalidad = 'encierro'
-  if (/lengua.*indígena/.test(nombreLower)) modalidad = 'lengua_indigena'
-  
-  // Detectar asignatura
-  let asignatura: string | undefined
-  const patronesAsignatura = {
-    'Matemática': /matemática|matemáticas/i,
-    'Lenguaje y Comunicación': /lenguaje|comunicación|lengua castellana/i,
-    'Ciencias Naturales': /ciencias naturales|biología|física|química/i,
-    'Historia y Geografía': /historia|geografía|ciencias sociales/i,
-    'Inglés': /inglés|english/i,
-    'Artes Visuales': /artes visuales|artes plásticas/i,
-    'Música': /música/i,
-    'Educación Física': /educación física|ed\. física/i,
-    'Tecnología': /tecnología/i,
-    'Religión': /religión|católica|evangélica/i
-  }
-  
-  for (const [asig, patron] of Object.entries(patronesAsignatura)) {
-    if (patron.test(nombreLower)) {
-      asignatura = asig
-      break
-    }
-  }
-  
-  return { año, nivel, modalidad, asignatura }
-}
-
 function inferirNivelPorTipo(tipo: string): string {
   // Inferir nivel educativo basado en el tipo de documento
   const mapeoNivel: Record<string, string> = {
@@ -949,6 +957,43 @@ async function calcularHashRemoto(url: string): Promise<string | null> {
     console.error('Error calculando hash:', error)
     return null
   }
+}
+
+/**
+ * Obtiene o crea la fuente DocenteMas en la BD
+ */
+async function obtenerOCrearFuenteDocenteMas(supabase: any): Promise<string> {
+  // Intentar obtener fuente existente
+  const { data: fuente } = await supabase
+    .from('fuentes_documentacion')
+    .select('id')
+    .eq('nombre', 'DocenteMas')
+    .maybeSingle()
+  
+  if (fuente?.id) {
+    return fuente.id
+  }
+  
+  // Crear nueva fuente
+  console.log('  📁 Creando fuente DocenteMas...')
+  const { data: nuevaFuente, error: insertError } = await supabase
+    .from('fuentes_documentacion')
+    .insert({
+      nombre: 'DocenteMas',
+      url_base: 'https://www.docentemas.cl',
+      tipo_fuente: 'sitio_web',
+      activo: true,
+      patron_url: 'https://www.docentemas.cl/documentos-descargables/*',
+      frecuencia_check: '1 day'
+    })
+    .select('id')
+    .single()
+  
+  if (insertError || !nuevaFuente?.id) {
+    throw new Error(`Error creando fuente: ${insertError?.message || 'ID nulo'}`)
+  }
+  
+  return nuevaFuente.id
 }
 
 export async function procesarDocumentoNuevo(
@@ -1024,48 +1069,9 @@ export async function procesarDocumentoNuevo(
   
   // 3. Registrar en base de datos
   console.log('  📝 Registrando en BD...')
-  // Crear o obtener fuente
-  let fuenteId
-  try {
-    const { data: fuente, error: fuenteError } = await supabase
-      .from('fuentes_documentacion')
-      .select('id')
-      .eq('nombre', 'DocenteMas')
-      .maybeSingle()
-    
-    if (fuente?.id) {
-      fuenteId = fuente.id
-    } else {
-      console.log('  📁 Creando fuente DocenteMas...')
-      const { data: nuevaFuente, error: insertError } = await supabase
-        .from('fuentes_documentacion')
-        .insert({
-          nombre: 'DocenteMas',
-          url_base: 'https://www.docentemas.cl',
-          tipo_fuente: 'sitio_web',
-          activo: true,
-          patron_url: 'https://www.docentemas.cl/documentos-descargables/*',
-          frecuencia_check: '1 day'
-        })
-        .select('id')
-        .single()
-      
-      if (insertError) {
-        throw new Error(`Error creando fuente: ${insertError.message}`)
-      }
-      
-      fuenteId = nuevaFuente?.id
-    }
-  } catch (error) {
-    console.error('Error con fuente:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
-    throw new Error(`No se pudo obtener fuente_id: ${errorMessage}`)
-  }
   
-  if (!fuenteId) {
-    throw new Error('fuente_id es null después de crear/obtener fuente')
-  }
-  
+  // Obtener o crear fuente DocenteMas
+  const fuenteId = await obtenerOCrearFuenteDocenteMas(supabase)
   console.log(`  📝 Usando fuente_id: ${fuenteId}`)
   
   const { data: documentoRegistrado, error: dbError } = await supabase
