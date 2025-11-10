@@ -18,8 +18,8 @@ const CONFIG = {
   RETRY_DELAY_BASE: 500, // Reducido de 1000ms a 500ms
 
   // Procesamiento
-  MAX_CONCURRENT_DOWNLOADS: 5, // Aumentado para procesamiento paralelo
-  MAX_DOCS_PER_EXECUTION: 20, // Límite por ejecución para evitar timeouts
+  MAX_CONCURRENT_DOWNLOADS: 8, // Aumentado para procesamiento más rápido
+  MAX_DOCS_PER_EXECUTION: 10, // REDUCIDO a 10 para evitar timeouts (era 20)
   PDF_SAMPLE_PAGES: 2, // Solo 2 páginas para clasificación IA (reducido)
   PDF_DOWNLOAD_TIMEOUT: 10000, // Reducido a 10s timeout (era 15s)
   ENABLE_AI_CLASSIFICATION: false, // ⚠️ DESHABILITADO para acelerar scraping
@@ -188,13 +188,18 @@ export async function handler(req: Request): Promise<Response> {
       invalidos: []
     }
     
-    // OPTIMIZACIÓN: Solo scrapear si force=true o no hay documentos pendientes
+    // OPTIMIZACIÓN: Solo scrapear si force=true o si no hay documentos en BD
+    const { count: totalDocumentos } = await supabase
+      .from('documentos_oficiales')
+      .select('*', { count: 'exact', head: true })
+    
     const { count: pendientesCount } = await supabase
       .from('documentos_oficiales')
       .select('*', { count: 'exact', head: true })
       .eq('etapa_actual', 'pendiente_descarga')
     
-    const debeScrapear = force || !skipScraping || (pendientesCount === 0)
+    // Solo scrapear si: force=true, o (skipScraping=false Y no hay docs en BD)
+    const debeScrapear = force || (!skipScraping && (totalDocumentos === 0))
     
     if (debeScrapear) {
       console.log('📡 Ejecutando scraping de sitio web...')
@@ -226,7 +231,7 @@ export async function handler(req: Request): Promise<Response> {
       
       console.log(`  ✅ ${documentosRegistrados.length} documentos registrados con etapa 'pendiente_descarga'`)
     } else {
-      console.log(`⏭️  Saltando scraping (${pendientesCount} documentos ya pendientes)`)
+      console.log(`⏭️  Saltando scraping - Total en BD: ${totalDocumentos}, Pendientes: ${pendientesCount}`)
     }
     
     // 4. PROCESAMIENTO: Descargar y procesar documentos pendientes (límite: MAX_DOCS_PER_EXECUTION)

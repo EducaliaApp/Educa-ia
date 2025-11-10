@@ -4,8 +4,8 @@
 SUPABASE_URL="https://cqfhayframohiulwauny.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxZmhheWZyYW1vaGl1bHdhdW55Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTk0NzQ5NCwiZXhwIjoyMDc3NTIzNDk0fQ.CtrvHtM1urfgMd2UMSOK3tjnpxSOe0oLuQ9qBEyVC4g"
 
-MAX_ITERATIONS=10  # Máximo 10 ejecuciones
-WAIT_BETWEEN=5     # Esperar 5 segundos entre ejecuciones
+MAX_ITERATIONS=20  # Aumentado a 20 (procesamos 10 docs por iteración)
+WAIT_BETWEEN=3     # Reducido a 3 segundos entre ejecuciones
 
 echo "🚀 Iniciando procesamiento por lotes..."
 echo "   Máximo de iteraciones: $MAX_ITERATIONS"
@@ -16,15 +16,10 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   echo "📦 Ejecución $i de $MAX_ITERATIONS"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   
-  # OPTIMIZACIÓN: Solo scrapear en la primera ejecución
-  if [ $i -eq 1 ]; then
-    echo "⏳ Ejecutando scraping + descarga... (timeout: 300s)"
-    payload='{"skipScraping": false}'
-  else
-    echo "⏳ Ejecutando solo descarga... (timeout: 60s)"
-    payload='{"skipScraping": true}'
-    timeout=60
-  fi
+  # Siempre skipScraping=true (la función decide si necesita scrapear según BD)
+  echo "⏳ Procesando lote (10 docs)... (timeout: 45s)"
+  payload='{"skipScraping": true}'
+  timeout=45
   
   # Ejecutar Edge Function
   response=$(curl -s -X POST \
