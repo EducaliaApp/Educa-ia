@@ -33,7 +33,8 @@ supabase = create_client(
 # Configuración
 BATCH_SIZE = int(os.getenv('VERIFY_BATCH_SIZE', '5'))  # Documentos en paralelo
 MAX_RETRIES = 3
-TIMEOUT = 30
+TIMEOUT_DOWNLOAD = 120  # 2 minutos para archivos grandes
+TIMEOUT_UPLOAD = 180    # 3 minutos para upload
 
 
 # ============================================
@@ -133,7 +134,7 @@ def redownload_y_upload(doc_id, url_original, storage_path, titulo):
             # Descargar de URL original
             response = requests.get(
                 url_original, 
-                timeout=TIMEOUT,
+                timeout=TIMEOUT_DOWNLOAD,
                 stream=True,
                 headers={
                     'User-Agent': 'Mozilla/5.0 (compatible; ProfeFlow-Bot/1.0)'
@@ -173,6 +174,16 @@ def redownload_y_upload(doc_id, url_original, storage_path, titulo):
             if hasattr(upload_result, 'error') and upload_result.error:
                 error_msg = str(upload_result.error)
                 
+                # Si es error de conexión, reintentar
+                if any(keyword in error_msg.lower() for keyword in ['disconnect', 'timeout', 'connection', 'reset']):
+                    intentos += 1
+                    if intentos < MAX_RETRIES:
+                        print(f"      ⚠️  Error de conexión, reintentando en {2 ** intentos}s...")
+                        time.sleep(2 ** intentos)  # Exponential backoff
+                        continue
+                    else:
+                        return False, f"Error upload después de {MAX_RETRIES} intentos: {error_msg[:100]}", 0
+                
                 # Si error es por archivo ya existente, verificar que existe
                 if 'already exists' in error_msg.lower():
                     existe, msg, _ = verificar_archivo_existe(storage_path)
@@ -195,16 +206,32 @@ def redownload_y_upload(doc_id, url_original, storage_path, titulo):
         except requests.Timeout:
             intentos += 1
             if intentos < MAX_RETRIES:
-                print(f"      ⏱️  Timeout, reintentando...")
-                time.sleep(2)
+                print(f"      ⏱️  Timeout, reintentando en {2 ** intentos}s...")
+                time.sleep(2 ** intentos)  # Exponential backoff
             else:
                 return False, f"Timeout después de {MAX_RETRIES} intentos", 0
         
         except requests.HTTPError as e:
-            return False, f"HTTP Error {e.response.status_code}: {e.response.reason}", 0
+            error_msg = f"HTTP Error {e.response.status_code}: {e.response.reason}"
+            # Reintentar en errores 5xx (server) pero no 4xx (client)
+            if 500 <= e.response.status_code < 600:
+                intentos += 1
+                if intentos < MAX_RETRIES:
+                    print(f"      ⚠️  Error del servidor, reintentando en {2 ** intentos}s...")
+                    time.sleep(2 ** intentos)
+                    continue
+            return False, error_msg, 0
         
         except Exception as e:
-            return False, f"Error: {str(e)[:100]}", 0
+            error_msg = str(e)
+            # Reintentar en errores de conexión
+            if any(keyword in error_msg.lower() for keyword in ['disconnect', 'timeout', 'connection', 'reset']):
+                intentos += 1
+                if intentos < MAX_RETRIES:
+                    print(f"      ⚠️  Error de conexión, reintentando en {2 ** intentos}s...")
+                    time.sleep(2 ** intentos)
+                    continue
+            return False, error_msg[:100], 0
     
     return False, f"Falló después de {MAX_RETRIES} intentos", 0
 
@@ -295,49 +322,53 @@ def actualizar_estado_bd(resultado):
     doc_id = resultado['doc_id']
     
     try:
+        # Obtener metadata actual
+        result = supabase.table('documentos_oficiales').select('metadata').eq('id', doc_id).execute()
+        current_metadata = result.data[0].get('metadata', {}) if result.data else {}
+        
         if resultado['status'] == 'ok':
             # Archivo OK - marcar como storage_validado
+            updated_metadata = {
+                **current_metadata,
+                'storage_verificado': True,
+                'fecha_verificacion': datetime.now().isoformat()
+            }
+            
             supabase.table('documentos_oficiales').update({
                 'etapa_actual': 'storage_validado',
                 'fecha_actualizacion': datetime.now().isoformat(),
-                'metadata': supabase.rpc('jsonb_merge', {
-                    'target': doc_id,
-                    'delta': json.dumps({
-                        'storage_verificado': True,
-                        'fecha_verificacion': datetime.now().isoformat()
-                    })
-                })
+                'metadata': updated_metadata
             }).eq('id', doc_id).execute()
         
         elif resultado['status'] == 'resincronizado':
             # Re-descargado exitosamente
+            updated_metadata = {
+                **current_metadata,
+                'storage_verificado': True,
+                'requirio_redownload': True,
+                'bytes_redownload': resultado['bytes'],
+                'fecha_redownload': datetime.now().isoformat()
+            }
+            
             supabase.table('documentos_oficiales').update({
                 'etapa_actual': 'storage_validado',
                 'fecha_actualizacion': datetime.now().isoformat(),
-                'metadata': supabase.rpc('jsonb_merge', {
-                    'target': doc_id,
-                    'delta': json.dumps({
-                        'storage_verificado': True,
-                        'requirio_redownload': True,
-                        'bytes_redownload': resultado['bytes'],
-                        'fecha_redownload': datetime.now().isoformat()
-                    })
-                })
+                'metadata': updated_metadata
             }).eq('id', doc_id).execute()
         
         else:
             # Error - marcar para atención manual
+            updated_metadata = {
+                **current_metadata,
+                'storage_error': resultado['mensaje'],
+                'fecha_error': datetime.now().isoformat(),
+                'requiere_atencion_manual': True
+            }
+            
             supabase.table('documentos_oficiales').update({
                 'etapa_actual': 'error_validacion_storage',
                 'fecha_actualizacion': datetime.now().isoformat(),
-                'metadata': supabase.rpc('jsonb_merge', {
-                    'target': doc_id,
-                    'delta': json.dumps({
-                        'storage_error': resultado['mensaje'],
-                        'fecha_error': datetime.now().isoformat(),
-                        'requiere_atencion_manual': True
-                    })
-                })
+                'metadata': updated_metadata
             }).eq('id', doc_id).execute()
     
     except Exception as e:
