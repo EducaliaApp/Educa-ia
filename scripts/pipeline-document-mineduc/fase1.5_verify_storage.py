@@ -222,15 +222,13 @@ def verificar_y_sincronizar_documento(doc):
     """
     doc_id = doc['id']
     titulo = doc['titulo']
-    nombre = doc.get('nombre', '')
-    tipo = doc.get('tipo', 'desconocido')
-    año = doc.get('año', 2024)
+    tipo = doc.get('tipo_documento', 'desconocido')
+    año = doc.get('año_vigencia', 2024)
+    storage_path_bd = doc.get('storage_path', '')
     url_original = doc.get('url_original')
     
-    # Reconstruir path esperado con sanitización actualizada
-    # Debe coincidir con la lógica del Edge Function
-    sanitized_name = sanitize_filename(nombre) if nombre else 'documento'
-    expected_storage_path = f"{tipo}/{año}/{sanitized_name}.pdf"
+    # Usar el storage_path que ya está en la BD (ya fue sanitizado)
+    expected_storage_path = storage_path_bd or f"{tipo}/{año}/{sanitize_filename(titulo)}.pdf"
     
     resultado = {
         'doc_id': doc_id,
@@ -252,18 +250,6 @@ def verificar_y_sincronizar_documento(doc):
         print(f"   ✅ {mensaje}")
         resultado['status'] = 'ok'
         resultado['mensaje'] = mensaje
-        
-        # Actualizar BD si el path cambió (por nueva sanitización)
-        if doc.get('storage_path') != expected_storage_path:
-            print(f"   🔄 Actualizando path en BD: {expected_storage_path}")
-            try:
-                supabase.table('documentos_oficiales')\
-                    .update({'storage_path': expected_storage_path})\
-                    .eq('id', doc_id)\
-                    .execute()
-            except Exception as e:
-                print(f"   ⚠️  Error actualizando path: {str(e)}")
-        
         return resultado
     
     # 2. Archivo no existe - intentar re-descarga
@@ -415,7 +401,7 @@ def main():
     print("\n🔍 Buscando documentos para verificar...")
     
     documentos = supabase.table('documentos_oficiales')\
-        .select('id, titulo, nombre, tipo, año, storage_path, url_original')\
+        .select('id, titulo, tipo_documento, año_vigencia, storage_path, url_original')\
         .eq('etapa_actual', 'descargado')\
         .not_.is_('storage_path', 'null')\
         .order('created_at', desc=False)\

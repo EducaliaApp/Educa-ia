@@ -1,4 +1,4 @@
-name: Pipeline RAG MINEDUC - Producción
+name: Pipeline RAG MINEDUC - DocenteMas
 
 on:
   schedule:
