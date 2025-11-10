@@ -12,7 +12,7 @@ import { PDFExtractor, type PDFMetadata } from '../shared/pdf-extractor.ts'
 
 const CONFIG = {
   // Rate limiting
-  DELAY_BETWEEN_CATEGORIES: 2000, // 2s entre categorías
+  DELAY_BETWEEN_CATEGORIES: 500, // 500ms entre categorías
   DELAY_BETWEEN_DOCUMENTS: 100,   // Reducido a 100ms para scraping más rápido
   MAX_RETRIES: 3,
   RETRY_DELAY_BASE: 1000, // Base para exponential backoff (1s, 2s, 4s)
@@ -106,6 +106,7 @@ interface ResultadoProcesamiento {
   exito: boolean
   documento_id?: string
   duplicado?: boolean
+  actualizado?: boolean
   error?: string
 }
 
@@ -116,11 +117,16 @@ interface Reporte {
   documentos_nuevos_procesados: number
   documentos_nuevos_pendientes: number
   documentos_actualizados: number
+  documentos_actualizados_procesados: number
+  documentos_actualizados_pendientes: number
   documentos_duplicados: number
   documentos_invalidos: number
   procesamiento_exitoso: number
   procesamiento_fallido: number
   tiempo_total_ms: number
+  pipeline_pendientes_descarga: number
+  pipeline_descargados: number
+  pipeline_total: number
   detalles: ResultadoProcesamiento[]
 }
 
@@ -193,36 +199,87 @@ export async function handler(req: Request): Promise<Response> {
     console.log(`  ⏭️  Duplicados: ${analisisDocumentos.duplicados.length}`)
     console.log(`  ❌ Inválidos: ${analisisDocumentos.invalidos.length}`)
     
-    // 3. PROCESAMIENTO de nuevos documentos
-    const resultadosProcesamiento = await procesarDocumentosNuevos(
+    // 3. REGISTRO RÁPIDO: Insertar documentos nuevos en BD sin descargar
+    console.log(`\n📝 Registrando documentos nuevos en BD...`)
+    const documentosRegistrados = await registrarDocumentosNuevos(
       supabase,
-      analisisDocumentos.nuevos,
-      processor
+      analisisDocumentos.nuevos
     )
     
-    // 4. ACTUALIZACIÓN de documentos modificados
-    await procesarActualizaciones(
-      supabase,
-      analisisDocumentos.actualizados
-    )
+    console.log(`  ✅ ${documentosRegistrados.length} documentos registrados con etapa 'pendiente_descarga'`)
+    
+    // 4. PROCESAMIENTO: Descargar y procesar documentos pendientes (límite: MAX_DOCS_PER_EXECUTION)
+    // Primero obtener estadísticas totales
+    const { count: totalPendientes } = await supabase
+      .from('documentos_oficiales')
+      .select('*', { count: 'exact', head: true })
+      .eq('etapa_actual', 'pendiente_descarga')
+    
+    const { count: totalDescargados } = await supabase
+      .from('documentos_oficiales')
+      .select('*', { count: 'exact', head: true })
+      .in('etapa_actual', ['descargado', 'transformando', 'transformado', 'transformado_errores'])
+    
+    console.log(`\n📊 Estado del pipeline:`)
+    console.log(`   ⏳ Pendientes descarga: ${totalPendientes || 0}`)
+    console.log(`   ✅ Descargados: ${totalDescargados || 0}`)
+    
+    // Obtener lote para procesar
+    const { data: documentosPendientes } = await supabase
+      .from('documentos_oficiales')
+      .select('*')
+      .eq('etapa_actual', 'pendiente_descarga')
+      .limit(CONFIG.MAX_DOCS_PER_EXECUTION)
+    
+    console.log(`\n📥 Descargando lote actual (${documentosPendientes?.length || 0} documentos)...`)
+    
+    let resultadosProcesamiento: ResultadoProcesamiento[] = []
+    
+    if (documentosPendientes && documentosPendientes.length > 0) {
+      resultadosProcesamiento = await procesarDocumentosPendientes(
+        supabase,
+        documentosPendientes,
+        processor
+      )
+    }
     
     // 5. REPORTE final
     const reporte = generarReporte(
       documentosDetectados,
       analisisDocumentos,
       resultadosProcesamiento,
-      Date.now() - startTime
+      Date.now() - startTime,
+      totalPendientes || 0,
+      totalDescargados || 0
     )
     
     console.log('\n✅ Monitoreo completado')
     console.log(`  ⏱️  Tiempo total: ${((reporte.tiempo_total_ms) / 1000).toFixed(2)}s`)
-    console.log(`  📊 Nuevos detectados: ${analisisDocumentos.nuevos.length}`)
+    console.log(`\n  🆕 DOCUMENTOS NUEVOS:`)
+    console.log(`     Total detectados: ${analisisDocumentos.nuevos.length}`)
     console.log(`     ✅ Procesados: ${reporte.documentos_nuevos_procesados}`)
     if (reporte.documentos_nuevos_pendientes > 0) {
       console.log(`     ⏳ Pendientes: ${reporte.documentos_nuevos_pendientes} (próxima ejecución)`)
     }
-    console.log(`  🔄 Actualizados: ${analisisDocumentos.actualizados.length}`)
-    console.log(`  ⏭️  Duplicados: ${analisisDocumentos.duplicados.length}`)
+    
+    const actualizacionesProcesadas = resultadosProcesamiento.filter(r => r.actualizado).length
+    const actualizacionesPendientes = analisisDocumentos.actualizados.length - actualizacionesProcesadas
+    
+    if (analisisDocumentos.actualizados.length > 0) {
+      console.log(`\n  🔄 ACTUALIZACIONES:`)
+      console.log(`     Total detectadas: ${analisisDocumentos.actualizados.length}`)
+      console.log(`     ✅ Procesadas: ${actualizacionesProcesadas}`)
+      if (actualizacionesPendientes > 0) {
+        console.log(`     ⏳ Pendientes: ${actualizacionesPendientes} (próxima ejecución)`)
+      }
+    }
+    
+    console.log(`\n  ⏭️  Duplicados: ${analisisDocumentos.duplicados.length}`)
+    
+    console.log(`\n  📊 ESTADO PIPELINE COMPLETO:`)
+    console.log(`     ⏳ Pendientes descarga: ${totalPendientes || 0}`)
+    console.log(`     ✅ Descargados: ${totalDescargados || 0}`)
+    console.log(`     📦 Total en BD: ${(totalPendientes || 0) + (totalDescargados || 0)}`)
     
     // 6. NOTIFICACIONES si hay cambios
     if (analisisDocumentos.nuevos.length > 0 || analisisDocumentos.actualizados.length > 0) {
@@ -435,15 +492,25 @@ async function analizarDocumentos(
       
       // Buscar duplicados con estrategia mejorada
       // 1. Primero buscar por URL normalizada (sin parámetros dinámicos)
-      const { data: porUrl } = await supabase
+      const { data: porUrl, error: errorUrl } = await supabase
         .from('documentos_oficiales')
         .select('id, hash_contenido, version, url_original, titulo, storage_path')
-        .or(`url_original.eq.${doc.url},url_original.eq.${urlNormalizada}`)
+        .eq('url_original', urlNormalizada)
+      
+      if (errorUrl) {
+        console.log(`  ⚠️  Error buscando URL: ${errorUrl.message}`)
+      }
       
       if (porUrl && porUrl.length > 0) {
         const existente = porUrl[0]
         
-        // Mismo URL (normalizado) - verificar si cambió contenido
+        // Si el documento NO tiene hash (pendiente de descarga), es duplicado
+        if (!existente.hash_contenido) {
+          resultado.duplicados.push(doc)
+          continue
+        }
+        
+        // Si tiene hash, verificar si cambió el contenido
         const hashNuevo = await calcularHashRemoto(doc.url)
         
         if (hashNuevo && hashNuevo !== existente.hash_contenido) {
@@ -522,6 +589,175 @@ async function analizarDocumentos(
   }
 
   return resultado
+}
+
+/**
+ * Registra documentos nuevos en BD sin descargarlos (rápido)
+ * Solo crea el registro con estado 'pendiente_descarga'
+ */
+async function registrarDocumentosNuevos(
+  supabase: any,
+  documentosNuevos: DocumentoDetectado[]
+): Promise<any[]> {
+  
+  const registrados = []
+  
+  for (const doc of documentosNuevos) {
+    try {
+      // Obtener fuente DocenteMas
+      const fuenteId = await obtenerOCrearFuenteDocenteMas(supabase)
+      
+      const { data, error } = await supabase
+        .from('documentos_oficiales')
+        .insert({
+          fuente_id: fuenteId,
+          tipo_documento: mapearTipoDocumento(doc.tipo, doc.subcategoria),
+          nivel_educativo: doc.nivel_educativo,
+          modalidad: doc.modalidad,
+          asignatura: doc.asignatura || null,
+          año_vigencia: doc.año,
+          titulo: doc.nombre,
+          url_original: normalizarUrl(doc.url),
+          version: `${doc.año}.1`,
+          formato: 'pdf',
+          procesado: false,
+          es_version_actual: true,
+          estado_procesamiento: 'pendiente', // Estado general
+          etapa_actual: 'pendiente_descarga', // 🆕 Etapa específica del pipeline
+          hash_contenido: null, // Se calculará durante la descarga
+          storage_path: null, // Se asignará durante la descarga
+          tamaño_bytes: null, // Se asignará durante la descarga
+          metadata: {
+            subcategoria: doc.subcategoria,
+            tipo_original: doc.tipo,
+            confianza_clasificacion: doc.confianza_clasificacion
+          }
+        })
+        .select()
+        .single()
+      
+      if (error) {
+        console.log(`  ⚠️  Error registrando ${doc.nombre}: ${error.message}`)
+        continue
+      }
+      
+      registrados.push(data)
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      console.log(`  ❌ Error: ${errorMessage}`)
+    }
+  }
+  
+  return registrados
+}
+
+/**
+ * Procesa documentos que ya están en BD con estado 'pendiente_descarga'
+ * Descarga PDF, sube a storage y actualiza registro
+ */
+async function procesarDocumentosPendientes(
+  supabase: any,
+  documentosPendientes: any[],
+  processor: DocumentProcessor
+): Promise<ResultadoProcesamiento[]> {
+  
+  const resultados: ResultadoProcesamiento[] = []
+  
+  // Procesamiento paralelo con límite de concurrencia
+  const concurrencia = CONFIG.MAX_CONCURRENT_DOWNLOADS
+  
+  for (let i = 0; i < documentosPendientes.length; i += concurrencia) {
+    const lote = documentosPendientes.slice(i, i + concurrencia)
+    console.log(`\n📦 Lote ${Math.floor(i / concurrencia) + 1}/${Math.ceil(documentosPendientes.length / concurrencia)} (${lote.length} docs)`)
+    
+    const promesas = lote.map(async (doc) => {
+      console.log(`  📥 ${doc.titulo}`)
+      
+      try {
+        await descargarYActualizarDocumento(supabase, doc)
+        console.log(`     ✅ Completado`)
+        return {
+          documento: doc.titulo,
+          exito: true,
+          documento_id: doc.id
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+        console.error(`     ❌ Error: ${errorMessage}`)
+        return {
+          documento: doc.titulo,
+          exito: false,
+          error: errorMessage
+        }
+      }
+    })
+    
+    const resultadosLote = await Promise.all(promesas)
+    resultados.push(...resultadosLote)
+  }
+  
+  return resultados
+}
+
+/**
+ * Descarga PDF y actualiza documento en BD
+ */
+async function descargarYActualizarDocumento(supabase: any, doc: any): Promise<void> {
+  
+  // Marcar como procesando
+  await supabase
+    .from('documentos_oficiales')
+    .update({ 
+      estado_procesamiento: 'procesando',
+      etapa_actual: 'descargando'
+    })
+    .eq('id', doc.id)
+  
+  // 1. Descargar PDF
+  const response = await fetch(doc.url_original)
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+  }
+  
+  const pdfBuffer = await response.arrayBuffer()
+  const hash = await calcularHash(pdfBuffer)
+  
+  // 2. Subir a Supabase Storage
+  const sanitizedName = doc.titulo
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9.\-_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+  
+  const fileName = `${doc.tipo_documento}/${doc.año_vigencia}/${sanitizedName}.pdf`
+  
+  await crearBucketSiNoExiste(supabase)
+  
+  const { error: uploadError } = await supabase.storage
+    .from('documentos-oficiales')
+    .upload(fileName, pdfBuffer, {
+      contentType: 'application/pdf',
+      upsert: true
+    })
+  
+  if (uploadError) {
+    throw new Error(`Error subiendo archivo: ${uploadError.message}`)
+  }
+  
+  // 3. Actualizar registro en BD
+  await supabase
+    .from('documentos_oficiales')
+    .update({
+      storage_path: fileName,
+      tamaño_bytes: pdfBuffer.byteLength,
+      hash_contenido: hash,
+      estado_procesamiento: 'descargado',
+      etapa_actual: 'descargado',
+      fecha_descarga: new Date().toISOString()
+    })
+    .eq('id', doc.id)
 }
 
 /**
@@ -604,23 +840,33 @@ function generarReporte(
   documentosDetectados: DocumentoDetectado[],
   analisis: AnalisisDocumentos,
   resultados: ResultadoProcesamiento[],
-  tiempoMs: number
+  tiempoMs: number,
+  pipelinePendientes: number,
+  pipelineDescargados: number
 ): Reporte {
-  const documentosProcesados = resultados.length
-  const documentosPendientes = Math.max(0, analisis.nuevos.length - documentosProcesados)
+  const documentosNuevosProcesados = resultados.filter(r => !r.actualizado).length
+  const documentosNuevosPendientes = Math.max(0, analisis.nuevos.length - documentosNuevosProcesados)
+  
+  const actualizacionesProcesadas = resultados.filter(r => r.actualizado).length
+  const actualizacionesPendientes = Math.max(0, analisis.actualizados.length - actualizacionesProcesadas)
   
   return {
     fecha_monitoreo: new Date().toISOString(),
     documentos_detectados: documentosDetectados.length,
     documentos_nuevos: analisis.nuevos.length,
-    documentos_nuevos_procesados: documentosProcesados,
-    documentos_nuevos_pendientes: documentosPendientes,
+    documentos_nuevos_procesados: documentosNuevosProcesados,
+    documentos_nuevos_pendientes: documentosNuevosPendientes,
     documentos_actualizados: analisis.actualizados.length,
+    documentos_actualizados_procesados: actualizacionesProcesadas,
+    documentos_actualizados_pendientes: actualizacionesPendientes,
     documentos_duplicados: analisis.duplicados.length,
     documentos_invalidos: analisis.invalidos.length,
     procesamiento_exitoso: resultados.filter(r => r.exito).length,
     procesamiento_fallido: resultados.filter(r => !r.exito).length,
     tiempo_total_ms: tiempoMs,
+    pipeline_pendientes_descarga: pipelinePendientes,
+    pipeline_descargados: pipelineDescargados,
+    pipeline_total: pipelinePendientes + pipelineDescargados,
     detalles: resultados
   }
 }

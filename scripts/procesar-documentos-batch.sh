@@ -37,19 +37,25 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   echo "$response" | jq -r '
     if .reporte then
       "✅ Completado exitosamente\n" +
-      "   📊 Detectados: \(.reporte.documentos_detectados)\n" +
-      "   🆕 Nuevos: \(.reporte.documentos_nuevos)\n" +
-      "   ✅ Procesados: \(.reporte.documentos_nuevos_procesados)\n" +
-      "   ⏳ Pendientes: \(.reporte.documentos_nuevos_pendientes)\n" +
+      "   📊 Detectados en web: \(.reporte.documentos_detectados)\n" +
+      "   🆕 Nuevos registrados: \(.reporte.documentos_nuevos)\n" +
       "   ⏭️  Duplicados: \(.reporte.documentos_duplicados)\n" +
+      "\n" +
+      "   📦 PIPELINE DE DESCARGA:\n" +
+      "   ✅ Descargados en este lote: \(.reporte.procesamiento_exitoso)\n" +
+      "   ❌ Fallos: \(.reporte.procesamiento_fallido)\n" +
+      "   ⏳ Pendientes descarga: \(.reporte.pipeline_pendientes_descarga)\n" +
+      "   ✅ Total descargados: \(.reporte.pipeline_descargados)\n" +
+      "   📦 Total en BD: \(.reporte.pipeline_total)\n" +
+      "\n" +
       "   ⏱️  Tiempo: \(.reporte.tiempo_total_ms / 1000)s"
     else
       "❌ Error: \(.error // "Respuesta inválida")"
     end
   '
   
-  # Extraer pendientes
-  pendientes=$(echo "$response" | jq -r '.reporte.documentos_nuevos_pendientes // 0')
+  # Extraer pendientes del pipeline (no solo nuevos)
+  pendientes=$(echo "$response" | jq -r '.reporte.pipeline_pendientes_descarga // 0')
   
   # Si no hay pendientes, terminar
   if [ "$pendientes" == "0" ]; then

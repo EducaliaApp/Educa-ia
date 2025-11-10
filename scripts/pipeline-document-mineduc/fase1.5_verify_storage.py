@@ -5,7 +5,7 @@ FASE 1.5: Verificación y Sincronización de Storage
 Responsabilidades:
 1. Verificar que todos los documentos registrados tengan archivo en Storage
 2. Re-descargar y subir archivos faltantes desde URL original
-3. Marcar documentos como 'storage_validado' o 'error_storage'
+3. Marcar documentos como 'storage_validado' o 'error_validacion_storage'
 4. Generar reporte detallado
 
 Ejecutar ANTES de Fase 2 Transform
@@ -342,7 +342,7 @@ def actualizar_estado_bd(resultado):
         else:
             # Error - marcar para atención manual
             supabase.table('documentos_oficiales').update({
-                'etapa_actual': 'error_storage',
+                'etapa_actual': 'error_validacion_storage',
                 'fecha_actualizacion': datetime.now().isoformat(),
                 'metadata': supabase.rpc('jsonb_merge', {
                     'target': doc_id,

@@ -418,7 +418,7 @@ def procesar_documento_individual(doc_data):
         if not exito or pdf_bytes is None:
             # Marcar como error en BD
             supabase.table('documentos_oficiales').update({
-                'etapa_actual': 'error_storage',
+                'etapa_actual': 'error_validacion_storage',
                 'metadata': {
                     'error': 'archivo_no_disponible_en_storage',
                     'timestamp_error': datetime.now().isoformat()
