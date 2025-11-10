@@ -32,23 +32,36 @@ for i in $(seq 1 $MAX_ITERATIONS); do
     continue
   fi
   
+  # Debug: Mostrar respuesta raw si está vacía o tiene error
+  if [ -z "$response" ]; then
+    echo "⚠️  Respuesta vacía del servidor"
+    continue
+  fi
+  
+  # Verificar si el response es JSON válido
+  if ! echo "$response" | jq empty 2>/dev/null; then
+    echo "⚠️  Respuesta no es JSON válido:"
+    echo "$response" | head -20
+    continue
+  fi
+  
   # Extraer métricas del response
   echo ""
   echo "$response" | jq -r '
     if .reporte then
       "✅ Completado exitosamente\n" +
-      "   📊 Detectados en web: \(.reporte.documentos_detectados)\n" +
-      "   🆕 Nuevos registrados: \(.reporte.documentos_nuevos)\n" +
-      "   ⏭️  Duplicados: \(.reporte.documentos_duplicados)\n" +
+      "   📊 Detectados en web: \(.reporte.documentos_detectados // 0)\n" +
+      "   🆕 Nuevos registrados: \(.reporte.documentos_nuevos // 0)\n" +
+      "   ⏭️  Duplicados: \(.reporte.documentos_duplicados // 0)\n" +
       "\n" +
       "   📦 PIPELINE DE DESCARGA:\n" +
-      "   ✅ Descargados en este lote: \(.reporte.procesamiento_exitoso)\n" +
-      "   ❌ Fallos: \(.reporte.procesamiento_fallido)\n" +
-      "   ⏳ Pendientes descarga: \(.reporte.pipeline_pendientes_descarga)\n" +
-      "   ✅ Total descargados: \(.reporte.pipeline_descargados)\n" +
-      "   📦 Total en BD: \(.reporte.pipeline_total)\n" +
+      "   ✅ Descargados en este lote: \(.reporte.procesamiento_exitoso // 0)\n" +
+      "   ❌ Fallos: \(.reporte.procesamiento_fallido // 0)\n" +
+      "   ⏳ Pendientes descarga: \(.reporte.pipeline_pendientes_descarga // 0)\n" +
+      "   ✅ Total descargados: \(.reporte.pipeline_descargados // 0)\n" +
+      "   📦 Total en BD: \(.reporte.pipeline_total // 0)\n" +
       "\n" +
-      "   ⏱️  Tiempo: \(.reporte.tiempo_total_ms / 1000)s"
+      "   ⏱️  Tiempo: \((.reporte.tiempo_total_ms // 0) / 1000)s"
     else
       "❌ Error: \(.error // "Respuesta inválida")"
     end

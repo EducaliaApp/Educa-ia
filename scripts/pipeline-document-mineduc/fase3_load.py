@@ -28,6 +28,7 @@ EMBEDDING_DIMENSIONS = 1536  # Reducción dimensional para eficiencia
 MAX_CHUNK_SIZE = 6000  # Chars por chunk (balance calidad/costo)
 MIN_CHUNK_SIZE = 500   # Evita chunks muy pequeños
 OVERLAP_SIZE = 200     # Overlap mínimo para contexto
+MAX_TOKENS_PER_CHUNK = 7000  # 🔧 HARD LIMIT: OpenAI tiene límite de 8192 tokens
 
 # ============================================
 # CHUNKING SEMÁNTICO INTELIGENTE
@@ -98,14 +99,94 @@ def chunking_semantico_markdown(contenido: str, doc_metadata: dict) -> List[Dict
     chunks_finales = []
     
     # Detectar si es rúbrica (estructura especial)
-    es_rubrica = doc_metadata.get('tipo_documento') == 'rubricas'
+    es_rubrica = doc_metadata.get('tipo_documento') == 'rubricas_portafolio'
     
     if es_rubrica:
-        chunks_finales = chunking_rubricas(contenido, doc_metadata)
+        chunks_intermedios = chunking_rubricas(contenido, doc_metadata)
     else:
-        chunks_finales = chunking_generico(contenido, doc_metadata)
+        chunks_intermedios = chunking_generico(contenido, doc_metadata)
+    
+    # 🔧 NUEVO: Forzar división si algún chunk excede MAX_TOKENS_PER_CHUNK
+    for chunk in chunks_intermedios:
+        texto = chunk['contenido']
+        
+        # Estimación rápida: 1 token ≈ 4 caracteres en español
+        tokens_estimados = len(texto) // 4
+        
+        if tokens_estimados > MAX_TOKENS_PER_CHUNK:
+            # Dividir forzadamente en chunks más pequeños
+            sub_chunks = dividir_chunk_largo(texto, chunk['metadata'])
+            chunks_finales.extend(sub_chunks)
+        else:
+            chunks_finales.append(chunk)
     
     return chunks_finales
+
+
+def dividir_chunk_largo(texto: str, metadata: dict) -> List[Dict]:
+    """
+    Divide un chunk que excede MAX_TOKENS_PER_CHUNK
+    Respeta saltos de línea y párrafos cuando es posible
+    """
+    chunks = []
+    max_chars = MAX_TOKENS_PER_CHUNK * 4  # Convertir tokens a chars
+    
+    # Dividir por párrafos primero
+    parrafos = texto.split('\n\n')
+    
+    chunk_actual = ""
+    parte_num = 1
+    
+    for parrafo in parrafos:
+        # Si un solo párrafo es demasiado largo, dividirlo por oraciones
+        if len(parrafo) > max_chars:
+            # Dividir por oraciones (punto + espacio)
+            oraciones = re.split(r'(?<=[.!?])\s+', parrafo)
+            
+            for oracion in oraciones:
+                if len(chunk_actual) + len(oracion) > max_chars and chunk_actual:
+                    # Guardar chunk actual
+                    chunks.append({
+                        'contenido': chunk_actual,
+                        'metadata': {
+                            **metadata,
+                            'parte': f'{parte_num}/{len(parrafos)}',
+                            'chunk_dividido': True
+                        }
+                    })
+                    chunk_actual = oracion
+                    parte_num += 1
+                else:
+                    chunk_actual += ' ' + oracion if chunk_actual else oracion
+        
+        # Párrafo normal
+        elif len(chunk_actual) + len(parrafo) > max_chars and chunk_actual:
+            # Guardar chunk actual
+            chunks.append({
+                'contenido': chunk_actual,
+                'metadata': {
+                    **metadata,
+                    'parte': f'{parte_num}',
+                    'chunk_dividido': True
+                }
+            })
+            chunk_actual = parrafo
+            parte_num += 1
+        else:
+            chunk_actual += '\n\n' + parrafo if chunk_actual else parrafo
+    
+    # Agregar último chunk
+    if chunk_actual.strip():
+        chunks.append({
+            'contenido': chunk_actual,
+            'metadata': {
+                **metadata,
+                'parte': f'{parte_num}' if parte_num > 1 else 'completo',
+                'chunk_dividido': parte_num > 1
+            }
+        })
+    
+    return chunks
 
 
 def chunking_rubricas(contenido: str, doc_metadata: dict) -> List[Dict]:

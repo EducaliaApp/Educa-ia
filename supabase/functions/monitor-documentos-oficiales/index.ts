@@ -244,48 +244,30 @@ export async function handler(req: Request): Promise<Response> {
     }
     
     // 5. REPORTE final
-    const reporte = generarReporte(
-      documentosDetectados,
-      analisisDocumentos,
-      resultadosProcesamiento,
-      Date.now() - startTime,
-      totalPendientes || 0,
-      totalDescargados || 0
-    )
+    const reporte = {
+      fecha_monitoreo: new Date().toISOString(),
+      documentos_detectados: documentosDetectados.length,
+      documentos_nuevos: documentosNuevos.length,
+      documentos_actualizados: documentosActualizados.length,
+      documentos_duplicados: documentosDuplicados.length,
+      procesamiento_exitoso: resultadosProcesamiento.filter(r => r.exito).length,
+      procesamiento_fallido: resultadosProcesamiento.filter(r => !r.exito).length,
+      pipeline_pendientes_descarga: totalPendientes || 0,
+      pipeline_descargados: totalDescargados || 0,
+      pipeline_total: (totalPendientes || 0) + (totalDescargados || 0),
+      detalles: resultadosProcesamiento
+    }
     
     console.log('\n✅ Monitoreo completado')
-    console.log(`  ⏱️  Tiempo total: ${((reporte.tiempo_total_ms) / 1000).toFixed(2)}s`)
-    console.log(`\n  🆕 DOCUMENTOS NUEVOS:`)
-    console.log(`     Total detectados: ${analisisDocumentos.nuevos.length}`)
-    console.log(`     ✅ Procesados: ${reporte.documentos_nuevos_procesados}`)
-    if (reporte.documentos_nuevos_pendientes > 0) {
-      console.log(`     ⏳ Pendientes: ${reporte.documentos_nuevos_pendientes} (próxima ejecución)`)
-    }
+    console.log(`  📊 Nuevos: ${documentosNuevos.length}`)
+    console.log(`  🔄 Actualizados: ${documentosActualizados.length}`)
+    console.log(`  ⏭️  Duplicados (saltados): ${documentosDuplicados.length}`)
     
-    const actualizacionesProcesadas = resultadosProcesamiento.filter(r => r.actualizado).length
-    const actualizacionesPendientes = analisisDocumentos.actualizados.length - actualizacionesProcesadas
-    
-    if (analisisDocumentos.actualizados.length > 0) {
-      console.log(`\n  🔄 ACTUALIZACIONES:`)
-      console.log(`     Total detectadas: ${analisisDocumentos.actualizados.length}`)
-      console.log(`     ✅ Procesadas: ${actualizacionesProcesadas}`)
-      if (actualizacionesPendientes > 0) {
-        console.log(`     ⏳ Pendientes: ${actualizacionesPendientes} (próxima ejecución)`)
-      }
-    }
-    
-    console.log(`\n  ⏭️  Duplicados: ${analisisDocumentos.duplicados.length}`)
-    
-    console.log(`\n  📊 ESTADO PIPELINE COMPLETO:`)
-    console.log(`     ⏳ Pendientes descarga: ${totalPendientes || 0}`)
-    console.log(`     ✅ Descargados: ${totalDescargados || 0}`)
-    console.log(`     📦 Total en BD: ${(totalPendientes || 0) + (totalDescargados || 0)}`)
-    
-    // 6. NOTIFICACIONES si hay cambios
-    if (analisisDocumentos.nuevos.length > 0 || analisisDocumentos.actualizados.length > 0) {
+    // 6. Notificar a administradores si hay cambios
+    if (documentosNuevos.length > 0 || documentosActualizados.length > 0) {
       await notificarAdministradores(supabase, reporte)
     }
-    
+
     return new Response(
       JSON.stringify({
         success: true,
