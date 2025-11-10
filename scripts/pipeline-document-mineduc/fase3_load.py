@@ -234,15 +234,18 @@ def generar_embedding_con_cache(texto: str, chunk_hash: str) -> Tuple[List[float
     """
     
     # Buscar en caché
+    # 🔧 FIX: Usar .limit(1).execute() en lugar de .maybeSingle() 
+    # (maybeSingle no existe en supabase-py, fue renombrado a maybe_single)
     cache_result = supabase.table('embeddings_cache')\
         .select('embedding, tokens_usados')\
         .eq('content_hash', chunk_hash)\
         .eq('model', EMBEDDING_MODEL)\
-        .maybeSingle()\
+        .limit(1)\
         .execute()
     
-    if cache_result.data:
-        return cache_result.data['embedding'], cache_result.data['tokens_usados'], 0.0
+    if cache_result.data and len(cache_result.data) > 0:
+        cached = cache_result.data[0]  # Obtener primer resultado
+        return cached['embedding'], cached['tokens_usados'], 0.0
     
     # Generar embedding nuevo
     try:
@@ -440,6 +443,13 @@ def export_metrics_json(metrics: dict, filepath: str):
 metrics = {
     'timestamp': datetime.now().isoformat(),
     'fase': 'load',
+    
+    # Aliases para GitHub Actions (compatibilidad)
+    'loaded': loaded,
+    'tokens': total_tokens,
+    'cost_usd': round(total_cost, 4),
+    
+    # Métricas detalladas
     'documentos_procesados': len(docs),
     'documentos_cargados': loaded,
     'documentos_fallidos': len(docs) - loaded,

@@ -249,7 +249,7 @@ jobs:
           retention-days: 30
 
   # ============================================
-  # FASE 2: Transform
+  # FASE 2: Transform. Objetivo: Generar Embeddings de Documentos tipo 
   # ============================================
   
   transform:
@@ -371,9 +371,9 @@ jobs:
           
           # Extraer de JSON si existe
           if [ -f load_metrics.json ]; then
-            loaded=$(jq -r '.loaded' load_metrics.json)
-            tokens=$(jq -r '.tokens' load_metrics.json)
-            cost=$(jq -r '.cost_usd' load_metrics.json)
+            loaded=$(jq -r '.loaded // 0' load_metrics.json)
+            tokens=$(jq -r '.tokens // 0' load_metrics.json)
+            cost=$(jq -r '.cost_usd // 0' load_metrics.json)
             success="true"
           else
             # Fallback
@@ -383,6 +383,11 @@ jobs:
             success="false"
           fi
           
+          # Validar que no sean null
+          loaded=${loaded:-0}
+          tokens=${tokens:-0}
+          cost=${cost:-0}
+          
           echo "success=$success" >> $GITHUB_OUTPUT
           echo "count=$loaded" >> $GITHUB_OUTPUT
           echo "tokens=$tokens" >> $GITHUB_OUTPUT
@@ -390,7 +395,7 @@ jobs:
           
           echo "### 📦 Fase 3: Load" >> $GITHUB_STEP_SUMMARY
           echo "- **Cargados:** $loaded" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tokens:** $(printf "%'d" $tokens)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tokens:** $(printf "%'d" $tokens 2>/dev/null || echo $tokens)" >> $GITHUB_STEP_SUMMARY
           echo "- **Costo:** \$$cost USD" >> $GITHUB_STEP_SUMMARY
       
       - name: Upload load metrics

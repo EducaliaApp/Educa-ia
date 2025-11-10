@@ -44,9 +44,9 @@ const URLS_OFICIALES = {
       'Marco para la Buena Enseñanza'
     ]
   },
-  rubricas: {
+  rubricasPortafolio: {
     url: 'https://www.docentemas.cl/documentos-descargables/rubricas',
-    subcategorias: ['Rúbricas']
+    subcategorias: ['Rúbricas Portafolio'] // Rúbricas de evaluación docente
   },
   tiposDeInformesDeResultados: {
     url: 'https://www.docentemas.cl/documentos-descargables/tipos-de-informes-de-resultados',
@@ -276,12 +276,12 @@ async function scrapearDocumentos(
   aiAnalyzer: AIAnalyzer,
   pdfExtractor: PDFExtractor
 ): Promise<DocumentoDetectado[]> {
-  
+
   const documentosDetectados: DocumentoDetectado[] = []
-  
+
   for (const [tipo, config] of Object.entries(URLS_OFICIALES)) {
     console.log(`\n📡 Procesando categoría: ${tipo}`)
-    
+
     try {
       const response = await fetch(config.url, {
         headers: {
@@ -290,30 +290,30 @@ async function scrapearDocumentos(
           'Accept-Language': 'es-CL,es;q=0.9'
         }
       })
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`)
       }
-      
+
       const html = await response.text()
-      
+
       // Extraer PDFs por subcategoría
       const pdfsPorSubcategoria = extraerPDFsPorSubcategoria(html, config.subcategorias)
-      
+
       // Procesar cada PDF
       for (const [subcategoria, pdfLinks] of Object.entries(pdfsPorSubcategoria)) {
         console.log(`  📁 ${subcategoria}: ${pdfLinks.length} documentos`)
-        
+
         for (const link of pdfLinks) {
           // Validación básica
           if (!link.url || !link.nombre) {
             console.log(`    ⚠️  Link inválido, saltando...`)
             continue
           }
-          
+
           // 1. Intentar parsing básico del nombre
           let metadata = parsearNombreArchivo(link.nombre, tipo, html)
-          
+
           // 2. Si falla, usar IA con contexto mejorado (con retry)
           if (!metadata || (metadata as any).confianza < 0.7) {
             console.log(`    🤖 Clasificación IA para: ${link.nombre}`)
@@ -329,7 +329,7 @@ async function scrapearDocumentos(
               CONFIG.RETRY_DELAY_BASE,
               'Clasificación IA'
             )
-            
+
             if (metadataIA) {
               metadata = {
                 año: metadataIA.año,
@@ -339,7 +339,7 @@ async function scrapearDocumentos(
               }
             }
           }
-          
+
           // 3. Si todo falla, usar defaults inteligentes
           if (!metadata) {
             metadata = {
@@ -349,9 +349,10 @@ async function scrapearDocumentos(
             }
             console.log(`    ℹ️  Usando defaults (baja confianza)`)
           }
-          
+
           // Solo agregar si tiene año reciente y metadata válida
-          if (metadata && metadata.año >= 2024) {
+          // Incluimos desde 2023 para capturar rúbricas históricas
+          if (metadata && metadata.año >= 2023) {
             documentosDetectados.push({
               nombre: link.nombre,
               url: link.url,
@@ -366,7 +367,7 @@ async function scrapearDocumentos(
           } else if (metadata) {
             console.log(`    ⏭️  Documento antiguo (${metadata.año}), saltando`)
           }
-          
+
           // Rate limiting entre documentos
           await new Promise(r => setTimeout(r, CONFIG.DELAY_BETWEEN_DOCUMENTS))
         }
@@ -382,6 +383,24 @@ async function scrapearDocumentos(
   }
 
   return documentosDetectados
+}
+
+/**
+ * Normaliza URL removiendo parámetros dinámicos (refresh, timestamps)
+ * Mantiene solo base + wpdmdl (ID estable del documento)
+ */
+function normalizarUrl(url: string): string {
+  try {
+    const urlObj = new URL(url)
+    // Extraer solo el parámetro wpdmdl (ID estable del documento)
+    const wpdmdl = urlObj.searchParams.get('wpdmdl')
+    const basePath = urlObj.origin + urlObj.pathname
+    // Retornar URL sin parámetros dinámicos
+    return wpdmdl ? `${basePath}?wpdmdl=${wpdmdl}` : basePath
+  } catch {
+    // Si falla el parsing, retornar URL original
+    return url
+  }
 }
 
 /**
@@ -403,42 +422,83 @@ async function analizarDocumentos(
 
   for (const doc of documentosDetectados) {
     try {
-      // Buscar por múltiples criterios
-      const { data: existentes } = await supabase
+      // Normalizar URL para comparación
+      const urlNormalizada = normalizarUrl(doc.url)
+      
+      // Buscar duplicados con estrategia mejorada
+      // 1. Primero buscar por URL normalizada (sin parámetros dinámicos)
+      const { data: porUrl } = await supabase
         .from('documentos_oficiales')
         .select('id, hash_contenido, version, url_original, titulo, storage_path')
-        .or(`url_original.eq.${doc.url},and(titulo.ilike.%${doc.nombre}%,año_vigencia.eq.${doc.año})`)
+        .or(`url_original.eq.${doc.url},url_original.eq.${urlNormalizada}`)
+      
+      if (porUrl && porUrl.length > 0) {
+        const existente = porUrl[0]
+        
+        // Mismo URL (normalizado) - verificar si cambió contenido
+        const hashNuevo = await calcularHashRemoto(doc.url)
+        
+        if (hashNuevo && hashNuevo !== existente.hash_contenido) {
+          // ✅ ACTUALIZADO
+          resultado.actualizados.push({
+            ...doc,
+            id_existente: existente.id,
+            version_anterior: existente.version,
+            hash_nuevo: hashNuevo
+          })
+          console.log(`  🔄 ${doc.nombre} (hash cambió)`)
+        } else {
+          // ⏭️ DUPLICADO (mismo contenido)
+          resultado.duplicados.push(doc)
+        }
+        
+        continue // Ya procesado, siguiente documento
+      }
+      
+      // 2. Si no hay match por URL, buscar por nombre exacto + año
+      const nombreNormalizado = doc.nombre
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Eliminar tildes
+        .replace(/[^a-z0-9]/g, '') // Solo alfanuméricos
+      
+      const { data: porNombre } = await supabase
+        .from('documentos_oficiales')
+        .select('id, hash_contenido, version, url_original, titulo, storage_path')
+        .eq('año_vigencia', doc.año)
+      
+      // Filtrar por similitud de nombre (en memoria)
+      const existentes = porNombre?.filter((existente: any) => {
+        const tituloNormalizado = existente.titulo
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]/g, '')
+        
+        // Match si > 80% de similitud
+        const similitud = calcularSimilitud(nombreNormalizado, tituloNormalizado)
+        return similitud > 0.8
+      }) || []
 
-      if (!existentes || existentes.length === 0) {
+      if (existentes.length === 0) {
         // ✅ NUEVO
         resultado.nuevos.push(doc)
         console.log(`  🆕 ${doc.nombre}`)
 
       } else if (existentes.length === 1) {
         const existente = existentes[0]
-
-        if (existente.url_original === doc.url) {
-          // Mismo URL - verificar si cambió contenido
-          const hashNuevo = await calcularHashRemoto(doc.url)
-
-          if (hashNuevo && hashNuevo !== existente.hash_contenido) {
-            // ✅ ACTUALIZADO
-            resultado.actualizados.push({
-              ...doc,
-              id_existente: existente.id,
-              version_anterior: existente.version,
-              hash_nuevo: hashNuevo
-            })
-            console.log(`  🔄 ${doc.nombre} (hash cambió)`)
-          } else {
-            // ⏭️ DUPLICADO (mismo contenido)
-            resultado.duplicados.push(doc)
-          }
-        } else {
-          // Mismo título/año pero URL diferente
+        
+        // Mismo título pero URL diferente (posible duplicado o re-publicación)
+        const urlExistenteNorm = normalizarUrl(existente.url_original)
+        const urlNuevaNorm = normalizarUrl(doc.url)
+        
+        if (urlExistenteNorm !== urlNuevaNorm) {
           console.log(`  ⚠️  URL diferente para: ${doc.nombre}`)
-          resultado.duplicados.push(doc)
+          console.log(`      BD (norm): ${urlExistenteNorm}`)
+          console.log(`      Nuevo (norm): ${urlNuevaNorm}`)
         }
+        
+        resultado.duplicados.push(doc)
 
       } else {
         // Múltiples coincidencias
@@ -553,16 +613,47 @@ function extraerPDFsPorSubcategoria(
     const tituloTab = matchTab[1].trim()
     const contenidoTab = matchTab[2]
     
-    // Buscar subcategoría que coincida
-    const subcategoriaMatch = subcategorias.find(sub => 
-      tituloTab.toLowerCase().includes(sub.toLowerCase()) ||
-      sub.toLowerCase().includes(tituloTab.toLowerCase())
-    )
+    // Matching mejorado con palabras clave
+    let subcategoriaDestino = subcategorias[0] // Default: primera subcategoría
     
-    if (subcategoriaMatch) {
-      const pdfs = extraerLinksPDF(contenidoTab)
-      resultado[subcategoriaMatch].push(...pdfs)
-      console.log(`      📝 Tab "${tituloTab}" → ${subcategoriaMatch}: ${pdfs.length} PDFs`)
+    const tituloLower = tituloTab.toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Eliminar tildes para comparación
+    
+    // Buscar la mejor coincidencia
+    for (const sub of subcategorias) {
+      const subLower = sub.toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+      
+      // Patrones específicos por subcategoría
+      const patterns: Record<string, RegExp[]> = {
+        'programas emtp': [/emtp/i, /tecnico.*profesional/i, /tp/i],
+        'priorizacion curricular': [/priorizacion/i, /priorizaci[oó]n/i],
+        'marco para la buena ensenanza': [/marco/i, /buena.*ensenanza/i, /mbe/i],
+        'bases curriculares': [/bases.*curriculares/i, /curricul/i]
+      }
+      
+      // Primero intentar match directo
+      if (tituloLower.includes(subLower) || subLower.includes(tituloLower)) {
+        subcategoriaDestino = sub
+        break
+      }
+      
+      // Luego intentar patrones específicos
+      const subKey = subLower.replace(/\s+/g, ' ')
+      const relevantPatterns = patterns[subKey] || []
+      
+      if (relevantPatterns.some(pattern => pattern.test(tituloTab))) {
+        subcategoriaDestino = sub
+        break
+      }
+    }
+    
+    const pdfs = extraerLinksPDF(contenidoTab)
+    if (pdfs.length > 0) {
+      resultado[subcategoriaDestino].push(...pdfs)
+      console.log(`      📝 Tab "${tituloTab}" → ${subcategoriaDestino}: ${pdfs.length} PDFs`)
     }
   }
   
@@ -629,8 +720,25 @@ function extraerLinksPDF(html: string): Array<{ nombre: string; url: string }> {
 }
 
 function extraerNombreDeUrl(url: string): string {
-  // Para URLs con wpdmdl, intentar extraer nombre del contexto
+  // Para URLs con wpdmdl, intentar extraer el slug descriptivo
   if (url.includes('wpdmdl=')) {
+    // Patrón: https://www.docentemas.cl/download/nombre-descriptivo/?wpdmdl=123
+    const slugMatch = url.match(/\/download\/([^/?]+)\//i)
+    if (slugMatch && slugMatch[1]) {
+      const slug = slugMatch[1]
+        .replace(/-/g, ' ')  // Convertir guiones en espacios
+        .replace(/_/g, ' ')  // Convertir underscores en espacios
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1)) // Capitalizar
+        .join(' ')
+        .trim()
+      
+      if (slug && slug.length > 3) {
+        return slug
+      }
+    }
+    
+    // Fallback: usar ID si no hay slug
     const id = url.match(/wpdmdl=(\d+)/)?.[1]
     return id ? `documento_${id}` : 'documento'
   }
@@ -672,8 +780,8 @@ function parsearNombreArchivo(nombre: string, tipo?: string, html?: string): {
 
   const nombreLower = nombre.toLowerCase()
 
-  // Detectar año con múltiples patrones
-  const añoMatch = nombre.match(/202[0-9]/) || nombre.match(/\b(2024|2025|2026)\b/)
+  // Detectar año con múltiples patrones (incluye 2023-2026)
+  const añoMatch = nombre.match(/202[3-9]/) || nombre.match(/\b(2023|2024|2025|2026)\b/)
   const año = añoMatch ? parseInt(añoMatch[0]) : 2025 // Default a 2025 si no se encuentra
 
   // Patrones mejorados para nivel educativo
@@ -816,7 +924,7 @@ ${textoMuestra.substring(0, 2000)}
 Analiza el contenido y clasifica el documento. Responde SOLO con JSON válido (sin markdown):
 
 {
-  "año": número entre 2020-2026 (busca en encabezados, pie de página, o contenido),
+  "año": número entre 2023-2026 (busca en encabezados, pie de página, o contenido),
   "justificacion_año": "explica de dónde se obtuvo el año (ej: 'Encabezado dice 2025', 'Decreto 67/2018')",
   "nivel_educativo": "parvularia|basica_1_6|basica_7_8_media|media_tp|especial_regular|especial_neep|hospitalaria|encierro|lengua_indigena|epja|regular",
   "justificacion_nivel": "explica por qué este nivel (ej: 'Menciona 1° a 6° básico', 'Documento para TP')",
@@ -904,8 +1012,8 @@ function validarRespuestaIA(resultado: any): any | null {
       return null
     }
     
-    // Validar rangos
-    if (data.año < 2020 || data.año > 2026) {
+    // Validar rangos (incluye 2023 para rúbricas históricas)
+    if (data.año < 2023 || data.año > 2026) {
       return null
     }
     
@@ -932,11 +1040,44 @@ function validarRespuestaIA(resultado: any): any | null {
   }
 }
 
+/**
+ * Calcula similitud entre dos strings usando coeficiente de Sørensen–Dice
+ * Más rápido que Levenshtein y suficiente para nombres de documentos
+ * Retorna valor entre 0 (totalmente diferentes) y 1 (idénticos)
+ */
+function calcularSimilitud(str1: string, str2: string): number {
+  if (str1 === str2) return 1.0
+  if (str1.length < 2 || str2.length < 2) return 0.0
+  
+  // Crear bigramas (pares de caracteres consecutivos)
+  const bigramas1 = new Set<string>()
+  const bigramas2 = new Set<string>()
+  
+  for (let i = 0; i < str1.length - 1; i++) {
+    bigramas1.add(str1.substring(i, i + 2))
+  }
+  
+  for (let i = 0; i < str2.length - 1; i++) {
+    bigramas2.add(str2.substring(i, i + 2))
+  }
+  
+  // Calcular intersección
+  let interseccion = 0
+  for (const bigrama of bigramas1) {
+    if (bigramas2.has(bigrama)) {
+      interseccion++
+    }
+  }
+  
+  // Coeficiente de Dice: 2 * intersección / (tamaño1 + tamaño2)
+  return (2.0 * interseccion) / (bigramas1.size + bigramas2.size)
+}
+
 function inferirNivelPorTipo(tipo: string): string {
   // Inferir nivel educativo basado en el tipo de documento
   const mapeoNivel: Record<string, string> = {
     'manuales': 'regular',
-    'rubricas': 'regular',
+    'rubricasPortafolio': 'regular', // Rúbricas de evaluación docente (todos los niveles)
     'referentesCurriculares': 'basica_1_6',
     'tiposDeInformesDeResultados': 'regular',
     'documentos': 'regular',
@@ -1092,7 +1233,7 @@ export async function procesarDocumentoNuevo(
       asignatura: doc.asignatura || null,
       año_vigencia: doc.año,
       titulo: doc.nombre,
-      url_original: doc.url,
+      url_original: normalizarUrl(doc.url), // URL sin parámetros dinámicos (refresh, etc)
       storage_path: fileName,
       tamaño_bytes: pdfBuffer.byteLength,
       hash_contenido: hash,
@@ -1166,7 +1307,7 @@ function mapearTipoDocumento(tipo: string, subcategoria?: string): string {
       'Priorización Curricular': 'priorizacion_curricular',
       'Programas EMTP': 'programa_emtp',
       'Marco para la Buena Enseñanza': 'marco_buena_ensenanza',
-      'Rúbricas': 'rubricas',
+      'Rúbricas Portafolio': 'rubricas_portafolio', // Rúbricas de evaluación docente
       'Manuales de Instrumentos': 'manual_portafolio',
       'Informes de Resultados': 'informe_resultados',
       'Documentos Legales': 'documento_legal'
@@ -1181,7 +1322,7 @@ function mapearTipoDocumento(tipo: string, subcategoria?: string): string {
   const mapeo: Record<string, string> = {
     'manuales': 'manual_portafolio',
     'basesCurriculares': 'bases_curriculares',
-    'rubricas': 'rubricas',
+    'rubricasPortafolio': 'rubricas_portafolio', // Rúbricas de evaluación docente
     'tiposDeInformesDeResultados': 'informe_resultados',
     'documentosLegales': 'documento_legal'
   }

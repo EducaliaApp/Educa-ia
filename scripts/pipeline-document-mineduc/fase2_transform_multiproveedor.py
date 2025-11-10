@@ -616,8 +616,148 @@ año: 2025
 
 def extraer_con_ia_vision(pdf_bytes, tipo_documento):
     """Wrapper para IA Vision con prompt especializado"""
-    # ... tu código de extracción IA ...
-    pass  # Mantén tu implementación actual
+
+    # Crear prompt especializado por tipo
+    if tipo_documento == 'rubricas':
+        prompt = """Extrae el contenido de esta rúbrica de evaluación docente chilena.
+
+INSTRUCCIONES:
+- Mantén toda la estructura jerárquica (dominios, criterios, indicadores)  
+- Conserva los 4 niveles: Insatisfactorio, Básico, Competente, Destacado
+- Usa formato Markdown con ## para secciones principales
+- Incluye todos los descriptores de desempeño literalmente
+
+Responde SOLO el contenido extraído en Markdown:"""
+    else:
+        prompt = f"""Extrae todo el contenido textual de este documento oficial del MINEDUC.
+
+INSTRUCCIONES:
+- Mantén estructura jerárquica completa
+- Conserva títulos, subtítulos y numeración
+- Incluye tablas y listas
+- Usa formato Markdown limpio
+- NO agregues comentarios ni explicaciones
+
+Responde SOLO el contenido extraído:"""
+    
+    # Convertir PDF a imágenes
+    try:
+        imagenes_base64 = []
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as pdf:
+            # Limitar páginas para optimizar costos
+            max_pages = min(20, len(pdf))  # Máximo 20 páginas
+            
+            for i in range(max_pages):
+                pix = pdf[i].get_pixmap(matrix=fitz.Matrix(1.5, 1.5))  # Resolución reducida
+                img_bytes = pix.tobytes("png")
+                img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+                imagenes_base64.append(img_b64)
+    
+    except Exception as e:
+        print(f"    ❌ Error convirtiendo PDF: {e}")
+        return "Error de conversión", 0, 'error'
+    
+    # Intentar proveedores en orden de prioridad
+    for proveedor in AI_PROVIDERS:
+        try:
+            if proveedor == 'gemini' and GEMINI_AVAILABLE:
+                contenido, costo = _extraer_con_gemini(prompt, imagenes_base64)
+                return contenido, costo, 'gemini'
+            
+            elif proveedor == 'openai' and OPENAI_AVAILABLE:
+                contenido, costo = _extraer_con_openai(prompt, imagenes_base64)
+                return contenido, costo, 'openai'
+            
+            elif proveedor == 'anthropic' and ANTHROPIC_AVAILABLE:
+                contenido, costo = _extraer_con_anthropic(prompt, imagenes_base64)
+                return contenido, costo, 'anthropic'
+        
+        except Exception as e:
+            error_msg = str(e).lower()
+            print(f"    ⚠️  {proveedor.upper()} falló: {str(e)[:100]}")
+            
+            # Si es error de quota, probar siguiente proveedor
+            if 'quota' in error_msg or '429' in error_msg:
+                continue
+            # Si es error crítico, fallar completamente
+            else:
+                break
+    
+    # Todos los proveedores fallaron
+    print(f"    ❌ Todos los proveedores IA fallaron")
+    return "Error de extracción IA", 0, 'error'
+
+
+def _extraer_con_openai(prompt, imagenes_base64):
+    """Extrae con OpenAI GPT-4o"""
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    
+    # Preparar mensajes
+    content = [{"type": "text", "text": prompt}]
+    
+    for img_b64 in imagenes_base64[:10]:  # Máximo 10 imágenes
+        content.append({
+            "type": "image_url", 
+            "image_url": {"url": f"data:image/png;base64,{img_b64}"}
+        })
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": content}],
+            max_tokens=4096,
+            temperature=0.2
+        )
+        
+        contenido = response.choices[0].message.content
+        
+        # Calcular costo GPT-4o
+        input_tokens = response.usage.prompt_tokens
+        output_tokens = response.usage.completion_tokens
+        costo = (input_tokens * 0.0025 + output_tokens * 0.01) / 1000  # $2.50/$10 per 1M tokens
+        
+        return contenido, costo
+    
+    except Exception as e:
+        raise Exception(f"OpenAI error: {str(e)[:100]}")
+
+
+def _extraer_con_anthropic(prompt, imagenes_base64):
+    """Extrae con Claude 3.5 Sonnet"""
+    client = Anthropic(api_key=ANTHROPIC_API_KEY)
+    
+    # Preparar contenido
+    content = [{"type": "text", "text": prompt}]
+    
+    for img_b64 in imagenes_base64[:5]:  # Claude tiene límites más estrictos
+        content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/png", 
+                "data": img_b64
+            }
+        })
+    
+    try:
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=4096,
+            temperature=0.2,
+            messages=[{"role": "user", "content": content}]
+        )
+        
+        contenido = response.content[0].text
+        
+        # Calcular costo Claude 3.5 Sonnet
+        input_tokens = response.usage.input_tokens
+        output_tokens = response.usage.output_tokens
+        costo = (input_tokens * 0.003 + output_tokens * 0.015) / 1000  # $3/$15 per 1M tokens
+        
+        return contenido, costo
+    
+    except Exception as e:
+        raise Exception(f"Anthropic error: {str(e)[:100]}")
 
 
 # ============================================
