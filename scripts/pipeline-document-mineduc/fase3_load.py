@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from supabase import create_client
 from openai import OpenAI
 from typing import List, Dict, Tuple
+import tiktoken  # Para contar tokens
 
 load_dotenv('.env.local')
 supabase = create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
@@ -28,7 +29,14 @@ EMBEDDING_DIMENSIONS = 1536  # Reducción dimensional para eficiencia
 MAX_CHUNK_SIZE = 6000  # Chars por chunk (balance calidad/costo)
 MIN_CHUNK_SIZE = 500   # Evita chunks muy pequeños
 OVERLAP_SIZE = 200     # Overlap mínimo para contexto
-MAX_TOKENS_PER_CHUNK = 7000  # 🔧 HARD LIMIT: OpenAI tiene límite de 8192 tokens
+MAX_TOKENS_PER_CHUNK = 7500  # 🔧 HARD LIMIT: OpenAI text-embedding-3-large límite 8192 tokens (dejamos margen)
+
+# Tokenizer para validación
+try:
+    tokenizer = tiktoken.encoding_for_model("text-embedding-3-large")
+except:
+    # Fallback si el modelo específico no está disponible
+    tokenizer = tiktoken.get_encoding("cl100k_base")
 
 # ============================================
 # CHUNKING SEMÁNTICO INTELIGENTE
@@ -90,6 +98,58 @@ def extraer_metadata_documento(contenido: str, doc_info: dict) -> dict:
     return metadata
 
 
+def subdividir_chunk_grande(texto: str, metadata: dict, max_tokens: int) -> List[Dict]:
+    """
+    Subdivide un chunk que excede el límite de tokens.
+    Intenta mantener coherencia dividiendo por párrafos.
+    """
+    subchunks = []
+    
+    # Dividir por párrafos (doble salto de línea)
+    parrafos = texto.split('\n\n')
+    
+    texto_actual = ""
+    tokens_actual = 0
+    
+    for parrafo in parrafos:
+        parrafo_tokens = len(tokenizer.encode(parrafo))
+        
+        # Si agregar este párrafo excede el límite, guardar chunk actual
+        if tokens_actual + parrafo_tokens > max_tokens and texto_actual:
+            subchunks.append({
+                'contenido': texto_actual.strip(),
+                'metadata': {
+                    **metadata,
+                    'subdividido': True,
+                    'parte': len(subchunks) + 1
+                }
+            })
+            texto_actual = parrafo + "\n\n"
+            tokens_actual = parrafo_tokens
+        else:
+            texto_actual += parrafo + "\n\n"
+            tokens_actual += parrafo_tokens
+    
+    # Guardar último chunk
+    if texto_actual.strip():
+        subchunks.append({
+            'contenido': texto_actual.strip(),
+            'metadata': {
+                **metadata,
+                'subdividido': True,
+                'parte': len(subchunks) + 1,
+                'total_partes': len(subchunks) + 1
+            }
+        })
+    
+    # Actualizar total_partes en todos los subchunks
+    total_partes = len(subchunks)
+    for sc in subchunks:
+        sc['metadata']['total_partes'] = total_partes
+    
+    return subchunks
+
+
 def chunking_semantico_markdown(contenido: str, doc_metadata: dict) -> List[Dict]:
     """
     Divide contenido respetando estructura Markdown
@@ -109,84 +169,19 @@ def chunking_semantico_markdown(contenido: str, doc_metadata: dict) -> List[Dict
     # 🔧 NUEVO: Forzar división si algún chunk excede MAX_TOKENS_PER_CHUNK
     for chunk in chunks_intermedios:
         texto = chunk['contenido']
+        num_tokens = len(tokenizer.encode(texto))
         
-        # Estimación rápida: 1 token ≈ 4 caracteres en español
-        tokens_estimados = len(texto) // 4
-        
-        if tokens_estimados > MAX_TOKENS_PER_CHUNK:
-            # Dividir forzadamente en chunks más pequeños
-            sub_chunks = dividir_chunk_largo(texto, chunk['metadata'])
-            chunks_finales.extend(sub_chunks)
+        if num_tokens > MAX_TOKENS_PER_CHUNK:
+            # Subdividir chunk grande
+            print(f"    ⚠️  Chunk de {num_tokens} tokens excede límite ({MAX_TOKENS_PER_CHUNK}), subdividiendo...")
+            subchunks = subdividir_chunk_grande(texto, chunk['metadata'], MAX_TOKENS_PER_CHUNK)
+            chunks_finales.extend(subchunks)
         else:
             chunks_finales.append(chunk)
     
     return chunks_finales
 
 
-def dividir_chunk_largo(texto: str, metadata: dict) -> List[Dict]:
-    """
-    Divide un chunk que excede MAX_TOKENS_PER_CHUNK
-    Respeta saltos de línea y párrafos cuando es posible
-    """
-    chunks = []
-    max_chars = MAX_TOKENS_PER_CHUNK * 4  # Convertir tokens a chars
-    
-    # Dividir por párrafos primero
-    parrafos = texto.split('\n\n')
-    
-    chunk_actual = ""
-    parte_num = 1
-    
-    for parrafo in parrafos:
-        # Si un solo párrafo es demasiado largo, dividirlo por oraciones
-        if len(parrafo) > max_chars:
-            # Dividir por oraciones (punto + espacio)
-            oraciones = re.split(r'(?<=[.!?])\s+', parrafo)
-            
-            for oracion in oraciones:
-                if len(chunk_actual) + len(oracion) > max_chars and chunk_actual:
-                    # Guardar chunk actual
-                    chunks.append({
-                        'contenido': chunk_actual,
-                        'metadata': {
-                            **metadata,
-                            'parte': f'{parte_num}/{len(parrafos)}',
-                            'chunk_dividido': True
-                        }
-                    })
-                    chunk_actual = oracion
-                    parte_num += 1
-                else:
-                    chunk_actual += ' ' + oracion if chunk_actual else oracion
-        
-        # Párrafo normal
-        elif len(chunk_actual) + len(parrafo) > max_chars and chunk_actual:
-            # Guardar chunk actual
-            chunks.append({
-                'contenido': chunk_actual,
-                'metadata': {
-                    **metadata,
-                    'parte': f'{parte_num}',
-                    'chunk_dividido': True
-                }
-            })
-            chunk_actual = parrafo
-            parte_num += 1
-        else:
-            chunk_actual += '\n\n' + parrafo if chunk_actual else parrafo
-    
-    # Agregar último chunk
-    if chunk_actual.strip():
-        chunks.append({
-            'contenido': chunk_actual,
-            'metadata': {
-                **metadata,
-                'parte': f'{parte_num}' if parte_num > 1 else 'completo',
-                'chunk_dividido': parte_num > 1
-            }
-        })
-    
-    return chunks
 
 
 def chunking_rubricas(contenido: str, doc_metadata: dict) -> List[Dict]:
