@@ -128,11 +128,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: v1.40.x
-      
       - name: Monitorear documentos oficiales
         id: monitor
         run: |
@@ -197,8 +192,9 @@ jobs:
       (needs.extract.outputs.has_changes == 'true' || github.event.inputs.force_full_sync == 'true')
     timeout-minutes: 10
     outputs:
-      docs_sin_archivo: ${{ steps.check.outputs.sin_archivo }}
-      docs_verificados: ${{ steps.check.outputs.verificados }}
+      verificados: ${{ steps.check.outputs.validados }}
+      resincronizados: ${{ steps.check.outputs.resincronizados }}
+      sin_archivo: ${{ steps.check.outputs.errores }}
       
     steps:
       - uses: actions/checkout@v4
@@ -263,7 +259,8 @@ jobs:
     if: |
       always() && 
       needs.preflight.outputs.can_proceed == 'true' &&
-      (needs.extract.outputs.has_changes == 'true' || github.event.inputs.force_full_sync == 'true')
+      (needs.extract.outputs.has_changes == 'true' || github.event.inputs.force_full_sync == 'true') &&
+      (fromJSON(needs.extract.outputs.nuevos || '0') > 0 || fromJSON(needs.extract.outputs.actualizados || '0') > 0 || github.event.inputs.force_full_sync == 'true')
     timeout-minutes: 30
     outputs:
       success: ${{ steps.transform.outputs.success }}
@@ -278,6 +275,16 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
+      
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            /var/cache/apt/archives
+            /var/lib/apt/lists
+          key: ${{ runner.os }}-apt-tesseract-${{ hashFiles('.github/workflows/pipeline-documentos-mineduc.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-tesseract-
       
       - name: Instalar dependencias
         run: |
@@ -336,7 +343,7 @@ jobs:
     if: |
       always() &&
       needs.preflight.outputs.can_proceed == 'true' &&
-      needs.transform.outputs.transformed > 0
+      fromJSON(needs.transform.outputs.transformed || '0') > 0
     timeout-minutes: 45
     outputs:
       success: ${{ steps.load.outputs.success }}
@@ -408,7 +415,7 @@ jobs:
     if: |
       always() &&
       needs.preflight.outputs.can_proceed == 'true' &&
-      needs.load.outputs.loaded > 0 &&
+      fromJSON(needs.load.outputs.loaded || '0') > 0 &&
       github.event.inputs.skip_validation != 'true'
     timeout-minutes: 20
     outputs:
@@ -453,9 +460,12 @@ jobs:
           echo "quality=$quality" >> $GITHUB_OUTPUT
           echo "alertas=$alertas" >> $GITHUB_OUTPUT
           
+          # Calcular porcentaje con precisión
+          quality_pct=$(printf "%.1f" $(echo "scale=2; $quality * 100" | bc -l))
+          
           echo "### ✅ Fase 4: Validación" >> $GITHUB_STEP_SUMMARY
           echo "- **Chunks validados:** $validated" >> $GITHUB_STEP_SUMMARY
-          echo "- **Calidad:** $(echo "$quality * 100" | bc)%" >> $GITHUB_STEP_SUMMARY
+          echo "- **Calidad:** ${quality_pct}%" >> $GITHUB_STEP_SUMMARY
           echo "- **Alertas:** $alertas" >> $GITHUB_STEP_SUMMARY
       
       - name: Upload validation report
@@ -474,11 +484,12 @@ jobs:
   optimize:
     name: "⚡ FASE 5: Optimizar Índices"
     runs-on: ubuntu-latest
-    needs: [preflight, validate]
+    needs: [preflight, load, validate]
     if: |
       always() &&
       needs.preflight.outputs.can_proceed == 'true' &&
-      needs.validate.outputs.validated > 0
+      (fromJSON(needs.load.outputs.loaded || '0') > 0 || 
+       fromJSON(needs.validate.outputs.validated || '0') > 0)
     timeout-minutes: 20
 
     steps:
