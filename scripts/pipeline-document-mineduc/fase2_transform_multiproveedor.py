@@ -155,69 +155,113 @@ def intentar_resubir_desde_url(doc_id, url_original, storage_path):
     Intenta descargar PDF de URL original y re-subirlo a Storage
     
     🔧 FIX: Separar headers de file_options correctamente
+    🔧 FIX: Timeout extendido para archivos grandes (hasta 120s)
+    🔧 FIX: Manejo robusto de conexiones interrumpidas
     """
-    try:
-        print(f"  🔄 Descargando desde URL original...")
-        
-        # Descargar de URL original
-        response = requests.get(url_original, timeout=30, stream=True)
-        response.raise_for_status()
-        
-        pdf_bytes = response.content
-        
-        # Validar PDF
-        if not pdf_bytes.startswith(b'%PDF'):
-            print(f"  ⚠️  No es un PDF válido")
-            return False, None
-        
-        print(f"  ✅ Descargado: {len(pdf_bytes):,} bytes")
-        
-        # 🔧 FIX CRÍTICO: Usar file_options correctamente
-        print(f"  💾 Re-subiendo a Storage...")
-        
-        upload_result = supabase.storage.from_('documentos-oficiales').upload(
-            path=storage_path,
-            file=pdf_bytes,
-            file_options={
-                'content-type': 'application/pdf',
-                'upsert': 'true'  # 🔧 Como string, no bool
-            }
-        )
-        
-        # Verificar error
-        if hasattr(upload_result, 'error') and upload_result.error:
-            print(f"  ⚠️  Error subiendo: {upload_result.error}")
-            return False, None
-        
-        print(f"  ✅ Re-subido exitosamente")
-        
-        # Actualizar metadata en BD
-        try:
-            supabase.table('documentos_oficiales').update({
-                'fecha_actualizacion': datetime.now().isoformat(),
-                'metadata': supabase.rpc('jsonb_set', {
-                    'target': supabase.table('documentos_oficiales').select('metadata').eq('id', doc_id),
-                    'path': '{resubido}',
-                    'value': json.dumps({
-                        'fecha': datetime.now().isoformat(),
-                        'razon': 'archivo_faltante_storage'
-                    })
-                })
-            }).eq('id', doc_id).execute()
-        except Exception as e:
-            print(f"  ⚠️  No se pudo actualizar metadata: {e}")
-        
-        return True, pdf_bytes
+    MAX_RETRIES = 3
+    TIMEOUT_DOWNLOAD = 120  # 2 minutos para archivos grandes
+    TIMEOUT_UPLOAD = 180    # 3 minutos para upload a Storage
     
-    except requests.Timeout:
-        print(f"  ❌ Timeout descargando URL")
-        return False, None
-    except requests.RequestException as e:
-        print(f"  ❌ Error HTTP: {e}")
-        return False, None
-    except Exception as e:
-        print(f"  ❌ Error: {str(e)[:100]}")
-        return False, None
+    for intento in range(MAX_RETRIES):
+        try:
+            if intento > 0:
+                print(f"  🔄 Reintento {intento + 1}/{MAX_RETRIES}...")
+                time.sleep(2 ** intento)  # Exponential backoff: 2s, 4s, 8s
+            
+            print(f"  🔄 Descargando desde URL original...")
+            
+            # Descargar de URL original con timeout extendido
+            response = requests.get(
+                url_original, 
+                timeout=TIMEOUT_DOWNLOAD, 
+                stream=True,
+                headers={'User-Agent': 'Mozilla/5.0'}  # Algunos servers bloquean requests sin UA
+            )
+            response.raise_for_status()
+            
+            pdf_bytes = response.content
+            
+            # Validar PDF
+            if not pdf_bytes.startswith(b'%PDF'):
+                print(f"  ⚠️  No es un PDF válido")
+                return False, None
+            
+            print(f"  ✅ Descargado: {len(pdf_bytes):,} bytes")
+            
+            # 🔧 FIX CRÍTICO: Usar file_options correctamente
+            print(f"  💾 Re-subiendo a Storage...")
+            
+            upload_result = supabase.storage.from_('documentos-oficiales').upload(
+                path=storage_path,
+                file=pdf_bytes,
+                file_options={
+                    'content-type': 'application/pdf',
+                    'upsert': 'true'  # 🔧 Como string, no bool
+                }
+            )
+            
+            # Verificar error
+            if hasattr(upload_result, 'error') and upload_result.error:
+                error_msg = str(upload_result.error)
+                print(f"  ⚠️  Error subiendo: {error_msg}")
+                
+                # Si es error de conexión, reintentar
+                if 'disconnect' in error_msg.lower() or 'timeout' in error_msg.lower():
+                    if intento < MAX_RETRIES - 1:
+                        continue
+                
+                return False, None
+            
+            print(f"  ✅ Re-subido exitosamente")
+            
+            # Actualizar metadata en BD
+            try:
+                # Obtener metadata actual
+                result = supabase.table('documentos_oficiales').select('metadata').eq('id', doc_id).execute()
+                current_metadata = result.data[0].get('metadata', {}) if result.data else {}
+                
+                # Merge con nueva info de re-subida
+                updated_metadata = {
+                    **current_metadata,
+                    'resubido': {
+                        'fecha': datetime.now().isoformat(),
+                        'razon': 'archivo_faltante_storage',
+                        'intentos': intento + 1
+                    }
+                }
+                
+                # Actualizar en BD
+                supabase.table('documentos_oficiales').update({
+                    'fecha_actualizacion': datetime.now().isoformat(),
+                    'metadata': updated_metadata
+                }).eq('id', doc_id).execute()
+            except Exception as e:
+                print(f"  ⚠️  No se pudo actualizar metadata: {e}")
+            
+            return True, pdf_bytes
+        
+        except requests.Timeout:
+            print(f"  ⏱️  Timeout descargando URL (intento {intento + 1}/{MAX_RETRIES})")
+            if intento < MAX_RETRIES - 1:
+                continue
+            return False, None
+        except requests.RequestException as e:
+            error_msg = str(e)
+            print(f"  ⚠️  Error HTTP: {error_msg[:100]}")
+            
+            # Reintentar en errores de conexión
+            if any(keyword in error_msg.lower() for keyword in ['disconnect', 'timeout', 'connection', 'reset']):
+                if intento < MAX_RETRIES - 1:
+                    continue
+            return False, None
+        except Exception as e:
+            print(f"  ❌ Error: {str(e)[:100]}")
+            if intento < MAX_RETRIES - 1:
+                continue
+            return False, None
+    
+    print(f"  ❌ Falló después de {MAX_RETRIES} intentos")
+    return False, None
 
 def descargar_pdf_con_verificacion(doc):
     """
