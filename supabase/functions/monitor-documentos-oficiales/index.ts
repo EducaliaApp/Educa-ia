@@ -16,12 +16,12 @@ const CONFIG = {
   DELAY_BETWEEN_DOCUMENTS: 500,   // 500ms entre docs
   MAX_RETRIES: 3,
   RETRY_DELAY_BASE: 1000, // Base para exponential backoff (1s, 2s, 4s)
-  
+
   // Procesamiento
   MAX_CONCURRENT_DOWNLOADS: 3,
   PDF_SAMPLE_PAGES: 3, // Primeras 3 páginas para clasificación IA
   PDF_DOWNLOAD_TIMEOUT: 30000, // 30s timeout para descargas
-  
+
   // Thresholds
   MIN_AI_CONFIDENCE: 0.70, // Confianza mínima para clasificación IA
   MIN_PDF_SIZE: 10 * 1024, // 10KB mínimo
@@ -371,16 +371,16 @@ async function scrapearDocumentos(
           await new Promise(r => setTimeout(r, CONFIG.DELAY_BETWEEN_DOCUMENTS))
         }
       }
-      
+
       // Rate limiting entre categorías
       await new Promise(r => setTimeout(r, CONFIG.DELAY_BETWEEN_CATEGORIES))
-      
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
       console.error(`  ❌ Error en ${tipo}:`, errorMessage)
     }
   }
-  
+
   return documentosDetectados
 }
 
@@ -393,14 +393,14 @@ async function analizarDocumentos(
   pdfExtractor: PDFExtractor,
   aiAnalyzer: AIAnalyzer
 ): Promise<AnalisisDocumentos> {
-  
+
   const resultado: AnalisisDocumentos = {
     nuevos: [],
     actualizados: [],
     duplicados: [],
     invalidos: []
   }
-  
+
   for (const doc of documentosDetectados) {
     try {
       // Buscar por múltiples criterios
@@ -408,19 +408,19 @@ async function analizarDocumentos(
         .from('documentos_oficiales')
         .select('id, hash_contenido, version, url_original, titulo, storage_path')
         .or(`url_original.eq.${doc.url},and(titulo.ilike.%${doc.nombre}%,año_vigencia.eq.${doc.año})`)
-      
+
       if (!existentes || existentes.length === 0) {
         // ✅ NUEVO
         resultado.nuevos.push(doc)
         console.log(`  🆕 ${doc.nombre}`)
-        
+
       } else if (existentes.length === 1) {
         const existente = existentes[0]
-        
+
         if (existente.url_original === doc.url) {
           // Mismo URL - verificar si cambió contenido
           const hashNuevo = await calcularHashRemoto(doc.url)
-          
+
           if (hashNuevo && hashNuevo !== existente.hash_contenido) {
             // ✅ ACTUALIZADO
             resultado.actualizados.push({
@@ -439,20 +439,20 @@ async function analizarDocumentos(
           console.log(`  ⚠️  URL diferente para: ${doc.nombre}`)
           resultado.duplicados.push(doc)
         }
-        
+
       } else {
         // Múltiples coincidencias
         console.log(`  ⚠️  ${existentes.length} coincidencias para: ${doc.nombre}`)
         resultado.duplicados.push(doc)
       }
-      
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
       console.error(`  ❌ Error analizando ${doc.nombre}:`, errorMessage)
       resultado.invalidos.push({ doc, error: errorMessage })
     }
   }
-  
+
   return resultado
 }
 
@@ -654,12 +654,12 @@ function extraerNombreConContexto(url: string, textoBoton: string, contextoHtml:
                          matchStrong?.[1]?.trim() ||
                          matchDescripcion?.[1]?.trim() ||
                          textoBoton
-  
+
   // Si encontramos contexto útil, usarlo; sino usar URL
   if (nombreContexto && nombreContexto !== 'Descargar' && nombreContexto.length > 5) {
     return nombreContexto.replace(/[^a-zA-Z0-9À-ſ\s\-_]/g, '').trim()
   }
-  
+
   return extraerNombreDeUrl(url)
 }
 
@@ -669,17 +669,17 @@ function parsearNombreArchivo(nombre: string, tipo?: string, html?: string): {
   modalidad: string
   asignatura?: string
 } | null {
-  
+
   const nombreLower = nombre.toLowerCase()
-  
+
   // Detectar año con múltiples patrones
   const añoMatch = nombre.match(/202[0-9]/) || nombre.match(/\b(2024|2025|2026)\b/)
   const año = añoMatch ? parseInt(añoMatch[0]) : 2025 // Default a 2025 si no se encuentra
-  
+
   // Patrones mejorados para nivel educativo
   let nivel = 'regular'
   const patronesNivel = {
-    'parvularia': /parvularia|párvulo|pre\s*escolar/,
+    'parvularia': /parvularia|párvulo|pre\s*escolar|educación parvularia|educacion parvularia/,
     'basica_1_6': /1°?\s*a\s*6°?|básica.*1.*6|primero.*sexto/,
     'basica_7_8_media': /7°?.*8°?|séptimo.*octavo|media|secundaria/,
     'media_tp': /técnico\s*profesional|tp|medio.*técnico/,
@@ -690,43 +690,43 @@ function parsearNombreArchivo(nombre: string, tipo?: string, html?: string): {
     'lengua_indigena': /lengua.*indígena|mapuche|quechua|aymara/,
     'epja': /adultos|jóvenes.*adultas|epja/
   }
-  
+
   for (const [key, patron] of Object.entries(patronesNivel)) {
     if (patron.test(nombreLower)) {
       nivel = key
       break
     }
   }
-  
+
   // Detectar modalidad
   let modalidad = 'regular'
   if (/especial/.test(nombreLower)) modalidad = 'especial'
   if (/hospitalaria/.test(nombreLower)) modalidad = 'hospitalaria'
   if (/encierro/.test(nombreLower)) modalidad = 'encierro'
   if (/lengua.*indígena/.test(nombreLower)) modalidad = 'lengua_indigena'
-  
-  // Detectar asignatura
+
+  // Detectar asignatura desde nombre del archivo
   let asignatura: string | undefined
   const patronesAsignatura = {
-    'Matemática': /matemática|matemáticas/i,
-    'Lenguaje y Comunicación': /lenguaje|comunicación|lengua castellana/i,
-    'Ciencias Naturales': /ciencias naturales|biología|física|química/i,
-    'Historia y Geografía': /historia|geografía|ciencias sociales/i,
-    'Inglés': /inglés|english/i,
-    'Artes Visuales': /artes visuales|artes plásticas/i,
-    'Música': /música/i,
-    'Educación Física': /educación física|ed\. física/i,
-    'Tecnología': /tecnología/i,
-    'Religión': /religión|católica|evangélica/i
+    'Matemática': /matemática|matemáticas|matematica|matematicas|matem_ticas/i,
+    'Lenguaje y Comunicación': /lenguaje|comunicación|comunicacion|comunicaci_n|lengua castellana|castellano/i,
+    'Ciencias Naturales': /ciencias naturales|biología|biolog_a|biologia|física|fisica|f_sica|química|quimica|qu_mica/i,
+    'Historia y Geografía': /historia|geografía|geografia|ciencias sociales|sociales/i,
+    'Inglés': /inglés|ingles|ingl_s|english/i,
+    'Artes Visuales': /artes visuales|artes_visuales|artes plásticas|artes plasticas|artes_plasticas|artes_pl_sticas/i,
+    'Música': /música|musica|artes musicales/i,
+    'Educación Física': /educación física|educacion fisica|educacion_fisica|educaci_n_f_sica|ed\. física|ed_f_sica|ed\. fisica/i,
+    'Tecnología': /tecnología|tecnologia|tecnolog_a/i,
+    'Religión': /religión|religion|religi_on|católica|catolica|cat_lica|evangelica|evangélica|evang_lica/i
   }
-  
+
   for (const [asig, patron] of Object.entries(patronesAsignatura)) {
     if (patron.test(nombreLower)) {
       asignatura = asig
       break
     }
   }
-  
+
   return { año, nivel, modalidad, asignatura }
 }
 
@@ -740,7 +740,7 @@ async function clasificarConIAMejorada(
   aiAnalyzer: AIAnalyzer,
   pdfExtractor: PDFExtractor
 ): Promise<ClasificacionMetadata | null> {
-  
+
   try {
     // 1. Validar que es PDF y obtener metadata
     const headResponse = await fetch(link.url, { 
@@ -936,7 +936,7 @@ function inferirNivelPorTipo(tipo: string): string {
   // Inferir nivel educativo basado en el tipo de documento
   const mapeoNivel: Record<string, string> = {
     'manuales': 'regular',
-    'rubricas': 'regular', 
+    'rubricas': 'regular',
     'referentesCurriculares': 'basica_1_6',
     'tiposDeInformesDeResultados': 'regular',
     'documentos': 'regular',
@@ -1049,8 +1049,16 @@ export async function procesarDocumentoNuevo(
   }
   
   // 2. Subir a Supabase Storage
-  const fileName = `${doc.tipo}/${doc.año}/${doc.nombre.replace(/[^a-zA-Z0-9.-]/g, '_')}.pdf`
-  console.log('  💾 Subiendo a storage...')
+  // Sanitizar nombre de archivo: normalizar tildes y caracteres especiales
+  const sanitizedName = doc.nombre
+    .normalize('NFD') // Descomponer caracteres con tildes (á → a + ´)
+    .replace(/[\u0300-\u036f]/g, '') // Eliminar marcas diacríticas (tildes)
+    .replace(/[^a-zA-Z0-9.\-_]/g, '_') // Solo permitir alfanuméricos, punto, guión y underscore
+    .replace(/_+/g, '_') // Colapsar múltiples underscores consecutivos
+    .replace(/^_|_$/g, '') // Eliminar underscores al inicio/final
+  
+  const fileName = `${doc.tipo}/${doc.año}/${sanitizedName}.pdf`
+  console.log(`  💾 Subiendo a storage: ${fileName}`)
   
   await crearBucketSiNoExiste(supabase)
   

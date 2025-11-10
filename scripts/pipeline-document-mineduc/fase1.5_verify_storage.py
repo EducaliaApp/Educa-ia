@@ -16,6 +16,8 @@ import sys
 import json
 import requests
 import time
+import unicodedata
+import re
 from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client
@@ -32,6 +34,42 @@ supabase = create_client(
 BATCH_SIZE = int(os.getenv('VERIFY_BATCH_SIZE', '5'))  # Documentos en paralelo
 MAX_RETRIES = 3
 TIMEOUT = 30
+
+
+# ============================================
+# HELPERS
+# ============================================
+
+def sanitize_filename(nombre):
+    """
+    Sanitiza nombre de archivo igual que monitor-documentos-oficiales Edge Function.
+    
+    Proceso:
+    1. Normalizar Unicode (NFD) para descomponer tildes
+    2. Eliminar marcas diacríticas (tildes)
+    3. Solo permitir alfanuméricos, punto, guión y underscore
+    4. Colapsar múltiples underscores
+    5. Eliminar underscores al inicio/final
+    """
+    # Normalizar Unicode: á → a + ´
+    normalized = unicodedata.normalize('NFD', nombre)
+    
+    # Eliminar marcas diacríticas (rango U+0300 a U+036F)
+    sin_tildes = ''.join(
+        char for char in normalized 
+        if not unicodedata.combining(char)
+    )
+    
+    # Solo alfanuméricos, punto, guión y underscore
+    sanitized = re.sub(r'[^a-zA-Z0-9.\-_]', '_', sin_tildes)
+    
+    # Colapsar múltiples underscores
+    sanitized = re.sub(r'_+', '_', sanitized)
+    
+    # Eliminar underscores al inicio/final
+    sanitized = sanitized.strip('_')
+    
+    return sanitized
 
 
 # ============================================
@@ -184,13 +222,20 @@ def verificar_y_sincronizar_documento(doc):
     """
     doc_id = doc['id']
     titulo = doc['titulo']
-    storage_path = doc['storage_path']
+    nombre = doc.get('nombre', '')
+    tipo = doc.get('tipo', 'desconocido')
+    año = doc.get('año', 2024)
     url_original = doc.get('url_original')
+    
+    # Reconstruir path esperado con sanitización actualizada
+    # Debe coincidir con la lógica del Edge Function
+    sanitized_name = sanitize_filename(nombre) if nombre else 'documento'
+    expected_storage_path = f"{tipo}/{año}/{sanitized_name}.pdf"
     
     resultado = {
         'doc_id': doc_id,
         'titulo': titulo,
-        'storage_path': storage_path,
+        'storage_path': expected_storage_path,
         'status': 'unknown',
         'mensaje': '',
         'bytes': 0,
@@ -198,15 +243,27 @@ def verificar_y_sincronizar_documento(doc):
     }
     
     print(f"\n📄 [{doc_id}] {titulo[:60]}")
-    print(f"   Path: {storage_path}")
+    print(f"   Path esperado: {expected_storage_path}")
     
     # 1. Verificar si existe en Storage
-    existe, mensaje, status_code = verificar_archivo_existe(storage_path)
+    existe, mensaje, status_code = verificar_archivo_existe(expected_storage_path)
     
     if existe:
         print(f"   ✅ {mensaje}")
         resultado['status'] = 'ok'
         resultado['mensaje'] = mensaje
+        
+        # Actualizar BD si el path cambió (por nueva sanitización)
+        if doc.get('storage_path') != expected_storage_path:
+            print(f"   🔄 Actualizando path en BD: {expected_storage_path}")
+            try:
+                supabase.table('documentos_oficiales')\
+                    .update({'storage_path': expected_storage_path})\
+                    .eq('id', doc_id)\
+                    .execute()
+            except Exception as e:
+                print(f"   ⚠️  Error actualizando path: {str(e)}")
+        
         return resultado
     
     # 2. Archivo no existe - intentar re-descarga
@@ -220,11 +277,11 @@ def verificar_y_sincronizar_documento(doc):
     
     print(f"   🔄 Iniciando re-sincronización...")
     
-    # 3. Re-descargar y subir
+    # 3. Re-descargar y subir con el path esperado (sanitizado)
     exito, msg, bytes_subidos = redownload_y_upload(
         doc_id, 
         url_original, 
-        storage_path,
+        expected_storage_path,
         titulo
     )
     
@@ -358,7 +415,7 @@ def main():
     print("\n🔍 Buscando documentos para verificar...")
     
     documentos = supabase.table('documentos_oficiales')\
-        .select('id, titulo, storage_path, url_original')\
+        .select('id, titulo, nombre, tipo, año, storage_path, url_original')\
         .eq('etapa_actual', 'descargado')\
         .not_.is_('storage_path', 'null')\
         .order('created_at', desc=False)\
