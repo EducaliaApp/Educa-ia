@@ -431,9 +431,11 @@ def main():
     # 1. Obtener documentos pendientes de verificación
     print("\n🔍 Buscando documentos para verificar...")
     
+    # Verificar documentos en cualquier etapa que tenga storage_path
+    # (descargado, transformado, transformado_errores, completado, error_validacion_storage)
     documentos = supabase.table('documentos_oficiales')\
-        .select('id, titulo, tipo_documento, año_vigencia, storage_path, url_original')\
-        .eq('etapa_actual', 'descargado')\
+        .select('id, titulo, tipo_documento, año_vigencia, storage_path, url_original, etapa_actual')\
+        .in_('etapa_actual', ['descargado', 'transformado', 'transformado_errores', 'error_validacion_storage'])\
         .not_.is_('storage_path', 'null')\
         .order('created_at', desc=False)\
         .execute().data or []
