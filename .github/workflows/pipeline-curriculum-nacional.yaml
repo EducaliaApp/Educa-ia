@@ -55,28 +55,28 @@ jobs:
                 from supabase import create_client
                 
                 supabase = create_client(
-                os.getenv('SUPABASE_URL'),
-                os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+                    os.getenv('SUPABASE_URL'),
+                    os.getenv('SUPABASE_SERVICE_ROLE_KEY')
                 )
                 
                 # Verificar conectividad
                 try:
-                result = supabase.table('documentos_oficiales').select('id').limit(1).execute()
-                print("✅ Conexión Supabase OK")
-                healthy = True
+                    result = supabase.table('documentos_oficiales').select('id').limit(1).execute()
+                    print("✅ Conexión Supabase OK")
+                    healthy = True
                 except Exception as e:
-                print(f"❌ Error Supabase: {e}")
-                healthy = False
+                    print(f"❌ Error Supabase: {e}")
+                    healthy = False
                 
                 # Verificar índices críticos (vía RPC)
                 try:
-                indices = supabase.rpc('verificar_indice_hnsw_existe').execute()
-                if indices.data and indices.data.get('existe'):
-                    print("✅ Índice HNSW presente")
-                else:
-                    print("⚠️ Índice HNSW faltante (se creará)")
+                    indices = supabase.rpc('verificar_indice_hnsw_existe').execute()
+                    if indices.data and indices.data.get('existe'):
+                        print("✅ Índice HNSW presente")
+                    else:
+                        print("⚠️ Índice HNSW faltante (se creará)")
                 except:
-                pass
+                    pass
                 
                 # Output
                 print(f"::set-output name=healthy::{str(healthy).lower()}")
