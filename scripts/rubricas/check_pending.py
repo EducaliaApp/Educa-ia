@@ -12,7 +12,7 @@ try:
         .select('id')\
         .eq('tipo_documento', 'rubricas')\
         .eq('procesado', True)\
-        .is_('rubrica_extraida', 'null')\
+        .is_('rubrica_extraida', None)\
         .execute().data or []
     
     print(f"📋 Documentos tipo 'rubricas' procesados sin extraer")

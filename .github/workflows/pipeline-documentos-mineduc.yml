@@ -675,7 +675,7 @@ jobs:
                   {"title": "Nuevos", "value": "${{ needs.extract.outputs.nuevos || 0 }}", "short": true},
                   {"title": "Transformados", "value": "${{ needs.transform.outputs.transformed || 0 }}", "short": true},
                   {"title": "Cargados", "value": "${{ needs.load.outputs.loaded || 0 }}", "short": true},
-                  {"title": "Costo", "value": "${{ needs.metrics.outputs.total_cost || 0 }}", "short": true},
+                  {"title": "Costo", "value": "$${{ needs.metrics.outputs.total_cost || 0 }}", "short": true},
                   {"title": "Workflow", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|#${{ github.run_number }}>", "short": false}
                 ]
               }]
