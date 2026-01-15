@@ -92,14 +92,31 @@ Modal para editar información completa del usuario:
 
 ## Instrucciones de Aplicación
 
-### Opción 1: Mediante Supabase CLI
+### Opción 1: CI/CD Automático (Recomendado) ⭐
+
+**Para proyectos en producción**, configura el workflow de GitHub Actions para ejecutar migraciones automáticamente:
+
+1. Configura los secrets requeridos en GitHub (ver `CI_CD_MIGRATIONS_SETUP.md`)
+2. Haz merge de tu PR a `main` o `production`
+3. El workflow ejecutará las migraciones automáticamente
+4. Verifica en GitHub Actions que se aplicaron correctamente
+
+**Ventajas:**
+- ✅ Automatizado y consistente
+- ✅ Se ejecuta antes del deployment
+- ✅ Logs centralizados
+- ✅ Rollback más fácil
+
+Ver guía completa: **`CI_CD_MIGRATIONS_SETUP.md`**
+
+### Opción 2: Mediante Supabase CLI
 
 ```bash
 # Asegúrate de tener Supabase CLI instalado
 supabase migration up
 ```
 
-### Opción 2: Mediante Supabase Dashboard
+### Opción 3: Mediante Supabase Dashboard
 
 1. Accede al Supabase Dashboard de tu proyecto
 2. Ve a la sección "SQL Editor"
@@ -111,12 +128,14 @@ supabase migration up
    SELECT * FROM roles;
    ```
 
-### Opción 3: Script de Migración Manual
+### Opción 4: Script de Migración Manual (No Recomendado)
 
 ```bash
 npm run migrate
 # Y selecciona la migración 20250115_admin_maintainers.sql
 ```
+
+**Nota:** Para proyectos en producción, se recomienda usar la Opción 1 (CI/CD) para mayor confiabilidad y trazabilidad.
 
 ## Verificación Post-Migración
 

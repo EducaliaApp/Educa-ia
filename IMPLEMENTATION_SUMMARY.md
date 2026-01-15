@@ -175,14 +175,23 @@ actualizar_plan_usuario(usuario_id UUID, nuevo_plan_codigo TEXT)
 
 ### 1. Aplicar Migración
 
-**Opción A - Supabase Dashboard:**
+**Opción A - CI/CD Automático (Recomendado):**
+
+El workflow de GitHub Actions aplica migraciones automáticamente:
+- Al hacer merge de PRs a `main` o `production`
+- Al hacer push directo a estas ramas
+- Manualmente desde GitHub Actions
+
+Ver guía completa: `CI_CD_MIGRATIONS_SETUP.md`
+
+**Opción B - Supabase Dashboard (Manual):**
 ```
 1. Ir a Supabase Dashboard → SQL Editor
 2. Copiar contenido de supabase/migrations/20250115_admin_maintainers.sql
 3. Ejecutar
 ```
 
-**Opción B - Supabase CLI:**
+**Opción C - Supabase CLI (Manual):**
 ```bash
 supabase migration up
 ```
