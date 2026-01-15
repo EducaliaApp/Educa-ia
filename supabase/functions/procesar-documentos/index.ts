@@ -1,11 +1,10 @@
-// @ts-nocheck
-// // supabase/functions/procesar-documentos/index.ts
+// supabase/functions/procesar-documentos/index.ts
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.ts'
 
 
 // Utility: read a ReadableStream or Blob-like from Supabase storage response
-async function blobFromResponse(res: any) {
+async function blobFromResponse(res: { arrayBuffer?: () => Promise<ArrayBuffer>, body?: ReadableStream<Uint8Array> }): Promise<ArrayBuffer> {
   if (res.arrayBuffer) return await res.arrayBuffer();
   if (res.body) {
     const buffer = await new Response(res.body).arrayBuffer();
@@ -95,8 +94,9 @@ async function handler(req: Request): Promise<Response> {
     }
 
     console.error('Error procesando documento:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return new Response(JSON.stringify({
-      error: String(error.message || error)
+      error: errorMessage
     }), {
       status: 500,
       headers: {
