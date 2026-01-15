@@ -15,7 +15,7 @@ Antes de comenzar, verifica que tienes:
 > **✅ IMPORTANTE**: Este proyecto utiliza GitHub Actions para aplicar migraciones automáticamente.
 > Ver [CI_CD_MIGRATIONS_SETUP.md](../CI_CD_MIGRATIONS_SETUP.md) para más detalles.
 
-La migración `20250115_user_role_management.sql` ya está en el formato correcto y se ejecutará automáticamente cuando:
+La migración `20250115001_user_role_management.sql` ya está en el formato correcto y se ejecutará automáticamente cuando:
 
 1. **Se hace merge del Pull Request a `main`** - El workflow `deploy-and-migrate.yml` se ejecuta automáticamente
 2. **Se hace push directo a `main`** - Las migraciones se aplican inmediatamente
@@ -44,7 +44,7 @@ La migración `20250115_user_role_management.sql` ya está en el formato correct
 1. Abre el proyecto en Supabase Dashboard
 2. Navega a **SQL Editor**
 3. Crea una nueva query
-4. Copia y pega el contenido de `supabase/migrations/20250115_user_role_management.sql`
+4. Copia y pega el contenido de `supabase/migrations/20250115001_user_role_management.sql`
 5. Ejecuta la query
 6. Verifica que no hay errores
 

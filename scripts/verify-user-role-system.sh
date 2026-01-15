@@ -35,7 +35,7 @@ check_content() {
 errors=0
 
 echo "📁 Verificando archivos principales..."
-check_file "supabase/migrations/20250115_user_role_management.sql" || ((errors++))
+check_file "supabase/migrations/20250115001_user_role_management.sql" || ((errors++))
 check_file "components/admin/CreateUserModal.tsx" || ((errors++))
 check_file "docs/USER_ROLE_MANAGEMENT.md" || ((errors++))
 echo ""
@@ -53,9 +53,9 @@ check_content "lib/supabase/types.ts" "role_id" "role_id agregado a tipos Profil
 echo ""
 
 echo "🗄️ Verificando migración de base de datos..."
-check_content "supabase/migrations/20250115_user_role_management.sql" "ADD COLUMN IF NOT EXISTS role_id" "Columna role_id" || ((errors++))
-check_content "supabase/migrations/20250115_user_role_management.sql" "profiles_with_roles" "Vista profiles_with_roles" || ((errors++))
-check_content "supabase/migrations/20250115_user_role_management.sql" "INSERT INTO public.roles" "Roles por defecto" || ((errors++))
+check_content "supabase/migrations/20250115001_user_role_management.sql" "ADD COLUMN IF NOT EXISTS role_id" "Columna role_id" || ((errors++))
+check_content "supabase/migrations/20250115001_user_role_management.sql" "profiles_with_roles" "Vista profiles_with_roles" || ((errors++))
+check_content "supabase/migrations/20250115001_user_role_management.sql" "INSERT INTO public.roles" "Roles por defecto" || ((errors++))
 echo ""
 
 echo "🔌 Verificando API endpoints..."
@@ -79,7 +79,7 @@ if [ $errors -eq 0 ]; then
     echo "✅ El sistema está listo para pruebas"
     echo ""
     echo "📌 Próximos pasos:"
-    echo "  1. Aplicar migración: supabase/migrations/20250115_user_role_management.sql"
+    echo "  1. Aplicar migración: supabase/migrations/20250115001_user_role_management.sql"
     echo "  2. Reiniciar servidor: npm run dev"
     echo "  3. Navegar a: http://localhost:3000/admin/usuarios"
     echo "  4. Probar creación y edición de usuarios"
