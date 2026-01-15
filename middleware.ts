@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseConfig, isMissingSupabaseEnvError } from '@/lib/supabase/config'
 import type { Database } from '@/lib/supabase/types'
-import { createClient } from '@supabase/supabase-js'
+import { isUserAdmin } from '@/lib/supabase/admin'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -55,40 +55,15 @@ export async function middleware(request: NextRequest) {
     }
 
     // Check if user has admin role using service role to bypass RLS
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    if (serviceRoleKey && serviceRoleKey.trim().length > 0) {
-      try {
-        const adminClient = createClient<Database>(getSupabaseConfig().url, serviceRoleKey, {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false,
-          },
-        })
-
-        const { data: profile, error } = await adminClient
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single()
-
-        if (error) {
-          console.error('[ADMIN AUTH] Error checking admin role:', error.message)
-          return NextResponse.redirect(new URL('/dashboard', request.url))
-        }
-
-        type ProfileRole = { role: string }
-        const profileData = profile as ProfileRole | null
-        
-        if (!profileData || profileData.role !== 'admin') {
-          console.warn('[ADMIN AUTH] Access denied - insufficient permissions')
-          return NextResponse.redirect(new URL('/dashboard', request.url))
-        }
-      } catch (error) {
-        console.error('[ADMIN AUTH] Exception checking admin role:', error)
+    try {
+      const userIsAdmin = await isUserAdmin(user.id)
+      
+      if (!userIsAdmin) {
+        console.warn('[ADMIN AUTH] Access denied - insufficient permissions')
         return NextResponse.redirect(new URL('/dashboard', request.url))
       }
-    } else {
-      console.error('[ADMIN AUTH] Missing SUPABASE_SERVICE_ROLE_KEY')
+    } catch (error) {
+      console.error('[ADMIN AUTH] Error checking admin role:', error)
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
   }
