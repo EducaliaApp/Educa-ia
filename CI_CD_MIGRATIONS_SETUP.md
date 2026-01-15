@@ -2,6 +2,8 @@
 
 Este documento explica cómo configurar y utilizar el pipeline CI/CD para ejecutar migraciones de Supabase automáticamente.
 
+> **⚠️ IMPORTANTE**: Las migraciones deben seguir un formato de nombre específico. Ver [MIGRATION_NAMING_GUIDE.md](MIGRATION_NAMING_GUIDE.md) para detalles.
+
 ## 📋 Descripción General
 
 El workflow `deploy-and-migrate.yml` automatiza la ejecución de migraciones de base de datos durante el proceso de deployment, eliminando la necesidad de ejecutar `supabase migration up` manualmente.
@@ -13,6 +15,7 @@ El workflow `deploy-and-migrate.yml` automatiza la ejecución de migraciones de 
 - ✅ Soporta ejecución manual con selección de ambiente
 - ✅ Se ejecuta antes del deployment de Vercel
 - ✅ Notifica si hay errores en las migraciones
+- ✅ Valida formato de nombres de archivos de migración
 
 ## 🔧 Requisitos Previos
 
@@ -134,11 +137,15 @@ Puedes ejecutar el workflow manualmente desde GitHub:
 
 ## 🔄 Flujo de Trabajo Típico
 
+> **📖 Ver [MIGRATION_NAMING_GUIDE.md](MIGRATION_NAMING_GUIDE.md)** para detalles completos sobre el formato de nombres de migraciones.
+
 ### 1. Desarrollo Local
 
 ```bash
-# 1. Crear nueva migración
+# 1. Crear nueva migración (automáticamente genera el timestamp correcto)
 supabase migration new nombre_de_migracion
+
+# Esto crea: supabase/migrations/YYYYMMDDHHmmss_nombre_de_migracion.sql
 
 # 2. Editar el archivo en supabase/migrations/
 # 3. Probar localmente (opcional)
@@ -183,8 +190,36 @@ git push origin feature/nueva-migracion
 2. **No hagas rollback manual** sin consultar los logs
 3. **Si falla una migración**, el deployment se detiene
 4. **Verifica datos sensibles** antes de hacer DROP o DELETE
+5. **Nombres de archivos deben seguir el formato `YYYYMMDDHHmmss_description.sql`** - ver [MIGRATION_NAMING_GUIDE.md](MIGRATION_NAMING_GUIDE.md)
 
 ## 🔍 Troubleshooting
+
+### Error: "file name must match pattern"
+
+```
+Skipping migration schema-rubricas.sql...
+(file name must match pattern "<timestamp>_name.sql")
+```
+
+**Causa**: El archivo de migración no sigue el formato requerido `YYYYMMDDHHmmss_description.sql`
+
+**Solución**:
+1. Mueve el archivo a `supabase/migrations/archive/` si ya fue aplicado manualmente
+2. O renómbralo usando `supabase migration new` para generar uno nuevo con el formato correcto
+3. Ver [MIGRATION_NAMING_GUIDE.md](MIGRATION_NAMING_GUIDE.md) para más detalles
+
+### Error: "duplicate key value violates unique constraint"
+
+```
+ERROR: duplicate key value violates unique constraint "pg_namespace_nspname_index"
+```
+
+**Causa**: Intentando aplicar migraciones que ya fueron ejecutadas manualmente o hay contenido duplicado
+
+**Solución**:
+1. Verifica qué migraciones ya están aplicadas: `supabase migration list`
+2. Si las migraciones están duplicadas, muévelas a `supabase/migrations/archive/`
+3. Ver las migraciones archivadas en `supabase/migrations/archive/README.md`
 
 ### Error: "Authentication failed"
 

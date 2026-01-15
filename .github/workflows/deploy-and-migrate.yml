@@ -54,10 +54,22 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      - name: Check Migrations Status
+        run: |
+          echo "📋 Checking migration status..."
+          echo "Current migrations in repository:"
+          ls -la supabase/migrations/
+          echo ""
+          echo "Remote migration history:"
+          supabase migration list || echo "⚠️  Could not list migrations (might be first run)"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
       - name: Run Migrations
         run: |
           echo "🚀 Running database migrations..."
-          supabase db push
+          # Run migrations with debug flag for detailed output
+          supabase db push --debug
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
