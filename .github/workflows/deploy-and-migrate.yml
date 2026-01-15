@@ -66,11 +66,15 @@ jobs:
           echo "🔧 Repairing migration history..."
           echo "Checking for orphaned remote migrations..."
           
-          # Get list of migrations and check for orphaned ones
-          # Note: We check for the specific error message that indicates orphaned migrations
-          # The hardcoded versions (00, 01, 02) are the legacy migrations that were applied
-          # before adopting the timestamp naming convention (YYYYMMDDHHmmss_description.sql)
-          if supabase migration list 2>&1 | grep -q "Remote migration versions not found"; then
+          # Get the migration list and check for orphaned migrations (00, 01, 02)
+          # These are legacy migrations that were applied before adopting the timestamp naming convention
+          MIGRATION_LIST=$(supabase migration list 2>&1 || true)
+          echo "$MIGRATION_LIST"
+          
+          # Check if remote has orphaned migrations (00, 01, 02) that don't exist locally
+          # Look for lines with empty Local column but populated Remote column for these versions
+          if echo "$MIGRATION_LIST" | grep -E "^\s+\|\s*(00|01|02)\s+\|" > /dev/null 2>&1; then
+            echo ""
             echo "⚠️  Found orphaned remote migrations (00, 01, 02)"
             echo "These migrations were applied before the timestamp naming convention was adopted"
             echo "Marking them as reverted to allow new migrations to proceed..."
@@ -83,6 +87,11 @@ jobs:
             supabase migration repair --status reverted 00 01 02
             
             echo "✅ Migration history repaired"
+            
+            # Verify the repair worked
+            echo ""
+            echo "📋 Verifying repair..."
+            supabase migration list || true
           else
             echo "✅ No orphaned migrations found, proceeding normally"
           fi
