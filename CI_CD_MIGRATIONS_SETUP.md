@@ -205,7 +205,7 @@ supabase migration repair --status reverted 00 01 02
 
 **Causa**: La base de datos remota tiene migraciones antiguas (00, 01, 02) que fueron aplicadas antes de adoptar el formato de timestamp, pero los archivos correspondientes no están en `supabase/migrations/`.
 
-**Solución automática**: El workflow incluye un paso que detecta y repara automáticamente este problema marcando las migraciones huérfanas como "revertidas". Esto permite que las nuevas migraciones se apliquen sin conflictos.
+**Solución automática**: El workflow incluye un paso que detecta y repara automáticamente este problema. Analiza la salida de `supabase migration list` para identificar migraciones huérfanas (aquellas que existen en Remote pero no en Local) y las marca como "revertidas". Esto permite que las nuevas migraciones se apliquen sin conflictos.
 
 **Solución manual** (si necesitas hacerlo localmente):
 ```bash

@@ -73,6 +73,8 @@ jobs:
           
           # Check if remote has orphaned migrations (00, 01, 02) that don't exist locally
           # Look for lines with empty Local column but populated Remote column for these versions
+          # Pattern explanation: ^\s+\| matches lines starting with whitespace then pipe (empty Local column)
+          # followed by \s*(00|01|02)\s+\| matching the version in Remote column
           if echo "$MIGRATION_LIST" | grep -E "^\s+\|\s*(00|01|02)\s+\|" > /dev/null 2>&1; then
             echo ""
             echo "⚠️  Found orphaned remote migrations (00, 01, 02)"
