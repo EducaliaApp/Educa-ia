@@ -2,15 +2,24 @@
 //
 // Edge Function para extraer Bases Curriculares desde curriculumnacional.cl
 // 
-// Selectores CSS basados en la estructura real del sitio:
-// - .asignatura a: Links de asignaturas en página principal
+// Soporta múltiples estructuras HTML del sitio:
+//
+// ESTRUCTURA TIPO A (ej: 1°-6° básico):
 // - .oa-cnt: Contenedor de cada objetivo de aprendizaje
-// - .nivel-titulo span: Curso (ej: "1° Básico")
+// - .oa-numero: Código del OA
 // - .oa-eje: Eje curricular
-// - .oa-numero: Código del OA (ej: "AR01 OA 01")
-// - .oa-descripcion: Texto del objetivo de aprendizaje
-// - .oa-basal: Indicador de priorización Basal
+// - .oa-descripcion: Texto del objetivo
+// - .oa-basal: Indicador de priorización
 // - .oa-recurso a: Actividades complementarias
+//
+// ESTRUCTURA TIPO B (otros niveles):
+// - .items-wrapper: Contenedor de ejes
+// - .item-wrapper: Contenedor de OA individual
+// - .oa-title: Título del OA
+// - .field__item: Descripción del objetivo
+// - .prioritized: Indicador de priorización
+// - a.link-more: Link a detalle del OA
+// - .field--name-field-recursos-relacionados li a: Actividades
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.ts'
@@ -35,9 +44,11 @@ const CONFIG = {
 // ============================================
 
 interface ObjetivoAprendizaje {
+  nivel: string // "1° a 6° Básico"
+  curso: string // "1° Básico"
   asignatura: string
   oa_codigo: string // "AR01 OA 01"
-  eje: string
+  eje: string // Eje o Núcleo curricular
   objetivo: string
   actividad_comp_1: string
   url_actividad_1: string
@@ -45,8 +56,9 @@ interface ObjetivoAprendizaje {
   url_actividad_2: string
   actividad_comp_3: string
   url_actividad_3: string
-  priorizacion: 0 | 1 // 1 si es Basal, 0 si no
-  curso: string // "1° Básico"
+  actividad_comp_4: string
+  url_actividad_4: string
+  priorizacion: 0 | 1 // 1 si es Basal/Prioritized, 0 si no
 }
 
 interface AsignaturaLink {
@@ -141,64 +153,129 @@ function extraerAsignaturasYCursos(html: string): AsignaturaLink[] {
 
 /**
  * Extrae objetivos de aprendizaje de una página de asignatura
- * Usa selectores CSS mejorados basados en la estructura real del sitio:
- * - .oa-cnt: contenedor de cada OA
- * - .nivel-titulo span: curso (ej: "1° Básico")
- * - .oa-eje: eje curricular
- * - .oa-numero: código del OA
- * - .oa-descripcion: texto del objetivo
- * - .oa-basal: indicador de priorización
+ * Soporta dos estructuras HTML diferentes:
+ * TIPO A: .oa-cnt, .oa-numero, .oa-eje, .oa-descripcion, .oa-basal
+ * TIPO B: .items-wrapper, .item-wrapper, .oa-title, .field__item, .prioritized
  */
-function extraerObjetivos(html: string, asignatura: string, curso: string): ObjetivoAprendizaje[] {
+function extraerObjetivos(html: string, asignatura: string, curso: string, nivel: string = ''): ObjetivoAprendizaje[] {
   const objetivos: ObjetivoAprendizaje[] = []
   
   // Extraer curso/nivel si está disponible en la página
   const nivelMatch = html.match(/<[^>]*class=[^>]*nivel-titulo[^>]*>[\s\S]*?<span[^>]*>([^<]*)<\/span>/i)
   const cursoExtraido = nivelMatch ? limpiarTexto(nivelMatch[1]) : curso
   
-  // Buscar bloques de objetivos usando el selector .oa-cnt
-  const patronOA = /<div[^>]*class=[^>]*oa-cnt[^>]*>([\s\S]*?)<\/div>(?=\s*<div[^>]*class=[^>]*oa-cnt|$)/gi
+  // INTENTAR ESTRUCTURA TIPO B PRIMERO (.items-wrapper/.item-wrapper)
+  const patronItemsWrapper = /<div[^>]*class=[^>]*items-wrapper[^>]*>([\s\S]*?)<\/div>(?=\s*<div[^>]*class=[^>]*items-wrapper|\s*<\/)/gi
+  let matchWrapper
+  let foundTipoB = false
   
-  let matchOA
-  while ((matchOA = patronOA.exec(html)) !== null) {
-    const bloqueOA = matchOA[1]
+  while ((matchWrapper = patronItemsWrapper.exec(html)) !== null) {
+    const bloqueEje = matchWrapper[1]
     
-    try {
-      // Extraer eje curricular (.oa-eje)
-      const ejeMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-eje[^>]*>([^<]*)<\/[^>]*>/i)
-      const eje = ejeMatch ? limpiarTexto(ejeMatch[1]) : ''
+    // Extraer título del eje
+    const ejeTitleMatch = bloqueEje.match(/<h3[^>]*>([^<]*)<\/h3>/i)
+    const ejeNombre = ejeTitleMatch ? limpiarTexto(ejeTitleMatch[1]) : ''
+    
+    // Buscar OAs dentro de este eje
+    const patronItemWrapper = /<div[^>]*class=[^>]*item-wrapper[^>]*>([\s\S]*?)<\/div>(?=\s*<div[^>]*class=[^>]*item-wrapper|<\/div>)/gi
+    let matchItem
+    
+    while ((matchItem = patronItemWrapper.exec(bloqueEje)) !== null) {
+      const bloqueOA = matchItem[1]
+      foundTipoB = true
       
-      // Extraer código OA (.oa-numero)
-      const codigoMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-numero[^>]*>([^<]*)<\/[^>]*>/i)
-      const codigo = codigoMatch ? limpiarTexto(codigoMatch[1]) : ''
+      try {
+        // Extraer código/título OA (.oa-title)
+        const codigoMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-title[^>]*>([^<]*)<\/[^>]*>/i)
+        const codigo = codigoMatch ? limpiarTexto(codigoMatch[1]) : ''
+        
+        if (!codigo) continue
+        
+        // Extraer objetivo (.field__item)
+        const objetivoMatch = bloqueOA.match(/<[^>]*class=[^>]*field__item[^>]*>([^<]*)<\/[^>]*>/i)
+        const objetivo = objetivoMatch ? limpiarTexto(objetivoMatch[1]) : ''
+        
+        // Detectar priorización (.prioritized)
+        const esPriorizado = /<[^>]*class=[^>]*prioritized[^>]*>/i.test(bloqueOA)
+        
+        // Extraer link de detalle (a.link-more)
+        const detalleLinkMatch = bloqueOA.match(/<a[^>]*class=[^>]*link-more[^>]*href=["']([^"']*)["']/i)
+        const detalleUrl = detalleLinkMatch ? 
+          (detalleLinkMatch[1].startsWith('http') ? detalleLinkMatch[1] : CONFIG.BASE_URL + detalleLinkMatch[1]) : 
+          ''
+        
+        objetivos.push({
+          nivel: nivel || cursoExtraido,
+          curso: cursoExtraido,
+          asignatura,
+          oa_codigo: codigo,
+          eje: ejeNombre,
+          objetivo: objetivo,
+          actividad_comp_1: '',
+          url_actividad_1: '',
+          actividad_comp_2: '',
+          url_actividad_2: '',
+          actividad_comp_3: '',
+          url_actividad_3: '',
+          actividad_comp_4: '',
+          url_actividad_4: '',
+          priorizacion: esPriorizado ? 1 : 0,
+          _detalleUrl: detalleUrl, // URL temporal para extraer actividades después
+        } as any)
+      } catch (error) {
+        console.error('Error extrayendo OA (Tipo B):', error)
+        continue
+      }
+    }
+  }
+  
+  // SI NO SE ENCONTRÓ ESTRUCTURA TIPO B, INTENTAR TIPO A (.oa-cnt)
+  if (!foundTipoB) {
+    const patronOA = /<div[^>]*class=[^>]*oa-cnt[^>]*>([\s\S]*?)<\/div>(?=\s*<div[^>]*class=[^>]*oa-cnt|$)/gi
+    
+    let matchOA
+    while ((matchOA = patronOA.exec(html)) !== null) {
+      const bloqueOA = matchOA[1]
       
-      if (!codigo) continue
-      
-      // Extraer objetivo (.oa-descripcion)
-      const objetivoMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-descripcion[^>]*>([^<]*)<\/[^>]*>/i)
-      const objetivo = objetivoMatch ? limpiarTexto(objetivoMatch[1]) : ''
-      
-      // Detectar priorización (.oa-basal)
-      const esBasal = /<[^>]*class=[^>]*oa-basal[^>]*>/i.test(bloqueOA)
-      
-      // Por ahora, crear el objetivo sin actividades (se agregarán después)
-      objetivos.push({
-        asignatura,
-        oa_codigo: codigo,
-        eje: eje,
-        objetivo: objetivo,
-        actividad_comp_1: '',
-        url_actividad_1: '',
-        actividad_comp_2: '',
-        url_actividad_2: '',
-        actividad_comp_3: '',
-        url_actividad_3: '',
-        priorizacion: esBasal ? 1 : 0,
-        curso: cursoExtraido,
-      })
-    } catch (error) {
-      console.error('Error extrayendo OA:', error)
-      continue
+      try {
+        // Extraer eje curricular (.oa-eje)
+        const ejeMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-eje[^>]*>([^<]*)<\/[^>]*>/i)
+        const eje = ejeMatch ? limpiarTexto(ejeMatch[1]) : ''
+        
+        // Extraer código OA (.oa-numero)
+        const codigoMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-numero[^>]*>([^<]*)<\/[^>]*>/i)
+        const codigo = codigoMatch ? limpiarTexto(codigoMatch[1]) : ''
+        
+        if (!codigo) continue
+        
+        // Extraer objetivo (.oa-descripcion)
+        const objetivoMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-descripcion[^>]*>([^<]*)<\/[^>]*>/i)
+        const objetivo = objetivoMatch ? limpiarTexto(objetivoMatch[1]) : ''
+        
+        // Detectar priorización (.oa-basal)
+        const esBasal = /<[^>]*class=[^>]*oa-basal[^>]*>/i.test(bloqueOA)
+        
+        objetivos.push({
+          nivel: nivel || cursoExtraido,
+          curso: cursoExtraido,
+          asignatura,
+          oa_codigo: codigo,
+          eje: eje,
+          objetivo: objetivo,
+          actividad_comp_1: '',
+          url_actividad_1: '',
+          actividad_comp_2: '',
+          url_actividad_2: '',
+          actividad_comp_3: '',
+          url_actividad_3: '',
+          actividad_comp_4: '',
+          url_actividad_4: '',
+          priorizacion: esBasal ? 1 : 0,
+        })
+      } catch (error) {
+        console.error('Error extrayendo OA (Tipo A):', error)
+        continue
+      }
     }
   }
   
@@ -207,7 +284,9 @@ function extraerObjetivos(html: string, asignatura: string, curso: string): Obje
 
 /**
  * Extrae actividades complementarias de la página de actividades
- * Usa selector CSS: .oa-recurso a
+ * Soporta dos selectores:
+ * - .oa-recurso a (estructura tipo A)
+ * - .field--name-field-recursos-relacionados li a (estructura tipo B)
  */
 async function extraerActividades(url: string): Promise<{ nombre: string; url: string }[]> {
   if (!url) return []
@@ -216,16 +295,29 @@ async function extraerActividades(url: string): Promise<{ nombre: string; url: s
     const html = await fetchWithRetry(url)
     const actividades: { nombre: string; url: string }[] = []
     
-    // Buscar recursos/actividades usando el selector .oa-recurso a
-    const patronActividad = /<[^>]*class=[^>]*oa-recurso[^>]*>[\s\S]*?<a[^>]*href=["']([^"']*)["'][^>]*>([^<]*)<\/a>/gi
+    // INTENTAR ESTRUCTURA TIPO B PRIMERO (.field--name-field-recursos-relacionados)
+    const patronActividadB = /<[^>]*class=[^>]*field--name-field-recursos-relacionados[^>]*>[\s\S]*?<li[^>]*>[\s\S]*?<a[^>]*href=["']([^"']*)["'][^>]*>([^<]*)<\/a>/gi
     
     let match
-    while ((match = patronActividad.exec(html)) !== null && actividades.length < 3) {
+    while ((match = patronActividadB.exec(html)) !== null && actividades.length < 4) {
       const href = match[1]
       const nombre = limpiarTexto(match[2])
       
       const urlCompleta = href.startsWith('http') ? href : CONFIG.BASE_URL + href
       actividades.push({ nombre, url: urlCompleta })
+    }
+    
+    // SI NO SE ENCONTRARON, INTENTAR ESTRUCTURA TIPO A (.oa-recurso a)
+    if (actividades.length === 0) {
+      const patronActividadA = /<[^>]*class=[^>]*oa-recurso[^>]*>[\s\S]*?<a[^>]*href=["']([^"']*)["'][^>]*>([^<]*)<\/a>/gi
+      
+      while ((match = patronActividadA.exec(html)) !== null && actividades.length < 4) {
+        const href = match[1]
+        const nombre = limpiarTexto(match[2])
+        
+        const urlCompleta = href.startsWith('http') ? href : CONFIG.BASE_URL + href
+        actividades.push({ nombre, url: urlCompleta })
+      }
     }
     
     return actividades
@@ -240,9 +332,11 @@ async function extraerActividades(url: string): Promise<{ nombre: string; url: s
  */
 function generarCSV(objetivos: ObjetivoAprendizaje[]): string {
   const headers = [
+    'Nivel',
+    'Curso',
     'Asignatura',
     'OA',
-    'Eje',
+    'Eje/Núcleo',
     'Objetivo de aprendizaje',
     'Actividad comp. 1',
     'URL Act. 1',
@@ -250,6 +344,8 @@ function generarCSV(objetivos: ObjetivoAprendizaje[]): string {
     'URL Act. 2',
     'Actividad comp. 3',
     'URL Act. 3',
+    'Actividad comp. 4',
+    'URL Act. 4',
     'Priorización',
   ]
   
@@ -257,6 +353,8 @@ function generarCSV(objetivos: ObjetivoAprendizaje[]): string {
   
   for (const obj of objetivos) {
     const row = [
+      escaparCSV(obj.nivel),
+      escaparCSV(obj.curso),
       escaparCSV(obj.asignatura),
       escaparCSV(obj.oa_codigo),
       escaparCSV(obj.eje),
@@ -267,6 +365,8 @@ function generarCSV(objetivos: ObjetivoAprendizaje[]): string {
       escaparCSV(obj.url_actividad_2),
       escaparCSV(obj.actividad_comp_3),
       escaparCSV(obj.url_actividad_3),
+      escaparCSV(obj.actividad_comp_4),
+      escaparCSV(obj.url_actividad_4),
       obj.priorizacion.toString(),
     ]
     
@@ -420,8 +520,13 @@ async function subirCSVaStorage(
           
           // 5. Para cada objetivo, extraer actividades si tiene
           for (const obj of objetivos) {
-            // Construir URL de actividades
-            const urlActividades = `${asig.url}/${obj.oa_codigo.toLowerCase().replace(/\s+/g, '-')}#actividades`
+            // Si tiene _detalleUrl (estructura Tipo B), usarlo; sino construir URL tradicional
+            const objAny = obj as any
+            const urlActividades = objAny._detalleUrl || 
+              `${asig.url}/${obj.oa_codigo.toLowerCase().replace(/\s+/g, '-')}#actividades`
+            
+            // Limpiar propiedad temporal
+            delete objAny._detalleUrl
             
             try {
               const actividades = await extraerActividades(urlActividades)
@@ -437,6 +542,10 @@ async function subirCSVaStorage(
               if (actividades.length > 2) {
                 obj.actividad_comp_3 = actividades[2]?.nombre || ''
                 obj.url_actividad_3 = actividades[2]?.url || ''
+              }
+              if (actividades.length > 3) {
+                obj.actividad_comp_4 = actividades[3]?.nombre || ''
+                obj.url_actividad_4 = actividades[3]?.url || ''
               }
             } catch (error) {
               console.warn(`  ⚠️  No se pudieron extraer actividades para ${obj.oa_codigo}`)
