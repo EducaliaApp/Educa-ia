@@ -148,7 +148,6 @@ export async function POST(request: NextRequest) {
     const { error: limitesError } = await adminClient
       .from('planes_limites')
       .insert(limitesData)
-      })
 
     if (limitesError) {
       console.error('Error creating limits:', limitesError)
