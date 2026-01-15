@@ -53,7 +53,7 @@ export default function PortafoliosAdminPage() {
       // Get all portafolios with profesor info
       const { data } = await supabase
         .from('portafolios')
-        .select(\`
+        .select(`
           id,
           profesor_id,
           año_evaluacion,
@@ -66,7 +66,7 @@ export default function PortafoliosAdminPage() {
           categoria_logro,
           created_at,
           profiles:profesor_id (nombre, email)
-        \`)
+        `)
         .order('created_at', { ascending: false })
 
       if (data) {
@@ -361,7 +361,7 @@ export default function PortafoliosAdminPage() {
                         <div className="w-24 bg-slate-700 rounded-full h-2">
                           <div
                             className="bg-blue-600 h-2 rounded-full transition-all"
-                            style={{ width: \`\${portafolio.progreso_porcentaje}%\` }}
+                            style={{ width: `${portafolio.progreso_porcentaje}%` }}
                           ></div>
                         </div>
                         <span className="text-slate-400 text-sm">

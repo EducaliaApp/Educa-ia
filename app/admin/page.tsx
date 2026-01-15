@@ -164,7 +164,7 @@ export default async function AdminDashboard() {
           value={totalPortafolios?.length || 0}
           subtitle="Portafolios docentes"
           icon={Briefcase}
-          iconColor="indigo"
+          iconColor="purple"
         />
       </div>
 

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, FileText, BarChart3, Settings, ArrowLeft, LogOut, ClipboardCheck, Briefcase } from 'lucide-react'
+import { LayoutDashboard, Users, FileText, BarChart3, Settings, ArrowLeft, LogOut, ClipboardCheck, Briefcase, GraduationCap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
@@ -36,6 +36,11 @@ const navItems: NavItem[] = [
     name: 'Portafolios',
     href: '/admin/portafolios',
     icon: Briefcase,
+  },
+  {
+    name: 'MINEDUC',
+    href: '/admin/mineduc',
+    icon: GraduationCap,
   },
   {
     name: 'Analytics',
