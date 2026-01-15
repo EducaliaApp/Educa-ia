@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { UserTable } from '@/components/admin/user-table'
+import { AjustarCreditosModal } from '@/components/admin/AjustarCreditosModal'
 import Input from '@/components/ui/Input'
 import { Search, Users as UsersIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -27,6 +28,8 @@ export default function UsuariosPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [planFilter, setPlanFilter] = useState('all')
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
 
   const supabase = createClient()
 
@@ -114,6 +117,15 @@ export default function UsuariosPage() {
     }
   }
 
+  const handleAjustarCreditos = (user: User) => {
+    setSelectedUser(user)
+    setIsModalOpen(true)
+  }
+
+  const handleCreditosSuccess = () => {
+    fetchUsers()
+  }
+
   const freeUsersCount = users.filter((u) => u.plan === 'free').length
   const proUsersCount = users.filter((u) => u.plan === 'pro').length
 
@@ -198,6 +210,7 @@ export default function UsuariosPage() {
       <UserTable
         users={filteredUsers}
         onPlanToggle={handlePlanToggle}
+        onAjustarCreditos={handleAjustarCreditos}
         isLoading={isLoading}
       />
 
@@ -208,6 +221,23 @@ export default function UsuariosPage() {
             Mostrando {filteredUsers.length} de {users.length} usuarios
           </p>
         </div>
+      )}
+
+      {/* Ajustar Creditos Modal */}
+      {selectedUser && (
+        <AjustarCreditosModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          userId={selectedUser.id}
+          userName={selectedUser.nombre}
+          currentCreditos={{
+            planificaciones: selectedUser.creditos_planificaciones || 0,
+            evaluaciones: selectedUser.creditos_evaluaciones || 0,
+            usados_planificaciones: selectedUser.creditos_usados_planificaciones || 0,
+            usados_evaluaciones: selectedUser.creditos_usados_evaluaciones || 0,
+          }}
+          onSuccess={handleCreditosSuccess}
+        />
       )}
     </div>
   )

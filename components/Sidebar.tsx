@@ -28,6 +28,7 @@ import {
   ListChecks,
   Crown,
   LogOut,
+  Shield,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Button from './ui/Button'
@@ -59,155 +60,171 @@ interface NavigationSection {
 
 const buildNavigation = (
   flags: RoadmapCategoryFlags,
-): NavigationSection[] => [
-  {
-    name: 'Inicio',
-    icon: Home,
-    href: '/dashboard',
-    isEnabled: flags.menuItemInicio,
-  },
-  {
-    name: 'Planifica',
-    icon: BookOpen,
-    isEnabled: flags.menuItemPlanifica,
-    items: [
-      {
-        name: 'Crear Planificación',
-        href: '/dashboard/planificaciones/nueva',
-        icon: FilePlus,
-      },
-      {
-        name: 'Mis Planificaciones',
-        href: '/dashboard/planificaciones',
-        icon: Files,
-      },
-    ],
-  },
-  {
-    name: 'Evalúa',
-    icon: ClipboardList,
-    isEnabled: flags.menuItemEvalua,
-    items: [
-      {
-        name: 'Crear Evaluaciones',
-        href: '/dashboard/evaluaciones/nueva',
-        icon: FilePlus,
-      },
-      {
-        name: 'Corregir y Retroalimentar',
-        href: '/dashboard/evaluaciones',
-        icon: CheckCircle2,
-      },
-      {
-        name: 'Análisis de Resultados',
-        icon: BarChart3,
-        disabled: true,
-      },
-    ],
-  },
-  {
-    name: 'Mi Carrera',
-    icon: GraduationCap,
-    isEnabled: flags.menuItemMiCarrera,
-    items: [
-      {
-        name: 'Portafolio Docente',
-        href: '/dashboard/portafolio',
-        icon: FolderOpen,
-      },
-      {
-        name: 'Evaluación Docente',
-        icon: Target,
-        disabled: true,
-      },
-      {
-        name: 'Mis Certificados',
-        icon: Award,
-        children: [
-          {
-            name: 'Obtenidos',
-            icon: Medal,
-            disabled: true,
-          },
-          {
-            name: 'Cargados',
-            icon: Upload,
-            disabled: true,
-          },
-          {
-            name: 'Verificar Certificados',
-            icon: ShieldCheck,
-            disabled: true,
-          },
-        ],
-      },
-      {
-        name: 'Mi Perfil de Competencias',
-        icon: BarChart3,
-        disabled: true,
-      },
-      {
-        name: 'Configuración de Cuenta',
-        href: '/dashboard/settings',
-        icon: Settings,
-      },
-    ],
-  },
-  {
-    name: 'Empleo',
-    icon: Briefcase,
-    isEnabled: flags.menuItemEmpleo,
-    items: [
-      {
-        name: 'Empleos para ti',
-        icon: Briefcase,
-        disabled: true,
-      },
-      {
-        name: 'Mis Postulaciones',
-        icon: ListChecks,
-        disabled: true,
-      },
-      {
-        name: 'Siguiendo',
-        icon: BookmarkCheck,
-        disabled: true,
-      },
-      {
-        name: 'Eventos',
-        icon: CalendarDays,
-        disabled: true,
-      },
-    ],
-  },
-  {
-    name: 'Salud',
-    icon: Heart,
-    isEnabled: flags.menuItemSalud,
-    items: [
-      {
-        name: '¿Necesitas Charlar?',
-        icon: MessageCircle,
-        disabled: true,
-      },
-      {
-        name: 'Profesionales de salud',
-        icon: Users,
-        disabled: true,
-      },
-      {
-        name: 'Eventos',
-        icon: CalendarDays,
-        disabled: true,
-      },
-    ],
-  },
-]
+  isAdmin: boolean = false,
+): NavigationSection[] => {
+  const sections: NavigationSection[] = [
+    {
+      name: 'Inicio',
+      icon: Home,
+      href: '/dashboard',
+      isEnabled: flags.menuItemInicio,
+    },
+    {
+      name: 'Planifica',
+      icon: BookOpen,
+      isEnabled: flags.menuItemPlanifica,
+      items: [
+        {
+          name: 'Crear Planificación',
+          href: '/dashboard/planificaciones/nueva',
+          icon: FilePlus,
+        },
+        {
+          name: 'Mis Planificaciones',
+          href: '/dashboard/planificaciones',
+          icon: Files,
+        },
+      ],
+    },
+    {
+      name: 'Evalúa',
+      icon: ClipboardList,
+      isEnabled: flags.menuItemEvalua,
+      items: [
+        {
+          name: 'Crear Evaluaciones',
+          href: '/dashboard/evaluaciones/nueva',
+          icon: FilePlus,
+        },
+        {
+          name: 'Corregir y Retroalimentar',
+          href: '/dashboard/evaluaciones',
+          icon: CheckCircle2,
+        },
+        {
+          name: 'Análisis de Resultados',
+          icon: BarChart3,
+          disabled: true,
+        },
+      ],
+    },
+    {
+      name: 'Mi Carrera',
+      icon: GraduationCap,
+      isEnabled: flags.menuItemMiCarrera,
+      items: [
+        {
+          name: 'Portafolio Docente',
+          href: '/dashboard/portafolio',
+          icon: FolderOpen,
+        },
+        {
+          name: 'Evaluación Docente',
+          icon: Target,
+          disabled: true,
+        },
+        {
+          name: 'Mis Certificados',
+          icon: Award,
+          children: [
+            {
+              name: 'Obtenidos',
+              icon: Medal,
+              disabled: true,
+            },
+            {
+              name: 'Cargados',
+              icon: Upload,
+              disabled: true,
+            },
+            {
+              name: 'Verificar Certificados',
+              icon: ShieldCheck,
+              disabled: true,
+            },
+          ],
+        },
+        {
+          name: 'Mi Perfil de Competencias',
+          icon: BarChart3,
+          disabled: true,
+        },
+        {
+          name: 'Configuración de Cuenta',
+          href: '/dashboard/settings',
+          icon: Settings,
+        },
+      ],
+    },
+    {
+      name: 'Empleo',
+      icon: Briefcase,
+      isEnabled: flags.menuItemEmpleo,
+      items: [
+        {
+          name: 'Empleos para ti',
+          icon: Briefcase,
+          disabled: true,
+        },
+        {
+          name: 'Mis Postulaciones',
+          icon: ListChecks,
+          disabled: true,
+        },
+        {
+          name: 'Siguiendo',
+          icon: BookmarkCheck,
+          disabled: true,
+        },
+        {
+          name: 'Eventos',
+          icon: CalendarDays,
+          disabled: true,
+        },
+      ],
+    },
+    {
+      name: 'Salud',
+      icon: Heart,
+      isEnabled: flags.menuItemSalud,
+      items: [
+        {
+          name: '¿Necesitas Charlar?',
+          icon: MessageCircle,
+          disabled: true,
+        },
+        {
+          name: 'Profesionales de salud',
+          icon: Users,
+          disabled: true,
+        },
+        {
+          name: 'Eventos',
+          icon: CalendarDays,
+          disabled: true,
+        },
+      ],
+    },
+  ]
+
+  // Add admin section if user is admin
+  if (isAdmin) {
+    sections.push({
+      name: 'Administración',
+      icon: Shield,
+      href: '/admin',
+      isEnabled: true,
+    })
+  }
+
+  return sections
+}
 
 export default function Sidebar({ profile, flags }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const navigation = buildNavigation(flags)
+  const isAdmin = profile.role === 'admin'
+  const navigation = buildNavigation(flags, isAdmin)
 
   const matchesPath = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`)

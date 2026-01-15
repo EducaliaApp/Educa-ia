@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { formatDate } from '@/lib/utils'
+import { Edit } from 'lucide-react'
 
 interface User {
   id: string
@@ -22,10 +23,11 @@ interface User {
 interface UserTableProps {
   users: User[]
   onPlanToggle?: (userId: string, currentPlan: 'free' | 'pro') => void
+  onAjustarCreditos?: (user: User) => void
   isLoading?: boolean
 }
 
-export function UserTable({ users, onPlanToggle, isLoading }: UserTableProps) {
+export function UserTable({ users, onPlanToggle, onAjustarCreditos, isLoading }: UserTableProps) {
   const [loadingUserId, setLoadingUserId] = useState<string | null>(null)
 
   const handlePlanToggle = async (userId: string, currentPlan: 'free' | 'pro') => {
@@ -80,11 +82,9 @@ export function UserTable({ users, onPlanToggle, isLoading }: UserTableProps) {
               <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
                 Registro
               </th>
-              {onPlanToggle && (
-                <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
-                  Acciones
-                </th>
-              )}
+              <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
+                Acciones
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
@@ -129,22 +129,34 @@ export function UserTable({ users, onPlanToggle, isLoading }: UserTableProps) {
                 <td className="px-6 py-4 text-slate-400 text-sm">
                   {formatDate(user.created_at)}
                 </td>
-                {onPlanToggle && (
-                  <td className="px-6 py-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePlanToggle(user.id, user.plan)}
-                      disabled={loadingUserId === user.id}
-                    >
-                      {loadingUserId === user.id ? (
-                        'Cambiando...'
-                      ) : (
-                        `Cambiar a ${user.plan === 'free' ? 'PRO' : 'FREE'}`
-                      )}
-                    </Button>
-                  </td>
-                )}
+                <td className="px-6 py-4">
+                  <div className="flex gap-2">
+                    {onPlanToggle && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePlanToggle(user.id, user.plan)}
+                        disabled={loadingUserId === user.id}
+                      >
+                        {loadingUserId === user.id ? (
+                          'Cambiando...'
+                        ) : (
+                          `→ ${user.plan === 'free' ? 'PRO' : 'FREE'}`
+                        )}
+                      </Button>
+                    )}
+                    {onAjustarCreditos && (
+                      <button
+                        onClick={() => onAjustarCreditos(user)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-600/20 text-blue-500 hover:bg-blue-600/30 rounded-lg transition-colors text-sm"
+                        title="Ajustar créditos"
+                      >
+                        <Edit className="w-4 h-4" />
+                        Créditos
+                      </button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
