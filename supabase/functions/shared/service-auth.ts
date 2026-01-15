@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const HEADER_API_KEY = 'x-api-key'
@@ -13,10 +12,9 @@ class UnauthorizedError extends Error {
 function validarClaveServicio(req: Request): void {
   const customSecret = Deno.env.get('SERVICE_FUNCTION_SECRET')
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
   
-  if (!customSecret && !serviceRoleKey && !anonKey) {
-    throw new Error('Falta SERVICE_FUNCTION_SECRET, SUPABASE_SERVICE_ROLE_KEY o SUPABASE_ANON_KEY en configuración')
+  if (!customSecret && !serviceRoleKey) {
+    throw new Error('Falta SERVICE_FUNCTION_SECRET o SUPABASE_SERVICE_ROLE_KEY en configuración')
   }
 
   const headerValue = req.headers.get(HEADER_API_KEY) ?? req.headers.get('authorization')
@@ -24,10 +22,13 @@ function validarClaveServicio(req: Request): void {
     ? headerValue.slice(7)
     : headerValue || ''
 
-  // Aceptar secret personalizado, service role key o anon key
+  if (!clave) {
+    throw new UnauthorizedError('No se proporcionó clave de autenticación')
+  }
+
+  // Aceptar solo secret personalizado o service role key (NO anon key por seguridad)
   const esValido = (customSecret && clave === customSecret) || 
-                   (serviceRoleKey && clave === serviceRoleKey) ||
-                   (anonKey && clave === anonKey)
+                   (serviceRoleKey && clave === serviceRoleKey)
   
   if (!esValido) {
     throw new UnauthorizedError('No autorizado para ejecutar esta función')

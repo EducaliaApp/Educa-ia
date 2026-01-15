@@ -2,10 +2,15 @@
 // Edge Function para analizar Módulo 1, Tarea 1 (Planificación) usando Rúbricas MBE
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { RubricasEngine } from '../_shared/rubricas-engine.ts'
-import { IAEvaluator } from '../_shared/ia-evaluator.ts'
-import { Logger } from '../_shared/logger.ts'
+import { RubricasEngine } from '../shared/rubricas-engine.ts'
+import { IAEvaluator } from '../shared/ia-evaluator.ts'
+import {
+  crearClienteSupabase,
+  autenticarUsuario,
+  recuperarRubricasRelevantes,
+} from '../shared/utils.ts'
+import { manejarError } from '../shared/error-handler.ts'
+import { createLogger } from '../shared/logger.ts'
 
 // CORS headers
 const corsHeaders = {
@@ -19,29 +24,32 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  const logger = new Logger('analizar-modulo1-tarea1')
-
   try {
-    // 1. Obtener datos de la solicitud
+    // 1. Autenticar usuario
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization header es requerido' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // 2. Obtener datos de la solicitud
     const { tarea_id } = await req.json()
 
     if (!tarea_id) {
       throw new Error('tarea_id es requerido')
     }
 
+    // 3. Conectar a Supabase con usuario autenticado
+    const supabase = crearClienteSupabase(authHeader)
+    const user = await autenticarUsuario(supabase)
+
+    // Crear logger con contexto
+    const logger = createLogger('analizar-modulo1-tarea1', supabase, crypto.randomUUID(), user.id)
     logger.info('Iniciando análisis', { tarea_id })
 
-    // 2. Conectar a Supabase
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Variables de entorno de Supabase no configuradas')
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey)
-
-    // 3. Obtener tarea y contexto
+    // 4. Obtener tarea y contexto
     const { data: tarea, error: tareaError } = await supabase
       .from('tareas_portafolio')
       .select(`
@@ -70,46 +78,33 @@ serve(async (req) => {
       año: portafolio.año_evaluacion,
     })
 
-    // 4. Inicializar motor de rúbricas
-    const rubricasEngine = new RubricasEngine(supabase, 'analizar-m1-t1')
-
-    // 5. Cargar rúbricas relevantes
-    const rubricas = await rubricasEngine.cargarRubricas({
-      año: portafolio.año_evaluacion,
-      nivel_educativo: portafolio.nivel_educativo,
-      asignatura: portafolio.asignatura,
-      modulo: 1,
-      tarea: 1,
-    })
+    // 5. Recuperar rúbricas relevantes
+    const rubricas = await recuperarRubricasRelevantes(
+      supabase,
+      1, // Módulo
+      1, // Tarea
+      portafolio.nivel_educativo,
+      portafolio.asignatura,
+      portafolio.año_evaluacion,
+      portafolio.modalidad || 'regular'
+    )
 
     logger.info(`Rúbricas cargadas: ${rubricas.length}`)
 
-    // 6. Inicializar evaluador de IA
-    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
-    const openaiKey = Deno.env.get('OPENAI_API_KEY')
+    // 6. Inicializar motores
+    const rubricasEngine = new RubricasEngine()
+    const iaEvaluator = new IAEvaluator()
 
-    if (!anthropicKey && !openaiKey) {
-      throw new Error('No hay API keys de IA configuradas (ANTHROPIC_API_KEY o OPENAI_API_KEY)')
-    }
-
-    const iaEvaluator = new IAEvaluator({
-      modelo: anthropicKey ? 'claude-sonnet-4' : 'gpt-4-turbo',
-      apiKey: (anthropicKey || openaiKey)!,
-      temperatura: 0.3,
-      maxTokens: 4000,
-    })
-
-    // 7. Evaluar cada indicador (ejemplo simplificado)
+    // 7. Evaluar cada indicador (implementación simplificada por ahora)
     const evaluaciones = []
     
     for (const rubrica of rubricas) {
       logger.info(`Evaluando ${rubrica.indicador_id}...`)
       
-      // Aquí iría la llamada real al motor
-      // const evaluacion = await rubricasEngine.evaluarIndicador(...)
+      // TODO: Implementar evaluación real usando rubricasEngine.evaluarIndicador
+      // const evaluacion = await rubricasEngine.evaluarIndicador(rubrica, contenido, iaEvaluator)
       
-      // Por ahora retornamos mock
-      logger.info(`✅ ${rubrica.indicador_id} evaluado`)
+      logger.info(`✅ ${rubrica.indicador_id} procesado`)
     }
 
     // 8. Retornar resultado
@@ -118,6 +113,7 @@ serve(async (req) => {
         success: true,
         message: 'Sistema de rúbricas configurado correctamente',
         rubricas_cargadas: rubricas.length,
+        nota: 'Evaluación completa pendiente de implementación'
       }),
       {
         status: 200,
@@ -125,17 +121,7 @@ serve(async (req) => {
       }
     )
   } catch (error) {
-    logger.error('Error en análisis', error as Error)
-
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : 'Error desconocido',
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    )
+    console.error('Error en análisis:', error)
+    return manejarError(error)
   }
 })

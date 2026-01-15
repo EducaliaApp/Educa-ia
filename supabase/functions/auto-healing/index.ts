@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { DocumentPipeline } from '../shared/document-pipeline.ts'
 import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.ts'
 
@@ -7,6 +6,26 @@ interface HealingResult {
   chunks_limpiados: number
   reintentos_programados: number
   tiempo_total_ms: number
+}
+
+interface DocumentoOficial {
+  id: string
+  titulo: string
+  estado_procesamiento?: string | null
+  procesado?: boolean
+}
+
+interface Reintento {
+  id: string
+  documento_id: string
+  intentos: number
+  programado_para: string
+  documentos_oficiales: DocumentoOficial
+}
+
+interface Chunk {
+  id: string
+  contenido: string
 }
 
 Deno.serve(async (req: Request) => {
@@ -40,7 +59,7 @@ Deno.serve(async (req: Request) => {
           progreso_procesamiento: 0,
           etapa_actual: null
         })
-        .in('id', docsInconsistentes.map((d: any) => d.id))
+        .in('id', docsInconsistentes.map((d: DocumentoOficial) => d.id))
 
       documentosRecuperados = docsInconsistentes.length
     }
@@ -62,7 +81,7 @@ Deno.serve(async (req: Request) => {
       await supabase
         .from('chunks_documentos')
         .delete()
-        .in('id', chunksHuerfanos.map((c: any) => c.id))
+        .in('id', chunksHuerfanos.map((c: Chunk) => c.id))
 
       chunksLimpiados = chunksHuerfanos.length
     }
@@ -82,7 +101,7 @@ Deno.serve(async (req: Request) => {
 
   const pipeline = new DocumentPipeline(supabase)
       
-      for (const reintento of reintentos) {
+      for (const reintento of reintentos as Reintento[]) {
         try {
           console.log(`    📄 Reintentando: ${reintento.documentos_oficiales.titulo}`)
 
@@ -161,7 +180,7 @@ Deno.serve(async (req: Request) => {
     if (chunksAntiguos && chunksAntiguos.length > 0) {
   console.log(`  🗜️ Comprimiendo ${chunksAntiguos.length} chunks antiguos...`)
       
-      for (const chunk of chunksAntiguos) {
+      for (const chunk of chunksAntiguos as Chunk[]) {
         // Comprimir contenido (simulado - en producción usar gzip)
         const contenidoComprimido = chunk.contenido.length > 500 ? 
           chunk.contenido.substring(0, 500) + '...[comprimido]' : 

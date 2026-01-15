@@ -13,7 +13,14 @@ import { IAEvaluator } from '../shared/ia-evaluator.ts'
 serve(async (req) => {
   try {
     // 1. Autenticación
-    const authHeader = req.headers.get('Authorization')!
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization header es requerido' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    
     const supabase = crearClienteSupabase(authHeader)
     const user = await autenticarUsuario(supabase)
     

@@ -1,16 +1,27 @@
-// @ts-nocheck
-// // supabase/functions/procesar-documentos/index.ts
+// supabase/functions/procesar-documentos/index.ts
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.ts'
 
 
 // Utility: read a ReadableStream or Blob-like from Supabase storage response
-async function blobFromResponse(res: any) {
-  if (res.arrayBuffer) return await res.arrayBuffer();
-  if (res.body) {
+// Accepts Blob, File, or Response-like objects from Supabase storage
+async function blobFromResponse(res: Blob | { arrayBuffer?: () => Promise<ArrayBuffer>, body?: ReadableStream<Uint8Array> }): Promise<ArrayBuffer> {
+  // Handle Blob/File objects
+  if (res instanceof Blob) {
+    return await res.arrayBuffer();
+  }
+  
+  // Handle objects with arrayBuffer method
+  if ('arrayBuffer' in res && res.arrayBuffer) {
+    return await res.arrayBuffer();
+  }
+  
+  // Handle objects with ReadableStream body
+  if ('body' in res && res.body) {
     const buffer = await new Response(res.body).arrayBuffer();
     return buffer;
   }
+  
   throw new Error('Unsupported download response format');
 }
 async function extraerTextoDePDF(arrayBuffer: ArrayBuffer): Promise<string> {
@@ -95,8 +106,9 @@ async function handler(req: Request): Promise<Response> {
     }
 
     console.error('Error procesando documento:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return new Response(JSON.stringify({
-      error: String(error.message || error)
+      error: errorMessage
     }), {
       status: 500,
       headers: {

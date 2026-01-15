@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { DocumentPipeline } from '../shared/document-pipeline.ts'
 import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.ts'
 
@@ -7,7 +6,27 @@ interface LoteResult {
   procesados_exitosamente: number
   fallidos: number
   tiempo_total_ms: number
-  resultados: any[]
+  resultados: Array<{
+    success: boolean
+    document_id?: string
+    error?: string
+    stage_completed?: string
+    metrics?: {
+      total_time_ms: number
+    }
+  }>
+}
+
+interface Documento {
+  id: string
+  titulo: string
+  año_vigencia?: number
+  tipo_documento?: string
+}
+
+interface Filtros {
+  año_vigencia?: number
+  tipo_documento?: string
 }
 
 Deno.serve(async (req: Request) => {
@@ -15,7 +34,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const supabase = crearClienteServicio(req)
-    const { limite = 10, filtros = {} } = await req.json()
+    const { limite = 10, filtros = {} } = await req.json() as { limite?: number; filtros?: Filtros }
 
     console.log(`🚀 Iniciando procesamiento en lote (límite: ${limite})...`)
 
@@ -50,7 +69,7 @@ Deno.serve(async (req: Request) => {
     await supabase
       .from('documentos_oficiales')
       .update({ estado_procesamiento: 'procesando' })
-      .in('id', documentos.map((d: any) => d.id))
+      .in('id', documentos.map((d: Documento) => d.id))
     
     // Procesamiento en paralelo con límite de concurrencia
     const CONCURRENCY_LIMIT = 3
@@ -60,7 +79,7 @@ Deno.serve(async (req: Request) => {
     for (let i = 0; i < documentos.length; i += CONCURRENCY_LIMIT) {
       const lote = documentos.slice(i, i + CONCURRENCY_LIMIT)
       
-      const promesasLote = lote.map(async (documento: any) => {
+      const promesasLote = lote.map(async (documento: Documento) => {
         try {
           console.log(`  📄 Procesando: ${documento.titulo}`)
           const resultado = await pipeline.process(documento)

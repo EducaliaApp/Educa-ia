@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { DocumentProcessor } from './document-processor.ts'
 import { AIAnalyzer } from "./ai-analyzer.ts";
 
@@ -26,7 +25,7 @@ interface PipelineResult {
 }
 
 export class DocumentPipeline {
-  private supabase: any
+  private supabase: SupabaseClient
   private processor: DocumentProcessor
   private aiAnalyzer: AIAnalyzer
   private embeddingCache = new Map<string, number[]>()
@@ -42,7 +41,7 @@ export class DocumentPipeline {
     'notify'
   ];
 
-  constructor(supabaseClient?: any) {
+  constructor(supabaseClient?: SupabaseClient) {
     this.supabase = supabaseClient ?? createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!

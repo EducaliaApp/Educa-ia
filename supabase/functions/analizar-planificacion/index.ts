@@ -51,7 +51,14 @@ interface AspectoEvaluacion {
 serve(async (req) => {
   try {
     // 1. Autenticación
-    const authHeader = req.headers.get('Authorization')!
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization header es requerido' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
