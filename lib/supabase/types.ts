@@ -17,6 +17,7 @@ export interface Database {
           asignatura: string | null
           nivel: string | null
           plan: string
+          role: string
           creditos_planificaciones: number
           creditos_evaluaciones: number
           creditos_usados_planificaciones: number
@@ -32,6 +33,7 @@ export interface Database {
           asignatura?: string | null
           nivel?: string | null
           plan?: string
+          role?: string
           creditos_planificaciones?: number
           creditos_evaluaciones?: number
           creditos_usados_planificaciones?: number
@@ -47,6 +49,7 @@ export interface Database {
           asignatura?: string | null
           nivel?: string | null
           plan?: string
+          role?: string
           creditos_planificaciones?: number
           creditos_evaluaciones?: number
           creditos_usados_planificaciones?: number
