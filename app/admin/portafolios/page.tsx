@@ -65,7 +65,7 @@ export default function PortafoliosAdminPage() {
           puntaje_estimado_ia,
           categoria_logro,
           created_at,
-          profiles:profesor_id (nombre, email)
+          profiles!profesor_id(nombre, email)
         `)
         .order('created_at', { ascending: false })
 

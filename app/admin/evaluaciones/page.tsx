@@ -54,7 +54,7 @@ export default function EvaluacionesAdminPage() {
           archivo_url,
           feedback,
           created_at,
-          profiles:user_id (nombre, email)
+          profiles!user_id(nombre, email)
         `)
         .order('created_at', { ascending: false })
 
