@@ -50,7 +50,8 @@ DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies 
-    WHERE tablename = 'function_logs' 
+    WHERE schemaname = 'public'
+    AND tablename = 'function_logs' 
     AND policyname = 'Administradores pueden ver todos los logs'
   ) THEN
     CREATE POLICY "Administradores pueden ver todos los logs"
@@ -66,7 +67,8 @@ BEGIN
 
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies 
-    WHERE tablename = 'function_logs' 
+    WHERE schemaname = 'public'
+    AND tablename = 'function_logs' 
     AND policyname = 'Service role puede insertar logs'
   ) THEN
     CREATE POLICY "Service role puede insertar logs"
