@@ -294,29 +294,29 @@ export default function EvaluacionesAdminPage() {
           size="xl"
         >
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-200">
+            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-700">
               <div>
-                <p className="text-sm text-slate-600">Usuario</p>
-                <p className="font-medium">{selectedEvaluacion.user_nombre}</p>
+                <p className="text-sm text-slate-400">Usuario</p>
+                <p className="font-medium text-white">{selectedEvaluacion.user_nombre}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-600">Email</p>
-                <p className="font-medium">{selectedEvaluacion.user_email}</p>
+                <p className="text-sm text-slate-400">Email</p>
+                <p className="font-medium text-white">{selectedEvaluacion.user_email}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-600">Tipo</p>
-                <p className="font-medium">{selectedEvaluacion.tipo || 'Sin tipo'}</p>
+                <p className="text-sm text-slate-400">Tipo</p>
+                <p className="font-medium text-white">{selectedEvaluacion.tipo || 'Sin tipo'}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-600">Fecha</p>
-                <p className="font-medium">{formatDate(selectedEvaluacion.created_at)}</p>
+                <p className="text-sm text-slate-400">Fecha</p>
+                <p className="font-medium text-white">{formatDate(selectedEvaluacion.created_at)}</p>
               </div>
             </div>
 
             <div>
-              <h4 className="font-semibold mb-2">Instrucciones</h4>
-              <div className="bg-slate-50 rounded-lg p-4">
-                <p className="text-sm whitespace-pre-wrap">
+              <h4 className="font-semibold mb-2 text-white">Instrucciones</h4>
+              <div className="bg-slate-800 rounded-lg p-4">
+                <p className="text-sm whitespace-pre-wrap text-slate-300">
                   {selectedEvaluacion.instrucciones || 'Sin instrucciones'}
                 </p>
               </div>
@@ -324,9 +324,9 @@ export default function EvaluacionesAdminPage() {
 
             {selectedEvaluacion.feedback && (
               <div>
-                <h4 className="font-semibold mb-2">Feedback Generado</h4>
-                <div className="bg-slate-50 rounded-lg p-4 max-h-[300px] overflow-y-auto">
-                  <pre className="text-sm whitespace-pre-wrap">
+                <h4 className="font-semibold mb-2 text-white">Feedback Generado</h4>
+                <div className="bg-slate-800 rounded-lg p-4 max-h-[300px] overflow-y-auto">
+                  <pre className="text-sm whitespace-pre-wrap text-slate-300">
                     {typeof selectedEvaluacion.feedback === 'string'
                       ? selectedEvaluacion.feedback
                       : JSON.stringify(selectedEvaluacion.feedback, null, 2)}

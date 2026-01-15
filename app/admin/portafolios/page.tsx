@@ -420,61 +420,61 @@ export default function PortafoliosAdminPage() {
           size="xl"
         >
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-200">
+            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-700">
               <div>
-                <p className="text-sm text-slate-600">Profesor</p>
-                <p className="font-medium">{selectedPortafolio.profesor_nombre}</p>
+                <p className="text-sm text-slate-400">Profesor</p>
+                <p className="font-medium text-white">{selectedPortafolio.profesor_nombre}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-600">Email</p>
-                <p className="font-medium">{selectedPortafolio.profesor_email}</p>
+                <p className="text-sm text-slate-400">Email</p>
+                <p className="font-medium text-white">{selectedPortafolio.profesor_email}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-600">Asignatura</p>
-                <p className="font-medium">{selectedPortafolio.asignatura}</p>
+                <p className="text-sm text-slate-400">Asignatura</p>
+                <p className="font-medium text-white">{selectedPortafolio.asignatura}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-600">Nivel Educativo</p>
-                <p className="font-medium">{selectedPortafolio.nivel_educativo}</p>
+                <p className="text-sm text-slate-400">Nivel Educativo</p>
+                <p className="font-medium text-white">{selectedPortafolio.nivel_educativo}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-600">Año Evaluación</p>
-                <p className="font-medium">{selectedPortafolio.año_evaluacion}</p>
+                <p className="text-sm text-slate-400">Año Evaluación</p>
+                <p className="font-medium text-white">{selectedPortafolio.año_evaluacion}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-600">Modalidad</p>
-                <p className="font-medium">{selectedPortafolio.modalidad}</p>
+                <p className="text-sm text-slate-400">Modalidad</p>
+                <p className="font-medium text-white">{selectedPortafolio.modalidad}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-600">Estado</p>
+                <p className="text-sm text-slate-400">Estado</p>
                 <Badge variant={getEstadoBadgeVariant(selectedPortafolio.estado)}>
                   {getEstadoLabel(selectedPortafolio.estado)}
                 </Badge>
               </div>
               <div>
-                <p className="text-sm text-slate-600">Progreso</p>
-                <p className="font-medium">{selectedPortafolio.progreso_porcentaje}%</p>
+                <p className="text-sm text-slate-400">Progreso</p>
+                <p className="font-medium text-white">{selectedPortafolio.progreso_porcentaje}%</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-200">
+            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-700">
               <div>
-                <p className="text-sm text-slate-600">Módulos Completados</p>
-                <p className="font-medium">
+                <p className="text-sm text-slate-400">Módulos Completados</p>
+                <p className="font-medium text-white">
                   {selectedPortafolio.modulos_completados} / {selectedPortafolio.total_modulos}
                 </p>
               </div>
               {selectedPortafolio.puntaje_estimado_ia && (
                 <>
                   <div>
-                    <p className="text-sm text-slate-600">Puntaje Estimado IA</p>
-                    <p className="font-medium text-lg">
+                    <p className="text-sm text-slate-400">Puntaje Estimado IA</p>
+                    <p className="font-medium text-lg text-white">
                       {selectedPortafolio.puntaje_estimado_ia.toFixed(1)} / 4.0
                     </p>
                   </div>
                   {selectedPortafolio.categoria_logro && (
                     <div>
-                      <p className="text-sm text-slate-600">Categoría Logro</p>
+                      <p className="text-sm text-slate-400">Categoría Logro</p>
                       <Badge variant="success">{selectedPortafolio.categoria_logro}</Badge>
                     </div>
                   )}
@@ -483,15 +483,15 @@ export default function PortafoliosAdminPage() {
             </div>
 
             <div>
-              <p className="text-sm text-slate-600">Fecha de Creación</p>
-              <p className="font-medium">{formatDate(selectedPortafolio.created_at)}</p>
+              <p className="text-sm text-slate-400">Fecha de Creación</p>
+              <p className="font-medium text-white">{formatDate(selectedPortafolio.created_at)}</p>
             </div>
 
-            <div className="bg-blue-50 rounded-lg p-4 mt-4">
-              <h4 className="font-semibold text-blue-900 mb-2">
+            <div className="bg-blue-900/20 border border-blue-800/50 rounded-lg p-4 mt-4">
+              <h4 className="font-semibold text-blue-100 mb-2">
                 Marco para la Buena Enseñanza (MBE)
               </h4>
-              <p className="text-sm text-blue-800">
+              <p className="text-sm text-blue-200">
                 Este portafolio está diseñado siguiendo los estándares del Marco para la Buena
                 Enseñanza del MINEDUC Chile, evaluando competencias docentes en preparación,
                 creación de ambiente propicio, enseñanza y profesionalismo.
