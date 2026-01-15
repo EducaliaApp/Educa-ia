@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit2, Trash2, CheckCircle, XCircle, Shield } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Role } from '@/lib/supabase/types'
@@ -21,8 +20,6 @@ export default function RolesPage() {
     activo: true,
   })
   const [nuevoPermiso, setNuevoPermiso] = useState('')
-
-  const supabase = createClient()
 
   // Permisos predefinidos disponibles
   const permisosDisponibles = [
@@ -63,14 +60,12 @@ export default function RolesPage() {
   const fetchRoles = async () => {
     setIsLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('roles')
-        .select('*')
-        .order('codigo', { ascending: true })
-
-      if (error) throw error
-
-      setRoles(data || [])
+      const response = await fetch('/api/admin/roles')
+      if (!response.ok) {
+        throw new Error('Error al obtener roles')
+      }
+      const data = await response.json()
+      setRoles(data.roles || [])
     } catch (error) {
       console.error('Error fetching roles:', error)
     } finally {
@@ -113,30 +108,40 @@ export default function RolesPage() {
     try {
       if (editingRole) {
         // Actualizar rol existente
-        const { error } = await supabase
-          .from('roles')
-          .update({
-            nombre: formData.nombre,
-            descripcion: formData.descripcion,
-            permisos: formData.permisos,
-            activo: formData.activo,
-          })
-          .eq('id', editingRole.id)
+        const response = await fetch('/api/admin/roles', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roleId: editingRole.id,
+            updates: {
+              nombre: formData.nombre,
+              descripcion: formData.descripcion,
+              permisos: formData.permisos,
+              activo: formData.activo,
+            },
+          }),
+        })
 
-        if (error) throw error
+        if (!response.ok) {
+          throw new Error('Error al actualizar el rol')
+        }
       } else {
         // Crear nuevo rol
-        const { error } = await supabase
-          .from('roles')
-          .insert({
+        const response = await fetch('/api/admin/roles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
             nombre: formData.nombre,
             codigo: formData.codigo,
             descripcion: formData.descripcion,
             permisos: formData.permisos,
             activo: formData.activo,
-          })
+          }),
+        })
 
-        if (error) throw error
+        if (!response.ok) {
+          throw new Error('Error al crear el rol')
+        }
       }
 
       await fetchRoles()
@@ -152,12 +157,13 @@ export default function RolesPage() {
     if (!confirm('¿Estás seguro de eliminar este rol?')) return
 
     try {
-      const { error } = await supabase
-        .from('roles')
-        .delete()
-        .eq('id', roleId)
+      const response = await fetch(`/api/admin/roles?roleId=${roleId}`, {
+        method: 'DELETE',
+      })
 
-      if (error) throw error
+      if (!response.ok) {
+        throw new Error('Error al eliminar el rol')
+      }
 
       await fetchRoles()
     } catch (error) {
@@ -169,12 +175,18 @@ export default function RolesPage() {
 
   const toggleActivo = async (role: Role) => {
     try {
-      const { error } = await supabase
-        .from('roles')
-        .update({ activo: !role.activo })
-        .eq('id', role.id)
+      const response = await fetch('/api/admin/roles', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roleId: role.id,
+          updates: { activo: !role.activo },
+        }),
+      })
 
-      if (error) throw error
+      if (!response.ok) {
+        throw new Error('Error al cambiar estado del rol')
+      }
 
       await fetchRoles()
     } catch (error) {

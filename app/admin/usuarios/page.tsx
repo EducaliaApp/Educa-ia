@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { UserTable } from '@/components/admin/user-table'
 import { AjustarCreditosModal } from '@/components/admin/AjustarCreditosModal'
 import { EditUserModal } from '@/components/admin/EditUserModal'
@@ -36,8 +35,6 @@ export default function UsuariosPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
 
-  const supabase = createClient()
-
   useEffect(() => {
     fetchUsers()
   }, [])
@@ -49,31 +46,13 @@ export default function UsuariosPage() {
   const fetchUsers = async () => {
     setIsLoading(true)
     try {
-      // Get all users with their planificaciones count
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, nombre, email, plan, role, asignatura, nivel, created_at, creditos_planificaciones, creditos_evaluaciones, creditos_usados_planificaciones, creditos_usados_evaluaciones')
-        .order('created_at', { ascending: false })
-
-      if (profiles) {
-        // Get planificaciones count for each user
-        const usersWithCounts = await Promise.all(
-          profiles.map(async (profile) => {
-            const { count } = await supabase
-              .from('planificaciones')
-              .select('*', { count: 'exact', head: true })
-              .eq('user_id', profile.id)
-
-            return {
-              ...profile,
-              total_planificaciones: count || 0,
-            }
-          })
-        )
-
-        setUsers(usersWithCounts as User[])
-        setFilteredUsers(usersWithCounts as User[])
+      const response = await fetch('/api/admin/usuarios')
+      if (!response.ok) {
+        throw new Error('Error al obtener usuarios')
       }
+      const data = await response.json()
+      setUsers(data.users || [])
+      setFilteredUsers(data.users || [])
     } catch (error) {
       console.error('Error fetching users:', error)
     } finally {
