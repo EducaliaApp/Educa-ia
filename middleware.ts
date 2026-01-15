@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseConfig, isMissingSupabaseEnvError } from '@/lib/supabase/config'
 import type { Database } from '@/lib/supabase/types'
+import { isUserAdmin } from '@/lib/supabase/admin'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -53,14 +54,16 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // Check if user has admin role
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (!profile || (profile as any).role !== 'admin') {
+    // Check if user has admin role using service role to bypass RLS
+    try {
+      const userIsAdmin = await isUserAdmin(user.id)
+      
+      if (!userIsAdmin) {
+        console.warn('[ADMIN AUTH] Access denied - insufficient permissions')
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+      }
+    } catch (error) {
+      console.error('[ADMIN AUTH] Error checking admin role:', error)
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
   }

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { isUserAdmin } from '@/lib/supabase/admin'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { Breadcrumbs } from '@/components/admin/Breadcrumbs'
 
@@ -24,20 +25,32 @@ export default async function AdminLayout({
     redirect('/login')
   }
 
-  // Check if user is admin
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, nombre, email')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile || profile.role !== 'admin') {
+  // Check if user is admin using service role to bypass RLS
+  try {
+    const userIsAdmin = await isUserAdmin(user.id)
+    
+    if (!userIsAdmin) {
+      console.warn('[ADMIN LAYOUT] Access denied - insufficient permissions')
+      redirect('/dashboard')
+    }
+  } catch (error) {
+    console.error('[ADMIN LAYOUT] Error checking admin role:', error)
     redirect('/dashboard')
   }
 
+  // Get profile information for display
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('nombre, email')
+    .eq('id', user.id)
+    .single()
+
+  const userName = profile?.nombre || 'Usuario'
+  const userEmail = profile?.email || user.email || ''
+
   return (
     <div className="min-h-screen bg-slate-950 flex">
-      <AdminSidebar userName={profile.nombre} userEmail={profile.email} />
+      <AdminSidebar userName={userName} userEmail={userEmail} />
       <main className="flex-1 overflow-auto">
         <div className="p-8">
           <Breadcrumbs />
