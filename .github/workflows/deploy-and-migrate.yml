@@ -61,6 +61,28 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      - name: Repair Migration History
+        run: |
+          echo "🔧 Repairing migration history..."
+          echo "Checking for orphaned remote migrations..."
+          
+          # Get list of migrations and check for orphaned ones
+          if supabase migration list 2>&1 | grep -q "Remote migration versions not found"; then
+            echo "⚠️  Found orphaned remote migrations (00, 01, 02)"
+            echo "These migrations were applied before the timestamp naming convention was adopted"
+            echo "Marking them as reverted to allow new migrations to proceed..."
+            
+            # Repair the migration history by marking orphaned migrations as reverted
+            supabase migration repair --status reverted 00 01 02
+            
+            echo "✅ Migration history repaired"
+          else
+            echo "✅ No orphaned migrations found, proceeding normally"
+          fi
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        continue-on-error: false
+
       - name: Run Migrations
         run: |
           echo "🚀 Running database migrations..."
