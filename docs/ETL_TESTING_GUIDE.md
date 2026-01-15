@@ -5,7 +5,7 @@
 1. **Base de datos configurada**:
    ```bash
    # Aplicar migración
-   psql -h [tu-db-host] -U postgres -d postgres -f supabase/migrations/20250115_procesos_etl.sql
+   psql -h [tu-db-host] -U postgres -d postgres -f supabase/migrations/20250115002_procesos_etl.sql
    ```
 
 2. **Edge Function desplegada**:

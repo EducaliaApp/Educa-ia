@@ -16,11 +16,13 @@ Se ha implementado un **sistema completo de ETL (Extracción, Transformación y 
   - Sube archivo a Supabase Storage
 
 ### 2. Migración SQL
-- **`supabase/migrations/20250115_procesos_etl.sql`**
+- **`supabase/migrations/20250115002_procesos_etl.sql`**
   - Tabla `procesos_etl`: registra todas las ejecuciones
   - Tabla `documentos_transformados`: archivos generados
   - Funciones RPC para gestionar procesos
   - Políticas RLS para seguridad (admin-only)
+
+**Nota**: Nombre sigue convención `YYYYMMDDXXX_` con secuencia para evitar conflictos.
 
 ### 3. Interfaz Admin
 - **`app/admin/etl/page.tsx`**
@@ -46,8 +48,8 @@ Se ha implementado un **sistema completo de ETL (Extracción, Transformación y 
 # Conectar a tu base de datos Supabase
 psql -h db.[tu-proyecto].supabase.co -U postgres -d postgres
 
-# Ejecutar migración
-\i supabase/migrations/20250115_procesos_etl.sql
+# Ejecutar migración (nota el número de secuencia 002)
+\i supabase/migrations/20250115002_procesos_etl.sql
 
 # Verificar tablas creadas
 \dt procesos_etl documentos_transformados
@@ -58,8 +60,10 @@ psql -h db.[tu-proyecto].supabase.co -U postgres -d postgres
 
 **O desde Supabase Dashboard**:
 1. Ir a SQL Editor
-2. Copiar contenido de `supabase/migrations/20250115_procesos_etl.sql`
+2. Copiar contenido de `supabase/migrations/20250115002_procesos_etl.sql`
 3. Ejecutar
+
+**Nota sobre nomenclatura**: El nombre de migración sigue el patrón `YYYYMMDDXXX_description.sql` donde `XXX` es un número de secuencia (001, 002, etc.) para evitar conflictos cuando se crean múltiples migraciones el mismo día.
 
 ### Paso 2: Desplegar Edge Function
 
@@ -225,7 +229,7 @@ const CONFIG = {
 - **Sistema completo**: `docs/ETL_BASES_CURRICULARES.md`
 - **Guía de testing**: `docs/ETL_TESTING_GUIDE.md`
 - **Código fuente**: `supabase/functions/extraer-bases-curriculares/`
-- **Migración SQL**: `supabase/migrations/20250115_procesos_etl.sql`
+- **Migración SQL**: `supabase/migrations/20250115002_procesos_etl.sql`
 - **Interfaz admin**: `app/admin/etl/page.tsx`
 
 ## 🐛 Troubleshooting

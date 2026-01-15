@@ -33,7 +33,7 @@ curl -X POST \
 
 ### 2. Base de Datos
 
-**Migración**: `supabase/migrations/20250115_procesos_etl.sql`
+**Migración**: `supabase/migrations/20250115002_procesos_etl.sql`
 
 **Tablas creadas**:
 
