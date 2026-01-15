@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseConfig, isMissingSupabaseEnvError } from '@/lib/supabase/config'
 import type { Database } from '@/lib/supabase/types'
+import { createClient } from '@supabase/supabase-js'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -53,14 +54,38 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // Check if user has admin role
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    // Check if user has admin role using service role to bypass RLS
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (serviceRoleKey) {
+      try {
+        const adminClient = createClient<Database>(getSupabaseConfig().url, serviceRoleKey, {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+          },
+        })
 
-    if (!profile || (profile as any).role !== 'admin') {
+        const { data: profile, error } = await adminClient
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+
+        if (error) {
+          console.error('[ADMIN AUTH] Error checking admin role:', error.message)
+          return NextResponse.redirect(new URL('/dashboard', request.url))
+        }
+
+        if (!profile || (profile as { role: string }).role !== 'admin') {
+          console.warn('[ADMIN AUTH] User lacks admin role:', user.id)
+          return NextResponse.redirect(new URL('/dashboard', request.url))
+        }
+      } catch (error) {
+        console.error('[ADMIN AUTH] Exception checking admin role:', error)
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+      }
+    } else {
+      console.error('[ADMIN AUTH] Missing SUPABASE_SERVICE_ROLE_KEY')
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
   }
