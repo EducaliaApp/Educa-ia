@@ -10,6 +10,7 @@ import {
   recuperarRubricasRelevantes,
 } from '../shared/utils.ts'
 import { manejarError } from '../shared/error-handler.ts'
+import { createLogger } from '../shared/logger.ts'
 
 // CORS headers
 const corsHeaders = {
