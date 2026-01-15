@@ -9,6 +9,12 @@ Se ha implementado un **sistema completo de ETL (Extracción, Transformación y 
 ### 1. Edge Function
 - **`supabase/functions/extraer-bases-curriculares/index.ts`**
   - Función Deno que hace scraping de curriculumnacional.cl
+  - **Selectores CSS precisos** basados en estructura real del sitio:
+    - `.asignatura a`: Links de asignaturas
+    - `.oa-cnt`: Contenedor de OAs
+    - `.oa-numero`, `.oa-eje`, `.oa-descripcion`: Datos del OA
+    - `.oa-basal`: Priorización
+    - `.oa-recurso a`: Actividades
   - Extrae OAs de 1° a 6° básico, todas las asignaturas
   - Detecta priorización (Basal = 1, otros = 0)
   - Obtiene hasta 3 actividades complementarias por OA

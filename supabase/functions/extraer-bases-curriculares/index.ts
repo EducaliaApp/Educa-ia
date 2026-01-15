@@ -1,4 +1,16 @@
 // supabase/functions/extraer-bases-curriculares/index.ts
+//
+// Edge Function para extraer Bases Curriculares desde curriculumnacional.cl
+// 
+// Selectores CSS basados en la estructura real del sitio:
+// - .asignatura a: Links de asignaturas en página principal
+// - .oa-cnt: Contenedor de cada objetivo de aprendizaje
+// - .nivel-titulo span: Curso (ej: "1° Básico")
+// - .oa-eje: Eje curricular
+// - .oa-numero: Código del OA (ej: "AR01 OA 01")
+// - .oa-descripcion: Texto del objetivo de aprendizaje
+// - .oa-basal: Indicador de priorización Basal
+// - .oa-recurso a: Actividades complementarias
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.ts'
@@ -47,6 +59,13 @@ interface AsignaturaLink {
 // ============================================
 
 /**
+ * Limpia texto eliminando espacios múltiples y trimming
+ */
+function limpiarTexto(texto: string): string {
+  return texto.replace(/\s+/g, ' ').trim()
+}
+
+/**
  * Realiza fetch con retry y rate limiting
  */
 async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promise<string> {
@@ -88,16 +107,17 @@ async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promis
 
 /**
  * Extrae links de asignaturas por curso de la página principal
+ * Usa selector CSS: .asignatura a
  */
 function extraerAsignaturasYCursos(html: string): AsignaturaLink[] {
   const links: AsignaturaLink[] = []
   
-  // Patrón para encontrar links a asignaturas
-  // Buscar elementos <a> con href que contenga /curriculum/1o-6o-basico/
-  const patronLink = /<a[^>]*href=["']([^"']*1o-6o-basico[^"']*)["'][^>]*>([^<]*)<\/a>/gi
+  // Patrón mejorado para buscar links dentro de elementos con clase 'asignatura'
+  // Busca: <div class="asignatura..."><a href="...">texto</a></div>
+  const patronAsignatura = /<div[^>]*class=[^>]*asignatura[^>]*>[\s\S]*?<a[^>]*href=["']([^"']*)["'][^>]*>([^<]*)<\/a>/gi
   
   let match
-  while ((match = patronLink.exec(html)) !== null) {
+  while ((match = patronAsignatura.exec(html)) !== null) {
     const href = match[1]
     const texto = match[2].trim()
     
@@ -111,7 +131,7 @@ function extraerAsignaturasYCursos(html: string): AsignaturaLink[] {
       
       // Evitar duplicados
       if (!links.some(l => l.url === url) && texto.length > 0) {
-        links.push({ nombre: texto, url })
+        links.push({ nombre: limpiarTexto(texto), url })
       }
     }
   }
@@ -121,55 +141,52 @@ function extraerAsignaturasYCursos(html: string): AsignaturaLink[] {
 
 /**
  * Extrae objetivos de aprendizaje de una página de asignatura
+ * Usa selectores CSS mejorados basados en la estructura real del sitio:
+ * - .oa-cnt: contenedor de cada OA
+ * - .nivel-titulo span: curso (ej: "1° Básico")
+ * - .oa-eje: eje curricular
+ * - .oa-numero: código del OA
+ * - .oa-descripcion: texto del objetivo
+ * - .oa-basal: indicador de priorización
  */
 function extraerObjetivos(html: string, asignatura: string, curso: string): ObjetivoAprendizaje[] {
   const objetivos: ObjetivoAprendizaje[] = []
   
-  // Buscar bloques de objetivos
-  // Los OA generalmente están en divs con clase "oa" o similar
-  const patronOA = /<div[^>]*class=[^>]*oa[^>]*>([\s\S]*?)<\/div>/gi
+  // Extraer curso/nivel si está disponible en la página
+  const nivelMatch = html.match(/<[^>]*class=[^>]*nivel-titulo[^>]*>[\s\S]*?<span[^>]*>([^<]*)<\/span>/i)
+  const cursoExtraido = nivelMatch ? limpiarTexto(nivelMatch[1]) : curso
+  
+  // Buscar bloques de objetivos usando el selector .oa-cnt
+  const patronOA = /<div[^>]*class=[^>]*oa-cnt[^>]*>([\s\S]*?)<\/div>(?=\s*<div[^>]*class=[^>]*oa-cnt|$)/gi
   
   let matchOA
-  let currentEje = ''
-  
-  // Primero, intentar extraer ejes (h3 o h4)
-  const patronEje = /<h[34][^>]*>([^<]*)<\/h[34]>/gi
-  const ejes: string[] = []
-  let matchEje
-  while ((matchEje = patronEje.exec(html)) !== null) {
-    ejes.push(matchEje[1].trim())
-  }
-  
-  // Extraer OAs
   while ((matchOA = patronOA.exec(html)) !== null) {
     const bloqueOA = matchOA[1]
     
     try {
-      // Extraer código OA (ej: "AR01 OA 01")
-      const codigoMatch = bloqueOA.match(/([A-Z]{2}\d{2}\s+OA\s+\d{2})/i)
-      const codigo = codigoMatch ? codigoMatch[1] : ''
+      // Extraer eje curricular (.oa-eje)
+      const ejeMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-eje[^>]*>([^<]*)<\/[^>]*>/i)
+      const eje = ejeMatch ? limpiarTexto(ejeMatch[1]) : ''
+      
+      // Extraer código OA (.oa-numero)
+      const codigoMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-numero[^>]*>([^<]*)<\/[^>]*>/i)
+      const codigo = codigoMatch ? limpiarTexto(codigoMatch[1]) : ''
       
       if (!codigo) continue
       
-      // Extraer objetivo
-      const objetivoMatch = bloqueOA.match(/<p[^>]*class=[^>]*oa-contenido[^>]*>([^<]*)<\/p>/i)
-      const objetivo = objetivoMatch ? objetivoMatch[1].trim() : ''
+      // Extraer objetivo (.oa-descripcion)
+      const objetivoMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-descripcion[^>]*>([^<]*)<\/[^>]*>/i)
+      const objetivo = objetivoMatch ? limpiarTexto(objetivoMatch[1]) : ''
       
-      // Detectar priorización (Basal)
-      const esBasal = /basal/i.test(bloqueOA) || /priorizado/i.test(bloqueOA)
-      
-      // Extraer link de actividades
-      const actividadesMatch = bloqueOA.match(/href=["']([^"']*actividades[^"']*)["']/i)
-      const urlActividades = actividadesMatch ? 
-        (actividadesMatch[1].startsWith('http') ? actividadesMatch[1] : CONFIG.BASE_URL + actividadesMatch[1]) : 
-        ''
+      // Detectar priorización (.oa-basal)
+      const esBasal = /<[^>]*class=[^>]*oa-basal[^>]*>/i.test(bloqueOA)
       
       // Por ahora, crear el objetivo sin actividades (se agregarán después)
       objetivos.push({
         asignatura,
         oa_codigo: codigo,
-        eje: currentEje || ejes[0] || '',
-        objetivo: objetivo || '',
+        eje: eje,
+        objetivo: objetivo,
         actividad_comp_1: '',
         url_actividad_1: '',
         actividad_comp_2: '',
@@ -177,7 +194,7 @@ function extraerObjetivos(html: string, asignatura: string, curso: string): Obje
         actividad_comp_3: '',
         url_actividad_3: '',
         priorizacion: esBasal ? 1 : 0,
-        curso,
+        curso: cursoExtraido,
       })
     } catch (error) {
       console.error('Error extrayendo OA:', error)
@@ -190,6 +207,7 @@ function extraerObjetivos(html: string, asignatura: string, curso: string): Obje
 
 /**
  * Extrae actividades complementarias de la página de actividades
+ * Usa selector CSS: .oa-recurso a
  */
 async function extraerActividades(url: string): Promise<{ nombre: string; url: string }[]> {
   if (!url) return []
@@ -198,13 +216,13 @@ async function extraerActividades(url: string): Promise<{ nombre: string; url: s
     const html = await fetchWithRetry(url)
     const actividades: { nombre: string; url: string }[] = []
     
-    // Buscar recursos/actividades
-    const patronActividad = /<li[^>]*class=[^>]*recurso[^>]*>[\s\S]*?<a[^>]*href=["']([^"']*)["'][^>]*>([^<]*)<\/a>/gi
+    // Buscar recursos/actividades usando el selector .oa-recurso a
+    const patronActividad = /<[^>]*class=[^>]*oa-recurso[^>]*>[\s\S]*?<a[^>]*href=["']([^"']*)["'][^>]*>([^<]*)<\/a>/gi
     
     let match
     while ((match = patronActividad.exec(html)) !== null && actividades.length < 3) {
       const href = match[1]
-      const nombre = match[2].trim()
+      const nombre = limpiarTexto(match[2])
       
       const urlCompleta = href.startsWith('http') ? href : CONFIG.BASE_URL + href
       actividades.push({ nombre, url: urlCompleta })
