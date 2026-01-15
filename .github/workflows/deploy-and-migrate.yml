@@ -66,12 +66,15 @@ jobs:
           echo "🔧 Repairing migration history..."
           echo "Checking for orphaned remote migrations..."
           
-          # Get the migration list and check for orphaned migrations (00, 01, 02)
-          # These are legacy migrations that were applied before adopting the timestamp naming convention
+          # Get the migration list and check for orphaned migrations
           MIGRATION_LIST=$(supabase migration list 2>&1 || true)
           echo "$MIGRATION_LIST"
           
-          # Check if remote has orphaned migrations (00, 01, 02) that don't exist locally
+          # Track if any repairs were needed
+          REPAIRS_NEEDED=false
+          
+          # Check if remote has orphaned legacy migrations (00, 01, 02) that don't exist locally
+          # These are legacy migrations that were applied before adopting the timestamp naming convention
           # Look for lines with empty Local column but populated Remote column for these versions
           # Pattern explanation: ^\s+\| matches lines starting with whitespace then pipe (empty Local column)
           # followed by \s*(00|01|02)\s+\| matching the version in Remote column
@@ -87,7 +90,30 @@ jobs:
             # - 01: 01_function_logs_fixed.sql  
             # - 02: 02_schema_rubricas_fixed.sql
             supabase migration repair --status reverted 00 01 02
+            REPAIRS_NEEDED=true
+          fi
+          
+          # Check if remote has migration 20250115 that CLI can't reconcile with local files
+          # SPECIFIC FIX: This version had a known conflict between remote and local state
+          # where the remote version couldn't be matched to local files due to multiple
+          # migrations sharing the same date prefix (20250115 and 20250115001).
+          # This is a targeted fix for this specific historical issue.
+          # Look for lines where Remote column has 20250115 but Local column is empty or different
+          if echo "$MIGRATION_LIST" | grep -E "^\s+\|\s*20250115\s+\|" > /dev/null 2>&1; then
+            echo ""
+            echo "⚠️  Found migration version conflict for 20250115"
+            echo "Remote has 20250115 but CLI can't reconcile it with local files"
+            echo "This is a known historical conflict from overlapping date-based version numbers"
+            echo "Marking it as reverted to allow fresh migration..."
             
+            # Repair by marking 20250115 as reverted to clear the conflict
+            # This allows the local migration with this version to be applied fresh
+            supabase migration repair --status reverted 20250115
+            REPAIRS_NEEDED=true
+          fi
+          
+          if [ "$REPAIRS_NEEDED" = true ]; then
+            echo ""
             echo "✅ Migration history repaired"
             
             # Verify the repair worked
