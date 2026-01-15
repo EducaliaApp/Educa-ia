@@ -68,23 +68,8 @@ jobs:
       - name: Run Migrations
         run: |
           echo "🚀 Running database migrations..."
-          # Run with --debug flag for better error messages if needed
-          if supabase db push --debug; then
-            echo "✅ Migrations applied successfully"
-          else
-            EXIT_CODE=$?
-            echo "⚠️  Migration command exited with code $EXIT_CODE"
-            echo "This might be expected if all migrations are already applied"
-            echo "Checking migration status..."
-            supabase migration list || true
-            # Only fail if it's not a "no new migrations" or "already applied" scenario
-            if [ $EXIT_CODE -eq 1 ] && supabase migration list 2>&1 | grep -q "migration"; then
-              echo "✅ Some migrations exist, continuing..."
-              exit 0
-            else
-              exit $EXIT_CODE
-            fi
-          fi
+          # Run migrations with debug flag for detailed output
+          supabase db push --debug
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}

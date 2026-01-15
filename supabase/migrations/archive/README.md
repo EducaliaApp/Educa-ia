@@ -1,8 +1,12 @@
 # Archived Migrations
 
+⚠️ **IMPORTANTE**: Estos archivos están archivados y **NO deben ser ejecutados** directamente. Algunos pueden contener errores o estar obsoletos.
+
 ## ¿Por qué están estos archivos aquí?
 
 Estos archivos de migración fueron movidos a este directorio de archivo porque **no siguen el formato de nombre requerido** por Supabase CLI para migraciones automáticas.
+
+Además, muchos de estos archivos fueron aplicados manualmente en producción y aplicarlos nuevamente causaría errores de duplicación.
 
 ## Formato Requerido
 
@@ -13,10 +17,10 @@ YYYYMMDDHHmmss_description.sql
 ```
 
 Por ejemplo:
-- ✅ `20250106_function_logs.sql`
-- ✅ `20250115_admin_maintainers.sql`
-- ❌ `01_function_logs_fixed.sql` (formato incorrecto)
-- ❌ `schema-rubricas.sql` (formato incorrecto)
+- ✅ `20250106_function_logs.sql` (formato correcto)
+- ✅ `20250115_admin_maintainers.sql` (formato correcto)
+- ❌ `01_function_logs_fixed.sql` (formato incorrecto - solo número)
+- ❌ `schema-rubricas.sql` (formato incorrecto - sin timestamp)
 
 ## ¿Qué hacer con estos archivos?
 
