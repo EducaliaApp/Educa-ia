@@ -48,10 +48,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Error al obtener límites' }, { status: 500 })
     }
 
-    const planesConLimites = planesData?.map(plan => ({
+    const planesConLimites = (planesData || []).map(plan => ({
       ...plan,
       limites: limitesData?.find(l => l.plan_id === plan.id),
-    })) || []
+    }))
 
     return NextResponse.json({ planes: planesConLimites })
   } catch (error) {
