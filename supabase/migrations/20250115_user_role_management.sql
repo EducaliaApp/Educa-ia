@@ -1,6 +1,8 @@
 -- Migration: User and Role Management System
 -- Adds proper relationship between profiles and roles tables
 -- Created: 2025-01-15
+-- Execution: Automatically via GitHub Actions workflow (deploy-and-migrate.yml)
+--            See CI_CD_MIGRATIONS_SETUP.md for details
 
 -- Step 1: Add role_id column to profiles table (nullable initially)
 ALTER TABLE public.profiles

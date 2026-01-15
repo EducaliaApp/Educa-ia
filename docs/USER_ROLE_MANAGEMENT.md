@@ -4,6 +4,8 @@
 
 Este documento describe la implementación del sistema de gestión de usuarios con roles en ProfeFlow, permitiendo administrar usuarios desde el panel de administración con asignación de roles desde la tabla `roles` de Supabase.
 
+> **✅ CI/CD Integrado**: La migración sigue el formato requerido por el workflow automático de GitHub Actions. Ver [CI_CD_MIGRATIONS_SETUP.md](../CI_CD_MIGRATIONS_SETUP.md) para detalles del proceso de deployment.
+
 ## Cambios Implementados
 
 ### 1. Base de Datos (Migration: `20250115_user_role_management.sql`)

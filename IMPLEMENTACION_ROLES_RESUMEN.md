@@ -305,11 +305,13 @@ $ npx tsc --noEmit
 ## 📝 Próximos Pasos Recomendados
 
 ### Despliegue
-1. ✅ **Migración aplicada** - Ejecutar SQL en Supabase
-2. ⏳ **Testing manual** - Probar flujo completo
-3. ⏳ **Screenshots** - Documentar UI final
-4. ⏳ **Deploy a staging** - Validar en ambiente de pruebas
-5. ⏳ **Deploy a producción** - Liberar a usuarios
+1. ✅ **Migración lista** - Formato correcto para CI/CD automático
+2. ✅ **CI/CD configurado** - Workflow `deploy-and-migrate.yml` ejecutará automáticamente
+3. ⏳ **Merge a main** - Las migraciones se aplicarán automáticamente
+4. ⏳ **Testing manual** - Probar flujo completo post-deployment
+5. ⏳ **Screenshots** - Documentar UI final
+
+> **📖 Ver [CI_CD_MIGRATIONS_SETUP.md](CI_CD_MIGRATIONS_SETUP.md)** para detalles del proceso automático.
 
 ### Mejoras Futuras (Opcionales)
 - [ ] Agregar permisos granulares por funcionalidad

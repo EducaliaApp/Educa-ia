@@ -10,29 +10,51 @@ Antes de comenzar, verifica que tienes:
 
 ## 📋 Pasos de Despliegue
 
-### 1. Aplicar Migración de Base de Datos
+### 1. Migración de Base de Datos (Automática vía CI/CD)
 
-#### Opción A: Desde Supabase Dashboard (Recomendado)
+> **✅ IMPORTANTE**: Este proyecto utiliza GitHub Actions para aplicar migraciones automáticamente.
+> Ver [CI_CD_MIGRATIONS_SETUP.md](../CI_CD_MIGRATIONS_SETUP.md) para más detalles.
 
+La migración `20250115_user_role_management.sql` ya está en el formato correcto y se ejecutará automáticamente cuando:
+
+1. **Se hace merge del Pull Request a `main`** - El workflow `deploy-and-migrate.yml` se ejecuta automáticamente
+2. **Se hace push directo a `main`** - Las migraciones se aplican inmediatamente
+3. **Ejecución manual** - Desde GitHub Actions → "Deploy and Run Migrations" → "Run workflow"
+
+#### Flujo Automático (Recomendado)
+
+```bash
+# 1. Crear Pull Request desde esta rama
+# 2. Esperar revisión y aprobación
+# 3. Hacer merge a main
+# 4. GitHub Actions ejecutará automáticamente:
+#    - Aplicación de migraciones
+#    - Verificación de schema
+#    - Deployment a Vercel
+```
+
+**Monitoreo del proceso**:
+- Ve a la pestaña `Actions` en GitHub
+- Busca el workflow "Deploy and Run Migrations"
+- Revisa los logs de cada job (migrate, verify, deploy)
+
+#### Opción Manual (Solo si es necesario)
+
+**Desde Supabase Dashboard**:
 1. Abre el proyecto en Supabase Dashboard
 2. Navega a **SQL Editor**
 3. Crea una nueva query
-4. Copia y pega el contenido completo de:
-   ```
-   supabase/migrations/20250115_user_role_management.sql
-   ```
-5. Haz clic en **Run** para ejecutar
-6. Verifica que no hay errores en la consola
+4. Copia y pega el contenido de `supabase/migrations/20250115_user_role_management.sql`
+5. Ejecuta la query
+6. Verifica que no hay errores
 
-#### Opción B: Desde CLI de Supabase
-
+**Desde CLI**:
 ```bash
-# Si tienes Supabase CLI instalado
+# Solo para desarrollo local o emergencias
 supabase db push
-
-# O ejecutar la migración específica
-supabase migration up --local
 ```
+
+> **⚠️ Nota**: La opción manual solo debe usarse en casos excepcionales. El CI/CD garantiza que las migraciones se apliquen de forma consistente y segura.
 
 ### 2. Verificar la Migración
 
