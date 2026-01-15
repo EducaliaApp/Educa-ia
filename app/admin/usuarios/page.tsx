@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react'
 import { UserTable } from '@/components/admin/user-table'
 import { AjustarCreditosModal } from '@/components/admin/AjustarCreditosModal'
 import { EditUserModal } from '@/components/admin/EditUserModal'
+import { CreateUserModal } from '@/components/admin/CreateUserModal'
 import Input from '@/components/ui/Input'
-import { Search, Users as UsersIcon } from 'lucide-react'
+import Button from '@/components/ui/Button'
+import { Search, Users as UsersIcon, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface User {
@@ -33,6 +35,7 @@ export default function UsuariosPage() {
   const [roleFilter, setRoleFilter] = useState('all')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
 
   useEffect(() => {
@@ -109,9 +112,18 @@ export default function UsuariosPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Gestión de Usuarios</h1>
-        <p className="text-slate-400">Administra todos los usuarios de ProfeFlow</p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">Gestión de Usuarios</h1>
+          <p className="text-slate-400">Administra todos los usuarios de ProfeFlow</p>
+        </div>
+        <Button
+          onClick={() => setIsCreateModalOpen(true)}
+          className="flex items-center gap-2"
+        >
+          <Plus className="w-5 h-5" />
+          Crear Usuario
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -248,6 +260,13 @@ export default function UsuariosPage() {
           onSuccess={handleEditSuccess}
         />
       )}
+
+      {/* Create User Modal */}
+      <CreateUserModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={handleEditSuccess}
+      />
     </div>
   )
 }
