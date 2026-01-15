@@ -11,6 +11,7 @@ interface User {
   plan: string
   role: string
   asignatura: string
+  nivel: string
   total_planificaciones?: number
   creditos_planificaciones?: number
   creditos_evaluaciones?: number
