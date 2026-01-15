@@ -35,7 +35,7 @@ export function EditUserModal({
     nombre: currentData.nombre,
     email: currentData.email,
     plan: currentData.plan,
-    roleId: '', // Will be populated from role
+    roleId: '', // Will be populated after roles are loaded based on currentData.role
     asignatura: currentData.asignatura || '',
     nivel: currentData.nivel || '',
   })
@@ -47,7 +47,7 @@ export function EditUserModal({
         nombre: currentData.nombre,
         email: currentData.email,
         plan: currentData.plan,
-        roleId: '', // Will be set after roles are loaded
+        roleId: '', // Will be set in fetchPlanesYRoles after roles are loaded
         asignatura: currentData.asignatura || '',
         nivel: currentData.nivel || '',
       })

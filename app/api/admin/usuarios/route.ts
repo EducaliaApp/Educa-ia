@@ -116,7 +116,9 @@ export async function POST(request: NextRequest) {
     const { data: newUser, error: createUserError } = await adminClient.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // Auto-confirm email
+      email_confirm: true, // Auto-confirm email for admin-created accounts
+      // This is appropriate for admin-created accounts as they are trusted
+      // Users can still reset password if needed
     })
 
     if (createUserError) {
@@ -172,8 +174,13 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error('Error updating profile:', updateError)
-      // Try to clean up the auth user
-      await adminClient.auth.admin.deleteUser(newUser.user.id)
+      // Try to clean up the auth user if profile creation failed
+      try {
+        await adminClient.auth.admin.deleteUser(newUser.user.id)
+      } catch (cleanupError) {
+        console.error('Failed to cleanup auth user after profile error:', cleanupError)
+        // Continue to return error to client even if cleanup fails
+      }
       return NextResponse.json({ 
         error: 'Error al crear el perfil del usuario',
         details: updateError.message 

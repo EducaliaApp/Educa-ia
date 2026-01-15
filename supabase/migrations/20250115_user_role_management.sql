@@ -70,6 +70,8 @@ BEGIN
   LIMIT 1;
 
   -- Insert profile with role_id
+  -- Note: 'user' is hardcoded as default role code for new registrations
+  -- Admin can change role later from admin panel if needed
   INSERT INTO public.profiles (id, email, role, role_id, created_at, updated_at)
   VALUES (NEW.id, NEW.email, 'user', default_role_id, NOW(), NOW());
   
