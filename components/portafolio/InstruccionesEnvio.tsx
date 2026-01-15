@@ -161,7 +161,7 @@ export function InstruccionesEnvio({
                 <h3 className="font-semibold text-lg mb-2">Ir a tu Portafolio {portafolio.año_evaluacion}</h3>
                 <p className="text-gray-600 mb-3">
                   En el menú principal, selecciona la sección{' '}
-                  <strong>"Portafolio Docente {portafolio.año_evaluacion}"</strong>.
+                  <strong>&ldquo;Portafolio Docente {portafolio.año_evaluacion}&rdquo;</strong>.
                 </p>
               </div>
             </div>
@@ -176,7 +176,7 @@ export function InstruccionesEnvio({
               <div className="flex-1 pt-1">
                 <h3 className="font-semibold text-lg mb-2">Subir archivo PDF del portafolio</h3>
                 <p className="text-gray-600 mb-3">
-                  Haz clic en "Subir Portafolio" y selecciona el archivo PDF que descargaste desde ProfeFlow.
+                  Haz clic en &ldquo;Subir Portafolio&rdquo; y selecciona el archivo PDF que descargaste desde ProfeFlow.
                 </p>
                 {onDescargarPDF && (
                   <Button variant="outline" size="sm" onClick={onDescargarPDF} className="mb-2">
@@ -277,7 +277,7 @@ export function InstruccionesEnvio({
               <div className="flex-1 pt-1">
                 <h3 className="font-semibold text-lg mb-2">Enviar portafolio</h3>
                 <p className="text-gray-600 mb-3">
-                  Haz clic en <strong>"Enviar Portafolio"</strong> y confirma el envío.
+                  Haz clic en <strong>&ldquo;Enviar Portafolio&rdquo;</strong> y confirma el envío.
                 </p>
                 <Alert className="bg-red-50 border-red-300">
                   <AlertTriangle className="h-4 w-4 text-red-600" />
