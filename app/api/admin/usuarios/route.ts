@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { Database } from '@/lib/supabase/types'
+
+type Profile = Database['public']['Tables']['profiles']['Row']
+type ProfileUpdate = Database['public']['Tables']['profiles']['Update']
 
 // GET: Fetch all users with their data
 export async function GET(request: NextRequest) {
@@ -127,9 +131,10 @@ export async function PUT(request: NextRequest) {
 
     // Update remaining fields
     if (Object.keys(updates).length > 0) {
+      const updateData = updates as ProfileUpdate
       const { error: updateError } = await adminClient
         .from('profiles')
-        .update(updates)
+        .update(updateData)
         .eq('id', userId)
 
       if (updateError) {

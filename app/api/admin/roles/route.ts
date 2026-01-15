@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { Database } from '@/lib/supabase/types'
+
+type Role = Database['public']['Tables']['roles']['Row']
+type RoleInsert = Database['public']['Tables']['roles']['Insert']
+type RoleUpdate = Database['public']['Tables']['roles']['Update']
 
 // GET: Fetch all roles
 export async function GET(request: NextRequest) {
@@ -80,15 +85,17 @@ export async function POST(request: NextRequest) {
     // Use admin client to bypass RLS
     const adminClient = createAdminClient()
 
+    const roleData: RoleInsert = {
+      nombre,
+      codigo,
+      descripcion: descripcion || null,
+      permisos: permisos || [],
+      activo: activo !== undefined ? activo : true,
+    }
+
     const { data: newRole, error: insertError } = await adminClient
       .from('roles')
-      .insert({
-        nombre,
-        codigo,
-        descripcion: descripcion || null,
-        permisos: permisos || [],
-        activo: activo !== undefined ? activo : true,
-      })
+      .insert(roleData)
       .select()
       .single()
 
@@ -140,7 +147,7 @@ export async function PUT(request: NextRequest) {
 
     const { error: updateError } = await adminClient
       .from('roles')
-      .update(updates)
+      .update(updates as RoleUpdate)
       .eq('id', roleId)
 
     if (updateError) {

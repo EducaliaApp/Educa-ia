@@ -4,7 +4,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { Database } from '@/lib/supabase/types'
 
 type Plan = Database['public']['Tables']['planes']['Row']
+type PlanInsert = Database['public']['Tables']['planes']['Insert']
+type PlanUpdate = Database['public']['Tables']['planes']['Update']
 type PlanLimite = Database['public']['Tables']['planes_limites']['Row']
+type PlanLimiteInsert = Database['public']['Tables']['planes_limites']['Insert']
+type PlanLimiteUpdate = Database['public']['Tables']['planes_limites']['Update']
 
 // GET: Fetch all planes with their limits
 export async function GET(request: NextRequest) {
@@ -110,17 +114,19 @@ export async function POST(request: NextRequest) {
     // Use admin client to bypass RLS
     const adminClient = createAdminClient()
 
-    // Create plan
+    // Create plan with explicit type
+    const planData: PlanInsert = {
+      nombre,
+      codigo,
+      descripcion: descripcion || null,
+      precio_mensual_clp: precio_mensual_clp || 0,
+      activo: activo !== undefined ? activo : true,
+      caracteristicas: caracteristicas || [],
+    }
+
     const { data: newPlan, error: planError } = await adminClient
       .from('planes')
-      .insert({
-        nombre,
-        codigo,
-        descripcion: descripcion || null,
-        precio_mensual_clp: precio_mensual_clp || 0,
-        activo: activo !== undefined ? activo : true,
-        caracteristicas: caracteristicas || [],
-      })
+      .insert(planData)
       .select()
       .single()
 
@@ -129,16 +135,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Error al crear el plan' }, { status: 500 })
     }
 
-    // Create limits for the new plan
+    // Create limits for the new plan with explicit type
+    const limitesData: PlanLimiteInsert = {
+      plan_id: newPlan.id,
+      creditos_planificaciones: creditos_planificaciones || 0,
+      creditos_evaluaciones: creditos_evaluaciones || 0,
+      analisis_portafolio: analisis_portafolio || false,
+      exportar_pdf: exportar_pdf || false,
+      soporte_prioritario: soporte_prioritario || false,
+    }
+
     const { error: limitesError } = await adminClient
       .from('planes_limites')
-      .insert({
-        plan_id: newPlan.id,
-        creditos_planificaciones: creditos_planificaciones || 0,
-        creditos_evaluaciones: creditos_evaluaciones || 0,
-        analisis_portafolio: analisis_portafolio || false,
-        exportar_pdf: exportar_pdf || false,
-        soporte_prioritario: soporte_prioritario || false,
+      .insert(limitesData)
       })
 
     if (limitesError) {
@@ -198,7 +207,7 @@ export async function PUT(request: NextRequest) {
     if (planUpdates && Object.keys(planUpdates).length > 0) {
       const { error: planError } = await adminClient
         .from('planes')
-        .update(planUpdates)
+        .update(planUpdates as PlanUpdate)
         .eq('id', planId)
 
       if (planError) {
@@ -211,7 +220,7 @@ export async function PUT(request: NextRequest) {
     if (limitesUpdates && Object.keys(limitesUpdates).length > 0) {
       const { error: limitesError } = await adminClient
         .from('planes_limites')
-        .update(limitesUpdates)
+        .update(limitesUpdates as PlanLimiteUpdate)
         .eq('plan_id', planId)
 
       if (limitesError) {
