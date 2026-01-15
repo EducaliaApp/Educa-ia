@@ -86,17 +86,19 @@ ON CONFLICT (codigo) DO NOTHING;
 -- ============================================
 -- 5. INSERTAR LÍMITES DE PLANES
 -- ============================================
+-- Nota: Usamos 999999 como valor convencional para representar créditos "ilimitados"
+-- Esta convención se mantiene en el código mediante la constante UNLIMITED_CREDITS
 INSERT INTO planes_limites (plan_id, creditos_planificaciones, creditos_evaluaciones, analisis_portafolio, exportar_pdf, soporte_prioritario)
 SELECT 
   id,
   CASE 
     WHEN codigo = 'free' THEN 5
-    WHEN codigo = 'pro' THEN 999999
+    WHEN codigo = 'pro' THEN 999999  -- Ilimitado
     ELSE 10
   END,
   CASE 
     WHEN codigo = 'free' THEN 3
-    WHEN codigo = 'pro' THEN 999999
+    WHEN codigo = 'pro' THEN 999999  -- Ilimitado
     ELSE 5
   END,
   CASE WHEN codigo = 'pro' THEN true ELSE false END,

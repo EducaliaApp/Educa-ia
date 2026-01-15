@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit2, Trash2, CheckCircle, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { UNLIMITED_CREDITS, formatCredits } from '@/lib/constants/plans'
 import type { Plan, PlanLimite } from '@/lib/supabase/types'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
@@ -178,7 +179,8 @@ export default function PlanesPage() {
       handleCloseModal()
     } catch (error) {
       console.error('Error saving plan:', error)
-      alert('Error al guardar el plan')
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      alert(`Error al guardar el plan: ${errorMessage}`)
     }
   }
 
@@ -196,7 +198,8 @@ export default function PlanesPage() {
       await fetchPlanes()
     } catch (error) {
       console.error('Error deleting plan:', error)
-      alert('Error al eliminar el plan')
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      alert(`Error al eliminar el plan: ${errorMessage}`)
     }
   }
 
@@ -212,7 +215,8 @@ export default function PlanesPage() {
       await fetchPlanes()
     } catch (error) {
       console.error('Error toggling plan:', error)
-      alert('Error al cambiar estado del plan')
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      alert(`Error al cambiar estado del plan: ${errorMessage}`)
     }
   }
 
@@ -312,17 +316,13 @@ export default function PlanesPage() {
                     <div className="flex justify-between text-slate-300">
                       <span>Planificaciones:</span>
                       <span className="font-semibold">
-                        {plan.limites.creditos_planificaciones === 999999
-                          ? 'Ilimitadas'
-                          : plan.limites.creditos_planificaciones}
+                        {formatCredits(plan.limites.creditos_planificaciones)}
                       </span>
                     </div>
                     <div className="flex justify-between text-slate-300">
                       <span>Evaluaciones:</span>
                       <span className="font-semibold">
-                        {plan.limites.creditos_evaluaciones === 999999
-                          ? 'Ilimitadas'
-                          : plan.limites.creditos_evaluaciones}
+                        {formatCredits(plan.limites.creditos_evaluaciones)}
                       </span>
                     </div>
                   </div>

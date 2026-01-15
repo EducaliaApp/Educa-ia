@@ -111,7 +111,8 @@ export function EditUserModal({
       onClose()
     } catch (error) {
       console.error('Error updating user:', error)
-      alert('Error al actualizar usuario')
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      alert(`Error al actualizar usuario: ${errorMessage}`)
     } finally {
       setIsLoading(false)
     }

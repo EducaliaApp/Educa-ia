@@ -143,7 +143,8 @@ export default function RolesPage() {
       handleCloseModal()
     } catch (error) {
       console.error('Error saving role:', error)
-      alert('Error al guardar el rol')
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      alert(`Error al guardar el rol: ${errorMessage}`)
     }
   }
 
@@ -161,7 +162,8 @@ export default function RolesPage() {
       await fetchRoles()
     } catch (error) {
       console.error('Error deleting role:', error)
-      alert('Error al eliminar el rol')
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      alert(`Error al eliminar el rol: ${errorMessage}`)
     }
   }
 
@@ -177,7 +179,8 @@ export default function RolesPage() {
       await fetchRoles()
     } catch (error) {
       console.error('Error toggling role:', error)
-      alert('Error al cambiar estado del rol')
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      alert(`Error al cambiar estado del rol: ${errorMessage}`)
     }
   }
 
