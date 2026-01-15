@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
     const adminClient = createAdminClient()
 
     // Get all users - first fetch profiles
-    const { data: profiles, error: profilesError } = await adminClient
-      .from('profiles')
+    const { data: profiles, error: profilesError } = await (adminClient
+      .from('profiles') as any)
       .select('id, nombre, email, plan, role, asignatura, nivel, created_at, creditos_planificaciones, creditos_evaluaciones, creditos_usados_planificaciones, creditos_usados_evaluaciones')
       .order('created_at', { ascending: false })
 
@@ -45,8 +45,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all planificaciones counts in a single query
-    const { data: planificacionesCounts, error: countsError } = await adminClient
-      .from('planificaciones')
+    const { data: planificacionesCounts, error: countsError } = await (adminClient
+      .from('planificaciones') as any)
       .select('user_id')
 
     if (countsError) {
@@ -57,13 +57,13 @@ export async function GET(request: NextRequest) {
     // Create a map of user_id to count
     const countsMap = new Map<string, number>()
     if (planificacionesCounts) {
-      planificacionesCounts.forEach((p) => {
+      planificacionesCounts.forEach((p: any) => {
         countsMap.set(p.user_id, (countsMap.get(p.user_id) || 0) + 1)
       })
     }
 
     // Combine profiles with their counts
-    const usersWithCounts = (profiles || []).map((profile) => ({
+    const usersWithCounts = (profiles || []).map((profile: any) => ({
       ...profile,
       total_planificaciones: countsMap.get(profile.id) || 0,
     }))
@@ -111,7 +111,7 @@ export async function PUT(request: NextRequest) {
 
     // If plan is being updated, use the RPC function to update credits automatically
     if (updates.plan) {
-      const { error: rpcError } = await adminClient.rpc('actualizar_plan_usuario', {
+      const { error: rpcError } = await (adminClient.rpc as any)('actualizar_plan_usuario', {
         usuario_id: userId,
         nuevo_plan_codigo: updates.plan,
       })
@@ -131,10 +131,9 @@ export async function PUT(request: NextRequest) {
 
     // Update remaining fields
     if (Object.keys(updates).length > 0) {
-      const updateData = updates as ProfileUpdate
-      const { error: updateError } = await adminClient
-        .from('profiles')
-        .update(updateData)
+      const { error: updateError } = await (adminClient
+        .from('profiles') as any)
+        .update(updates)
         .eq('id', userId)
 
       if (updateError) {

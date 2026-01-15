@@ -85,17 +85,15 @@ export async function POST(request: NextRequest) {
     // Use admin client to bypass RLS
     const adminClient = createAdminClient()
 
-    const roleData: RoleInsert = {
-      nombre,
-      codigo,
-      descripcion: descripcion || null,
-      permisos: permisos || [],
-      activo: activo !== undefined ? activo : true,
-    }
-
-    const { data: newRole, error: insertError } = await adminClient
-      .from('roles')
-      .insert(roleData)
+    const { data: newRole, error: insertError } = await (adminClient
+      .from('roles') as any)
+      .insert({
+        nombre,
+        codigo,
+        descripcion: descripcion || null,
+        permisos: permisos || [],
+        activo: activo !== undefined ? activo : true,
+      })
       .select()
       .single()
 
@@ -145,9 +143,9 @@ export async function PUT(request: NextRequest) {
     // Use admin client to bypass RLS
     const adminClient = createAdminClient()
 
-    const { error: updateError } = await adminClient
-      .from('roles')
-      .update(updates as RoleUpdate)
+    const { error: updateError } = await (adminClient
+      .from('roles') as any)
+      .update(updates)
       .eq('id', roleId)
 
     if (updateError) {

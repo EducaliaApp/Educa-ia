@@ -114,19 +114,17 @@ export async function POST(request: NextRequest) {
     // Use admin client to bypass RLS
     const adminClient = createAdminClient()
 
-    // Create plan with explicit type
-    const planData: PlanInsert = {
-      nombre,
-      codigo,
-      descripcion: descripcion || null,
-      precio_mensual_clp: precio_mensual_clp || 0,
-      activo: activo !== undefined ? activo : true,
-      caracteristicas: caracteristicas || [],
-    }
-
-    const { data: newPlan, error: planError } = await adminClient
-      .from('planes')
-      .insert(planData)
+    // Create plan
+    const { data: newPlan, error: planError } = await (adminClient
+      .from('planes') as any)
+      .insert({
+        nombre,
+        codigo,
+        descripcion: descripcion || null,
+        precio_mensual_clp: precio_mensual_clp || 0,
+        activo: activo !== undefined ? activo : true,
+        caracteristicas: caracteristicas || [],
+      })
       .select()
       .single()
 
@@ -135,19 +133,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Error al crear el plan' }, { status: 500 })
     }
 
-    // Create limits for the new plan with explicit type
-    const limitesData: PlanLimiteInsert = {
-      plan_id: newPlan.id,
-      creditos_planificaciones: creditos_planificaciones || 0,
-      creditos_evaluaciones: creditos_evaluaciones || 0,
-      analisis_portafolio: analisis_portafolio || false,
-      exportar_pdf: exportar_pdf || false,
-      soporte_prioritario: soporte_prioritario || false,
-    }
-
-    const { error: limitesError } = await adminClient
-      .from('planes_limites')
-      .insert(limitesData)
+    // Create limits for the new plan
+    const { error: limitesError } = await (adminClient
+      .from('planes_limites') as any)
+      .insert({
+        plan_id: newPlan.id,
+        creditos_planificaciones: creditos_planificaciones || 0,
+        creditos_evaluaciones: creditos_evaluaciones || 0,
+        analisis_portafolio: analisis_portafolio || false,
+        exportar_pdf: exportar_pdf || false,
+        soporte_prioritario: soporte_prioritario || false,
+      })
 
     if (limitesError) {
       console.error('Error creating limits:', limitesError)
@@ -204,9 +200,9 @@ export async function PUT(request: NextRequest) {
 
     // Update plan if there are updates
     if (planUpdates && Object.keys(planUpdates).length > 0) {
-      const { error: planError } = await adminClient
-        .from('planes')
-        .update(planUpdates as PlanUpdate)
+      const { error: planError } = await (adminClient
+        .from('planes') as any)
+        .update(planUpdates)
         .eq('id', planId)
 
       if (planError) {
@@ -217,9 +213,9 @@ export async function PUT(request: NextRequest) {
 
     // Update limits if there are updates
     if (limitesUpdates && Object.keys(limitesUpdates).length > 0) {
-      const { error: limitesError } = await adminClient
-        .from('planes_limites')
-        .update(limitesUpdates as PlanLimiteUpdate)
+      const { error: limitesError } = await (adminClient
+        .from('planes_limites') as any)
+        .update(limitesUpdates)
         .eq('plan_id', planId)
 
       if (limitesError) {
