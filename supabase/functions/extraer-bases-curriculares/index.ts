@@ -13,6 +13,9 @@ const CONFIG = {
   DELAY_BETWEEN_REQUESTS: 500, // ms para rate limiting
   MAX_RETRIES: 3,
   USER_AGENT: 'Mozilla/5.0 (compatible; ProfeFlow-Bot/1.0; +https://profeflow.cl)',
+  // Límite de asignaturas a procesar (0 = todas)
+  // Para testing: 10, Para producción: 0
+  MAX_ASIGNATURAS: 10,
 }
 
 // ============================================
@@ -256,9 +259,12 @@ function generarCSV(objetivos: ObjetivoAprendizaje[]): string {
 }
 
 /**
- * Escapa caracteres especiales para CSV
+ * Genera nombre de archivo CSV con timestamp
  */
-function escaparCSV(valor: string): string {
+function generarNombreArchivo(fecha: Date = new Date()): string {
+  const fechaStr = fecha.toISOString().split('T')[0]
+  return `bases_curriculares_1_a_6_basico_con_actividades_${fechaStr}.csv`
+}
   if (!valor) return ''
   
   // Si contiene punto y coma, comillas o saltos de línea, envolver en comillas
@@ -271,9 +277,9 @@ function escaparCSV(valor: string): string {
 }
 
 /**
- * Sube archivo a Supabase Storage
+ * Escapa caracteres especiales para CSV
  */
-async function subirCSVaStorage(
+function escaparCSV(valor: string): string {
   supabase: any,
   contenidoCSV: string,
   nombreArchivo: string
@@ -313,11 +319,10 @@ async function subirCSVaStorage(
   return urlData?.signedUrl || rutaArchivo
 }
 
-// ============================================
-// HANDLER PRINCIPAL
-// ============================================
-
-export async function handler(req: Request): Promise<Response> {
+/**
+ * Sube archivo a Supabase Storage
+ */
+async function subirCSVaStorage(
   const startTime = Date.now()
   
   try {
@@ -369,7 +374,15 @@ export async function handler(req: Request): Promise<Response> {
       const todosLosObjetivos: ObjetivoAprendizaje[] = []
       let asignaturasProcesadas = 0
       
-      for (const asig of asignaturas.slice(0, 10)) { // Limitar a 10 para testing
+      // Aplicar límite si está configurado (0 = sin límite)
+      const asignaturasAProcesar = CONFIG.MAX_ASIGNATURAS > 0 
+        ? asignaturas.slice(0, CONFIG.MAX_ASIGNATURAS)
+        : asignaturas
+      
+      console.log(`📊 Modo: ${CONFIG.MAX_ASIGNATURAS > 0 ? 'TEST' : 'PRODUCCIÓN'}`)
+      console.log(`📝 Procesando ${asignaturasAProcesar.length} de ${asignaturas.length} asignaturas`)
+      
+      for (const asig of asignaturasAProcesar) {
         try {
           console.log(`\n📚 Procesando: ${asig.nombre}`)
           await supabase.rpc('agregar_log_proceso_etl', {
@@ -432,7 +445,7 @@ export async function handler(req: Request): Promise<Response> {
       const contenidoCSV = generarCSV(todosLosObjetivos)
       
       // 7. Subir a Storage
-      const nombreArchivo = `bases_curriculares_1_a_6_basico_con_actividades_${new Date().toISOString().split('T')[0]}.csv`
+      const nombreArchivo = generarNombreArchivo()
       console.log(`💾 Subiendo ${nombreArchivo} a Storage...`)
       
       const urlDescarga = await subirCSVaStorage(supabase, contenidoCSV, nombreArchivo)

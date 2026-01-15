@@ -65,8 +65,7 @@ export default function ETLPage() {
 
   useEffect(() => {
     fetchData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []) // fetchData is stable and doesn't need to be in dependencies
 
   const fetchData = async () => {
     setIsLoading(true)
