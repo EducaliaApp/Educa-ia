@@ -22,7 +22,16 @@ serve(async (req) => {
   const logger = new Logger('analizar-modulo1-tarea1')
 
   try {
-    // 1. Obtener datos de la solicitud
+    // 1. Autenticar usuario
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization header es requerido' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // 2. Obtener datos de la solicitud
     const { tarea_id } = await req.json()
 
     if (!tarea_id) {
@@ -31,17 +40,30 @@ serve(async (req) => {
 
     logger.info('Iniciando análisis', { tarea_id })
 
-    // 2. Conectar a Supabase
+    // 3. Conectar a Supabase con usuario autenticado
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')
 
-    if (!supabaseUrl || !supabaseKey) {
+    if (!supabaseUrl || !supabaseAnonKey) {
       throw new Error('Variables de entorno de Supabase no configuradas')
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    })
 
-    // 3. Obtener tarea y contexto
+    // Verificar autenticación
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'No autorizado' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    logger.info('Usuario autenticado', { userId: user.id })
+
+    // 4. Obtener tarea y contexto
     const { data: tarea, error: tareaError } = await supabase
       .from('tareas_portafolio')
       .select(`
@@ -70,10 +92,10 @@ serve(async (req) => {
       año: portafolio.año_evaluacion,
     })
 
-    // 4. Inicializar motor de rúbricas
+    // 5. Inicializar motor de rúbricas
     const rubricasEngine = new RubricasEngine(supabase, 'analizar-m1-t1')
 
-    // 5. Cargar rúbricas relevantes
+    // 6. Cargar rúbricas relevantes
     const rubricas = await rubricasEngine.cargarRubricas({
       año: portafolio.año_evaluacion,
       nivel_educativo: portafolio.nivel_educativo,

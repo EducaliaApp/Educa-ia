@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { assertEquals, assertExists } from "https://deno.land/std@0.168.0/testing/asserts.ts";
 import { createMockSupabaseClient, createMockPDFBuffer, createMockHTMLWithPDFs, mockDocumentos, mockTextos } from "./shared/test-utils.ts";
 import { procesarDocumentoNuevo, PROCESAR_DOCUMENTO_FUNCTION } from "./monitor-documentos-oficiales/index.ts";

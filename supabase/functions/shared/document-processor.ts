@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // PDF processing moved to Python pipeline - not needed in Edge Functions
 // import { getDocument } from 'https://esm.sh/pdfjs-dist@3.11.174/legacy/build/pdf.mjs';
 
@@ -8,21 +7,21 @@ interface LogEvent {
   level: 'info' | 'warn' | 'error'
   component: string
   event: string
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
 }
 
 export class DocumentProcessor {
-  private supabase: any;
+  private supabase: SupabaseClient;
   private logs: LogEvent[] = [];
 
-    constructor(supabaseClient?: any) {
+    constructor(supabaseClient?: SupabaseClient) {
       this.supabase = supabaseClient ?? createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
   }
 
-  private log(level: LogEvent['level'], component: string, event: string, metadata: any = {}) {
+  private log(level: LogEvent['level'], component: string, event: string, metadata: Record<string, unknown> = {}) {
     const logEvent: LogEvent = {
       timestamp: new Date().toISOString(),
       level,
