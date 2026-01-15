@@ -194,6 +194,26 @@ git push origin feature/nueva-migracion
 
 ## 🔍 Troubleshooting
 
+### Error: "Remote migration versions not found in local migrations directory"
+
+```
+Remote migration versions not found in local migrations directory.
+
+Make sure your local git repo is up-to-date. If the error persists, try repairing the migration history table:
+supabase migration repair --status reverted 00 01 02
+```
+
+**Causa**: La base de datos remota tiene migraciones antiguas (00, 01, 02) que fueron aplicadas antes de adoptar el formato de timestamp, pero los archivos correspondientes no están en `supabase/migrations/`.
+
+**Solución automática**: El workflow incluye un paso que detecta y repara automáticamente este problema marcando las migraciones huérfanas como "revertidas". Esto permite que las nuevas migraciones se apliquen sin conflictos.
+
+**Solución manual** (si necesitas hacerlo localmente):
+```bash
+supabase migration repair --status reverted 00 01 02
+```
+
+**Nota**: Las migraciones 00, 01, 02 están archivadas en `supabase/migrations/archive/` como referencia histórica.
+
 ### Error: "file name must match pattern"
 
 ```

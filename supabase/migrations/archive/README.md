@@ -8,6 +8,12 @@ Estos archivos de migración fueron movidos a este directorio de archivo porque 
 
 Además, muchos de estos archivos fueron aplicados manualmente en producción y aplicarlos nuevamente causaría errores de duplicación.
 
+### Migraciones huérfanas (00, 01, 02)
+
+Las migraciones `00`, `01`, y `02` fueron aplicadas en producción antes de adoptar el formato de timestamp requerido por Supabase CLI. Estos registros existen en la tabla `supabase_migrations.schema_migrations` pero los archivos correspondientes (`00_create_enums.sql`, `01_function_logs_fixed.sql`, `02_schema_rubricas_fixed.sql`) están archivados aquí.
+
+**Solución automática**: El workflow CI/CD (`deploy-and-migrate.yml`) incluye un paso que automáticamente marca estas migraciones huérfanas como "revertidas" usando `supabase migration repair --status reverted 00 01 02`, permitiendo que las nuevas migraciones con formato timestamp se apliquen sin conflictos.
+
 ## Formato Requerido
 
 Supabase CLI requiere que las migraciones sigan este patrón de nombre:
