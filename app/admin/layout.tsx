@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
+import { Breadcrumbs } from '@/components/admin/Breadcrumbs'
 
 export const metadata = {
   title: 'Panel Admin - ProfeFlow',
@@ -38,7 +39,10 @@ export default async function AdminLayout({
     <div className="min-h-screen bg-slate-950 flex">
       <AdminSidebar userName={profile.nombre} userEmail={profile.email} />
       <main className="flex-1 overflow-auto">
-        <div className="p-8">{children}</div>
+        <div className="p-8">
+          <Breadcrumbs />
+          {children}
+        </div>
       </main>
     </div>
   )
