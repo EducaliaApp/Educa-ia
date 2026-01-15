@@ -1,16 +1,15 @@
 'use client'
 
-import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
 import { formatDate } from '@/lib/utils'
-import { Edit } from 'lucide-react'
+import { Edit, Shield } from 'lucide-react'
 
 interface User {
   id: string
   nombre: string
   email: string
-  plan: 'free' | 'pro'
+  plan: string
+  role: string
   asignatura: string
   total_planificaciones?: number
   creditos_planificaciones?: number
@@ -22,20 +21,12 @@ interface User {
 
 interface UserTableProps {
   users: User[]
-  onPlanToggle?: (userId: string, currentPlan: 'free' | 'pro') => void
+  onEditUser?: (user: User) => void
   onAjustarCreditos?: (user: User) => void
   isLoading?: boolean
 }
 
-export function UserTable({ users, onPlanToggle, onAjustarCreditos, isLoading }: UserTableProps) {
-  const [loadingUserId, setLoadingUserId] = useState<string | null>(null)
-
-  const handlePlanToggle = async (userId: string, currentPlan: 'free' | 'pro') => {
-    setLoadingUserId(userId)
-    await onPlanToggle?.(userId, currentPlan)
-    setLoadingUserId(null)
-  }
-
+export function UserTable({ users, onEditUser, onAjustarCreditos, isLoading }: UserTableProps) {
   if (isLoading) {
     return (
       <div className="bg-slate-900 border border-slate-800 rounded-lg p-8">
@@ -69,6 +60,9 @@ export function UserTable({ users, onPlanToggle, onAjustarCreditos, isLoading }:
               </th>
               <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
                 Plan
+              </th>
+              <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
+                Rol
               </th>
               <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
                 Asignatura
@@ -109,6 +103,14 @@ export function UserTable({ users, onPlanToggle, onAjustarCreditos, isLoading }:
                     {user.plan.toUpperCase()}
                   </Badge>
                 </td>
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-1">
+                    {user.role === 'admin' && <Shield className="w-4 h-4 text-yellow-500" />}
+                    <span className={user.role === 'admin' ? 'text-yellow-500 font-medium' : 'text-slate-400'}>
+                      {user.role === 'admin' ? 'Admin' : 'Usuario'}
+                    </span>
+                  </div>
+                </td>
                 <td className="px-6 py-4 text-slate-400 text-sm">
                   {user.asignatura || '-'}
                 </td>
@@ -131,27 +133,22 @@ export function UserTable({ users, onPlanToggle, onAjustarCreditos, isLoading }:
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex gap-2">
-                    {onPlanToggle && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handlePlanToggle(user.id, user.plan)}
-                        disabled={loadingUserId === user.id}
+                    {onEditUser && (
+                      <button
+                        onClick={() => onEditUser(user)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
+                        title="Editar usuario"
                       >
-                        {loadingUserId === user.id ? (
-                          'Cambiando...'
-                        ) : (
-                          `→ ${user.plan === 'free' ? 'PRO' : 'FREE'}`
-                        )}
-                      </Button>
+                        <Edit className="w-4 h-4" />
+                        Editar
+                      </button>
                     )}
                     {onAjustarCreditos && (
                       <button
                         onClick={() => onAjustarCreditos(user)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-600/20 text-blue-500 hover:bg-blue-600/30 rounded-lg transition-colors text-sm"
+                        className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors text-sm"
                         title="Ajustar créditos"
                       >
-                        <Edit className="w-4 h-4" />
                         Créditos
                       </button>
                     )}
