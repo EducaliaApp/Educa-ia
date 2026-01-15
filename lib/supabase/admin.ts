@@ -33,17 +33,28 @@ export function createAdminClient() {
  * This uses service_role to bypass RLS
  */
 export async function isUserAdmin(userId: string): Promise<boolean> {
-  const adminClient = createAdminClient()
+  try {
+    const adminClient = createAdminClient()
 
-  const { data, error } = await adminClient
-    .from('profiles')
-    .select('role')
-    .eq('id', userId)
-    .single()
+    const { data, error } = await adminClient
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .single()
 
-  if (error || !data) {
+    if (error) {
+      console.error('[isUserAdmin] Error checking admin role:', error)
+      return false
+    }
+
+    if (!data) {
+      console.warn('[isUserAdmin] No profile found for user:', userId)
+      return false
+    }
+
+    return (data as any).role === 'admin'
+  } catch (error) {
+    console.error('[isUserAdmin] Exception checking admin role:', error)
     return false
   }
-
-  return (data as any).role === 'admin'
 }

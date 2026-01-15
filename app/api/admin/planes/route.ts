@@ -20,12 +20,14 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     if (authError || !user) {
+      console.error('[GET /api/admin/planes] Auth error:', authError)
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
     // Check if user is admin using admin client to bypass RLS
     const userIsAdmin = await isUserAdmin(user.id)
     if (!userIsAdmin) {
+      console.warn('[GET /api/admin/planes] User is not admin:', user.id)
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
     }
 
