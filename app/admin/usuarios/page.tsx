@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { UserTable } from '@/components/admin/user-table'
 import { AjustarCreditosModal } from '@/components/admin/AjustarCreditosModal'
+import { EditUserModal } from '@/components/admin/EditUserModal'
 import Input from '@/components/ui/Input'
 import { Search, Users as UsersIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -12,8 +13,10 @@ interface User {
   id: string
   nombre: string
   email: string
-  plan: 'free' | 'pro'
+  plan: string
+  role: string
   asignatura: string
+  nivel: string
   created_at: string
   creditos_planificaciones?: number
   creditos_evaluaciones?: number
@@ -28,7 +31,9 @@ export default function UsuariosPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [planFilter, setPlanFilter] = useState('all')
+  const [roleFilter, setRoleFilter] = useState('all')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
 
   const supabase = createClient()
@@ -39,7 +44,7 @@ export default function UsuariosPage() {
 
   useEffect(() => {
     filterUsers()
-  }, [searchTerm, planFilter, users])
+  }, [searchTerm, planFilter, roleFilter, users])
 
   const fetchUsers = async () => {
     setIsLoading(true)
@@ -47,7 +52,7 @@ export default function UsuariosPage() {
       // Get all users with their planificaciones count
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, nombre, email, plan, asignatura, created_at, creditos_planificaciones, creditos_evaluaciones, creditos_usados_planificaciones, creditos_usados_evaluaciones')
+        .select('id, nombre, email, plan, role, asignatura, nivel, created_at, creditos_planificaciones, creditos_evaluaciones, creditos_usados_planificaciones, creditos_usados_evaluaciones')
         .order('created_at', { ascending: false })
 
       if (profiles) {
@@ -93,28 +98,17 @@ export default function UsuariosPage() {
       filtered = filtered.filter((user) => user.plan === planFilter)
     }
 
+    // Filter by role
+    if (roleFilter !== 'all') {
+      filtered = filtered.filter((user) => user.role === roleFilter)
+    }
+
     setFilteredUsers(filtered)
   }
 
-  const handlePlanToggle = async (userId: string, currentPlan: 'free' | 'pro') => {
-    const newPlan = currentPlan === 'free' ? 'pro' : 'free'
-
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ plan: newPlan })
-        .eq('id', userId)
-
-      if (error) throw error
-
-      // Update local state
-      setUsers((prev) =>
-        prev.map((user) => (user.id === userId ? { ...user, plan: newPlan } : user))
-      )
-    } catch (error) {
-      console.error('Error updating plan:', error)
-      alert('Error al actualizar el plan')
-    }
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user)
+    setIsEditModalOpen(true)
   }
 
   const handleAjustarCreditos = (user: User) => {
@@ -126,8 +120,12 @@ export default function UsuariosPage() {
     fetchUsers()
   }
 
-  const freeUsersCount = users.filter((u) => u.plan === 'free').length
-  const proUsersCount = users.filter((u) => u.plan === 'pro').length
+  const handleEditSuccess = () => {
+    fetchUsers()
+  }
+
+  const adminUsersCount = users.filter((u) => u.role === 'admin').length
+  const regularUsersCount = users.filter((u) => u.role === 'user').length
 
   return (
     <div className="space-y-6">
@@ -154,8 +152,8 @@ export default function UsuariosPage() {
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-sm font-medium mb-1">Usuarios FREE</p>
-              <h3 className="text-white text-3xl font-bold">{freeUsersCount}</h3>
+              <p className="text-slate-400 text-sm font-medium mb-1">Usuarios Regulares</p>
+              <h3 className="text-white text-3xl font-bold">{regularUsersCount}</h3>
             </div>
             <div className="p-3 bg-slate-600/10 rounded-lg">
               <UsersIcon className="w-6 h-6 text-slate-400" />
@@ -166,8 +164,8 @@ export default function UsuariosPage() {
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-sm font-medium mb-1">Usuarios PRO</p>
-              <h3 className="text-white text-3xl font-bold">{proUsersCount}</h3>
+              <p className="text-slate-400 text-sm font-medium mb-1">Administradores</p>
+              <h3 className="text-white text-3xl font-bold">{adminUsersCount}</h3>
             </div>
             <div className="p-3 bg-green-600/10 rounded-lg">
               <UsersIcon className="w-6 h-6 text-green-600" />
@@ -178,7 +176,7 @@ export default function UsuariosPage() {
 
       {/* Filters */}
       <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="relative">
             <Input
               type="text"
@@ -200,8 +198,22 @@ export default function UsuariosPage() {
             )}
           >
             <option value="all">Todos los planes</option>
-            <option value="free">Solo FREE</option>
-            <option value="pro">Solo PRO</option>
+            <option value="free">Plan Free</option>
+            <option value="pro">Plan Pro</option>
+          </select>
+
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className={cn(
+              'w-full px-3 py-2 border rounded-lg',
+              'focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent',
+              'bg-slate-800 border-slate-700 text-white'
+            )}
+          >
+            <option value="all">Todos los roles</option>
+            <option value="user">Usuarios</option>
+            <option value="admin">Administradores</option>
           </select>
         </div>
       </div>
@@ -209,7 +221,7 @@ export default function UsuariosPage() {
       {/* Users Table */}
       <UserTable
         users={filteredUsers}
-        onPlanToggle={handlePlanToggle}
+        onEditUser={handleEditUser}
         onAjustarCreditos={handleAjustarCreditos}
         isLoading={isLoading}
       />
@@ -237,6 +249,24 @@ export default function UsuariosPage() {
             usados_evaluaciones: selectedUser.creditos_usados_evaluaciones || 0,
           }}
           onSuccess={handleCreditosSuccess}
+        />
+      )}
+
+      {/* Edit User Modal */}
+      {selectedUser && (
+        <EditUserModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          userId={selectedUser.id}
+          currentData={{
+            nombre: selectedUser.nombre,
+            email: selectedUser.email,
+            plan: selectedUser.plan,
+            role: selectedUser.role,
+            asignatura: selectedUser.asignatura,
+            nivel: selectedUser.nivel,
+          }}
+          onSuccess={handleEditSuccess}
         />
       )}
     </div>
