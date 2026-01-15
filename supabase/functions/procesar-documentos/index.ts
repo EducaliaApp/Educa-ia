@@ -4,12 +4,24 @@ import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.
 
 
 // Utility: read a ReadableStream or Blob-like from Supabase storage response
-async function blobFromResponse(res: { arrayBuffer?: () => Promise<ArrayBuffer>, body?: ReadableStream<Uint8Array> }): Promise<ArrayBuffer> {
-  if (res.arrayBuffer) return await res.arrayBuffer();
-  if (res.body) {
+// Accepts Blob, File, or Response-like objects from Supabase storage
+async function blobFromResponse(res: Blob | { arrayBuffer?: () => Promise<ArrayBuffer>, body?: ReadableStream<Uint8Array> }): Promise<ArrayBuffer> {
+  // Handle Blob/File objects
+  if (res instanceof Blob) {
+    return await res.arrayBuffer();
+  }
+  
+  // Handle objects with arrayBuffer method
+  if ('arrayBuffer' in res && res.arrayBuffer) {
+    return await res.arrayBuffer();
+  }
+  
+  // Handle objects with ReadableStream body
+  if ('body' in res && res.body) {
     const buffer = await new Response(res.body).arrayBuffer();
     return buffer;
   }
+  
   throw new Error('Unsupported download response format');
 }
 async function extraerTextoDePDF(arrayBuffer: ArrayBuffer): Promise<string> {

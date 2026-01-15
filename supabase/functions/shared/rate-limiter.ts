@@ -27,7 +27,12 @@ export async function verificarRateLimit(
   const ahora = new Date()
   const ventanaInicio = new Date(ahora.getTime() - config.ventanaTiempoMinutos * 60 * 1000)
   
-  // Obtener número de requests en la ventana de tiempo
+  // NOTA: Esta implementación usa 'fecha' (date) en lugar de timestamp
+  // Para rate limiting más preciso, considerar agregar un campo 'created_at' (timestamp)
+  // a la tabla metricas_uso_profesor y usarlo aquí:
+  // .gte('created_at', ventanaInicio.toISOString())
+  
+  // Obtener número de requests en la ventana de tiempo (aproximado por día)
   const { data: metricas, error } = await supabase
     .from('metricas_uso_profesor')
     .select('analisis_evaluacion, analisis_planificacion, generacion_planificacion')

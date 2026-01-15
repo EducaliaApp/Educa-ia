@@ -18,13 +18,10 @@ export function crearRespuestaError(
 ): Response {
   const mensaje = error instanceof Error ? error.message : error
   
-  // No exponer detalles internos en producción para errores 500
-  const detalles = status === 500 ? undefined : mensaje
-  
   const errorResponse: ErrorResponse = {
     error: status === 500 ? 'Error interno del servidor' : mensaje,
     codigo,
-    detalles: status === 500 ? undefined : detalles,
+    detalles: status === 500 ? undefined : mensaje,
     timestamp: new Date().toISOString()
   }
   
