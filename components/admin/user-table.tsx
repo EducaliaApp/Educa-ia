@@ -12,6 +12,10 @@ interface User {
   plan: 'free' | 'pro'
   asignatura: string
   total_planificaciones?: number
+  creditos_planificaciones?: number
+  creditos_evaluaciones?: number
+  creditos_usados_planificaciones?: number
+  creditos_usados_evaluaciones?: number
   created_at: string
 }
 
@@ -68,7 +72,10 @@ export function UserTable({ users, onPlanToggle, isLoading }: UserTableProps) {
                 Asignatura
               </th>
               <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
-                Planificaciones
+                Créditos Plan.
+              </th>
+              <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
+                Créditos Eval.
               </th>
               <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
                 Registro
@@ -105,8 +112,19 @@ export function UserTable({ users, onPlanToggle, isLoading }: UserTableProps) {
                 <td className="px-6 py-4 text-slate-400 text-sm">
                   {user.asignatura || '-'}
                 </td>
-                <td className="px-6 py-4 text-slate-400 text-sm">
-                  {user.total_planificaciones ?? '-'}
+                <td className="px-6 py-4">
+                  <div className="text-sm">
+                    <span className="text-slate-300 font-medium">
+                      {user.creditos_usados_planificaciones || 0}/{user.creditos_planificaciones || 0}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="text-sm">
+                    <span className="text-slate-300 font-medium">
+                      {user.creditos_usados_evaluaciones || 0}/{user.creditos_evaluaciones || 0}
+                    </span>
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-slate-400 text-sm">
                   {formatDate(user.created_at)}

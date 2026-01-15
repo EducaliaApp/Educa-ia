@@ -14,6 +14,10 @@ interface User {
   plan: 'free' | 'pro'
   asignatura: string
   created_at: string
+  creditos_planificaciones?: number
+  creditos_evaluaciones?: number
+  creditos_usados_planificaciones?: number
+  creditos_usados_evaluaciones?: number
   total_planificaciones?: number
 }
 
@@ -40,7 +44,7 @@ export default function UsuariosPage() {
       // Get all users with their planificaciones count
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, nombre, email, plan, asignatura, created_at')
+        .select('id, nombre, email, plan, asignatura, created_at, creditos_planificaciones, creditos_evaluaciones, creditos_usados_planificaciones, creditos_usados_evaluaciones')
         .order('created_at', { ascending: false })
 
       if (profiles) {

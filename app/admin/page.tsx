@@ -3,7 +3,7 @@ import { MetricsCard } from '@/components/admin/metrics-card'
 import { DashboardCharts } from '@/components/admin/dashboard-charts'
 import { RecentUsersTable } from '@/components/admin/recent-users-table'
 import { Badge } from '@/components/ui/Badge'
-import { Users, TrendingUp, DollarSign, FileText, Activity, Calendar, BookOpen, Star } from 'lucide-react'
+import { Users, TrendingUp, DollarSign, FileText, Activity, Calendar, BookOpen, Star, ClipboardCheck, Briefcase } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 interface UserStats {
@@ -54,6 +54,10 @@ export default async function AdminDashboard() {
   
   const { data: totalEvaluaciones } = await supabase
     .from('evaluaciones')
+    .select('id', { count: 'exact' })
+
+  const { data: totalPortafolios } = await supabase
+    .from('portafolios')
     .select('id', { count: 'exact' })
 
   const { data: planificacionesThisMonth } = await supabase
@@ -126,7 +130,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Secondary Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <MetricsCard
           title="Total Planificaciones"
           value={totalPlanificaciones?.length || 0}
@@ -152,8 +156,15 @@ export default async function AdminDashboard() {
           title="Total Evaluaciones"
           value={totalEvaluaciones?.length || 0}
           subtitle="Desde el inicio"
-          icon={Star}
+          icon={ClipboardCheck}
           iconColor="orange"
+        />
+        <MetricsCard
+          title="Total Portafolios"
+          value={totalPortafolios?.length || 0}
+          subtitle="Portafolios docentes"
+          icon={Briefcase}
+          iconColor="indigo"
         />
       </div>
 
@@ -253,13 +264,13 @@ export default async function AdminDashboard() {
       {/* Quick Actions */}
       <div>
         <h2 className="text-xl font-bold text-white mb-4">Acciones Rápidas</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <a href="/admin/usuarios" className="bg-slate-900 border border-slate-800 rounded-lg p-6 hover:bg-slate-800 transition-colors">
             <div className="flex items-center gap-3">
               <Users className="w-8 h-8 text-blue-400" />
               <div>
                 <h3 className="text-white font-semibold">Gestionar Usuarios</h3>
-                <p className="text-slate-400 text-sm">Ver y administrar todos los usuarios</p>
+                <p className="text-slate-400 text-sm">Ver y administrar usuarios</p>
               </div>
             </div>
           </a>
@@ -268,7 +279,25 @@ export default async function AdminDashboard() {
               <FileText className="w-8 h-8 text-green-400" />
               <div>
                 <h3 className="text-white font-semibold">Ver Planificaciones</h3>
-                <p className="text-slate-400 text-sm">Revisar todas las planificaciones</p>
+                <p className="text-slate-400 text-sm">Revisar planificaciones</p>
+              </div>
+            </div>
+          </a>
+          <a href="/admin/evaluaciones" className="bg-slate-900 border border-slate-800 rounded-lg p-6 hover:bg-slate-800 transition-colors">
+            <div className="flex items-center gap-3">
+              <ClipboardCheck className="w-8 h-8 text-orange-400" />
+              <div>
+                <h3 className="text-white font-semibold">Ver Evaluaciones</h3>
+                <p className="text-slate-400 text-sm">Revisar evaluaciones</p>
+              </div>
+            </div>
+          </a>
+          <a href="/admin/portafolios" className="bg-slate-900 border border-slate-800 rounded-lg p-6 hover:bg-slate-800 transition-colors">
+            <div className="flex items-center gap-3">
+              <Briefcase className="w-8 h-8 text-indigo-400" />
+              <div>
+                <h3 className="text-white font-semibold">Ver Portafolios</h3>
+                <p className="text-slate-400 text-sm">Portafolios MBE</p>
               </div>
             </div>
           </a>
@@ -276,8 +305,8 @@ export default async function AdminDashboard() {
             <div className="flex items-center gap-3">
               <TrendingUp className="w-8 h-8 text-purple-400" />
               <div>
-                <h3 className="text-white font-semibold">Analytics Avanzados</h3>
-                <p className="text-slate-400 text-sm">Métricas detalladas y reportes</p>
+                <h3 className="text-white font-semibold">Analytics</h3>
+                <p className="text-slate-400 text-sm">Métricas y reportes</p>
               </div>
             </div>
           </a>
