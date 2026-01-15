@@ -139,8 +139,13 @@ export async function POST(request: NextRequest) {
 
     if (limitesError) {
       console.error('Error creating limits:', limitesError)
-      // Rollback plan creation
-      await adminClient.from('planes').delete().eq('id', newPlan.id)
+      // Attempt rollback - log if it fails but don't throw to client
+      try {
+        await adminClient.from('planes').delete().eq('id', newPlan.id)
+      } catch (rollbackError) {
+        console.error('Critical: Failed to rollback plan creation:', rollbackError)
+        // In a production system, this should trigger an alert
+      }
       return NextResponse.json({ error: 'Error al crear los límites del plan' }, { status: 500 })
     }
 

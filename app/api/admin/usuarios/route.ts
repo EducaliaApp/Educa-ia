@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     // Use admin client to bypass RLS
     const adminClient = createAdminClient()
 
-    // Get all users with their planificaciones count
+    // Get all users - first fetch profiles
     const { data: profiles, error: profilesError } = await adminClient
       .from('profiles')
       .select('id, nombre, email, plan, role, asignatura, nivel, created_at, creditos_planificaciones, creditos_evaluaciones, creditos_usados_planificaciones, creditos_usados_evaluaciones')
@@ -40,20 +40,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Error al obtener usuarios' }, { status: 500 })
     }
 
-    // Get planificaciones count for each user
-    const usersWithCounts = await Promise.all(
-      (profiles || []).map(async (profile) => {
-        const { count } = await adminClient
-          .from('planificaciones')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', profile.id)
+    // Get all planificaciones counts in a single query
+    const { data: planificacionesCounts, error: countsError } = await adminClient
+      .from('planificaciones')
+      .select('user_id')
 
-        return {
-          ...profile,
-          total_planificaciones: count || 0,
-        }
+    if (countsError) {
+      console.error('Error fetching planificaciones counts:', countsError)
+      // Continue without counts rather than failing
+    }
+
+    // Create a map of user_id to count
+    const countsMap = new Map<string, number>()
+    if (planificacionesCounts) {
+      planificacionesCounts.forEach((p) => {
+        countsMap.set(p.user_id, (countsMap.get(p.user_id) || 0) + 1)
       })
-    )
+    }
+
+    // Combine profiles with their counts
+    const usersWithCounts = (profiles || []).map((profile) => ({
+      ...profile,
+      total_planificaciones: countsMap.get(profile.id) || 0,
+    }))
 
     return NextResponse.json({ users: usersWithCounts })
   } catch (error) {
@@ -105,6 +114,10 @@ export async function PUT(request: NextRequest) {
 
       if (rpcError) {
         console.error('Error updating user plan:', rpcError)
+        // Check for specific error messages
+        if (rpcError.message?.includes('no existe') || rpcError.message?.includes('not exist')) {
+          return NextResponse.json({ error: `El plan '${updates.plan}' no existe o no está activo` }, { status: 400 })
+        }
         return NextResponse.json({ error: 'Error al actualizar el plan del usuario' }, { status: 500 })
       }
 
