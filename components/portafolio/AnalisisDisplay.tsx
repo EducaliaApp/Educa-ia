@@ -193,7 +193,7 @@ export function AnalisisDisplay({
                           className="bg-blue-50 border-l-4 border-blue-500 p-3 rounded-r"
                         >
                           <p className="text-sm text-gray-700 italic">
-                            "{evidencia.substring(0, 200)}{evidencia.length > 200 ? '...' : ''}"
+                            &ldquo;{evidencia.substring(0, 200)}{evidencia.length > 200 ? '...' : ''}&rdquo;
                           </p>
                         </div>
                       ))}

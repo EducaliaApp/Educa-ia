@@ -310,7 +310,7 @@ function ExperienciaCard({
             {actividadesFields.length === 0 && (
               <Alert>
                 <AlertDescription>
-                  Aún no has agregado actividades. Haz clic en "Agregar Actividad" para comenzar.
+                  Aún no has agregado actividades. Haz clic en &ldquo;Agregar Actividad&rdquo; para comenzar.
                 </AlertDescription>
               </Alert>
             )}

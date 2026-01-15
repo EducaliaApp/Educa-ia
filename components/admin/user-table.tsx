@@ -10,6 +10,7 @@ interface User {
   email: string
   plan: string
   role: string
+  role_name?: string
   asignatura: string
   nivel: string
   total_planificaciones?: number
@@ -108,7 +109,7 @@ export function UserTable({ users, onEditUser, onAjustarCreditos, isLoading }: U
                   <div className="flex items-center gap-1">
                     {user.role === 'admin' && <Shield className="w-4 h-4 text-yellow-500" />}
                     <span className={user.role === 'admin' ? 'text-yellow-500 font-medium' : 'text-slate-400'}>
-                      {user.role === 'admin' ? 'Admin' : 'Usuario'}
+                      {user.role_name || (user.role === 'admin' ? 'Administrador' : 'Usuario')}
                     </span>
                   </div>
                 </td>

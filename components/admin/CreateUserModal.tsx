@@ -6,53 +6,47 @@ import Button from '@/components/ui/Button'
 import { X } from 'lucide-react'
 import type { Plan, Role } from '@/lib/supabase/types'
 
-interface EditUserModalProps {
+interface CreateUserModalProps {
   isOpen: boolean
   onClose: () => void
-  userId: string
-  currentData: {
-    nombre: string
-    email: string
-    plan: string
-    role: string
-    asignatura?: string
-    nivel?: string
-  }
   onSuccess: () => void
 }
 
-export function EditUserModal({
+export function CreateUserModal({
   isOpen,
   onClose,
-  userId,
-  currentData,
   onSuccess,
-}: EditUserModalProps) {
+}: CreateUserModalProps) {
   const [planes, setPlanes] = useState<Plan[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
-    nombre: currentData.nombre,
-    email: currentData.email,
-    plan: currentData.plan,
-    roleId: '', // Will be populated after roles are loaded based on currentData.role
-    asignatura: currentData.asignatura || '',
-    nivel: currentData.nivel || '',
+    email: '',
+    password: '',
+    nombre: '',
+    asignatura: '',
+    nivel: '',
+    plan: 'free',
+    roleId: '',
   })
 
   useEffect(() => {
     if (isOpen) {
       fetchPlanesYRoles()
+      // Reset form
       setFormData({
-        nombre: currentData.nombre,
-        email: currentData.email,
-        plan: currentData.plan,
-        roleId: '', // Will be set in fetchPlanesYRoles after roles are loaded
-        asignatura: currentData.asignatura || '',
-        nivel: currentData.nivel || '',
+        email: '',
+        password: '',
+        nombre: '',
+        asignatura: '',
+        nivel: '',
+        plan: 'free',
+        roleId: '',
       })
+      setError(null)
     }
-  }, [isOpen, currentData])
+  }, [isOpen])
 
   const fetchPlanesYRoles = async () => {
     try {
@@ -70,10 +64,10 @@ export function EditUserModal({
         const rolesData = await rolesRes.json()
         const activeRoles = (rolesData.roles || []).filter((r: Role) => r.activo)
         setRoles(activeRoles)
-        // Find and set current role
-        const currentRole = activeRoles.find((r: Role) => r.codigo === currentData.role)
-        if (currentRole) {
-          setFormData(prev => ({ ...prev, roleId: currentRole.id }))
+        // Set default role to 'user' if available
+        const userRole = activeRoles.find((r: Role) => r.codigo === 'user')
+        if (userRole) {
+          setFormData(prev => ({ ...prev, roleId: userRole.id }))
         }
       }
     } catch (error) {
@@ -84,34 +78,27 @@ export function EditUserModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError(null)
 
     try {
       const response = await fetch('/api/admin/usuarios', {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          updates: {
-            nombre: formData.nombre,
-            email: formData.email,
-            roleId: formData.roleId,
-            asignatura: formData.asignatura,
-            nivel: formData.nivel,
-            ...(formData.plan !== currentData.plan && { plan: formData.plan }),
-          },
-        }),
+        body: JSON.stringify(formData),
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
-        throw new Error('Error al actualizar usuario')
+        throw new Error(data.error || 'Error al crear usuario')
       }
 
       onSuccess()
       onClose()
     } catch (error) {
-      console.error('Error updating user:', error)
+      console.error('Error creating user:', error)
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
-      alert(`Error al actualizar usuario: ${errorMessage}`)
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -125,7 +112,7 @@ export function EditUserModal({
         <div className="p-6">
           {/* Header */}
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-white">Editar Usuario</h2>
+            <h2 className="text-2xl font-bold text-white">Crear Nuevo Usuario</h2>
             <button
               onClick={onClose}
               className="text-slate-400 hover:text-white transition-colors"
@@ -134,38 +121,60 @@ export function EditUserModal({
             </button>
           </div>
 
+          {error && (
+            <div className="mb-4 p-3 bg-red-900/20 border border-red-500 rounded-lg">
+              <p className="text-red-400 text-sm">{error}</p>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Información básica */}
+            {/* Email y Password */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Nombre
-                </label>
-                <Input
-                  type="text"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Email
+                  Email *
                 </label>
                 <Input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
+                  placeholder="usuario@ejemplo.cl"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Contraseña *
+                </label>
+                <Input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  required
+                  minLength={6}
+                  placeholder="Mínimo 6 caracteres"
+                />
+              </div>
+            </div>
+
+            {/* Nombre */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Nombre Completo
+              </label>
+              <Input
+                type="text"
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                placeholder="Nombre del usuario"
+              />
             </div>
 
             {/* Plan y Role */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Plan
+                  Plan *
                 </label>
                 <select
                   value={formData.plan}
@@ -179,15 +188,10 @@ export function EditUserModal({
                     </option>
                   ))}
                 </select>
-                {formData.plan !== currentData.plan && (
-                  <p className="text-xs text-yellow-400 mt-1">
-                    Los créditos se ajustarán automáticamente según el nuevo plan
-                  </p>
-                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Rol
+                  Rol *
                 </label>
                 <select
                   value={formData.roleId}
@@ -215,6 +219,7 @@ export function EditUserModal({
                   type="text"
                   value={formData.asignatura}
                   onChange={(e) => setFormData({ ...formData, asignatura: e.target.value })}
+                  placeholder="Ej: Matemáticas"
                 />
               </div>
               <div>
@@ -225,8 +230,14 @@ export function EditUserModal({
                   type="text"
                   value={formData.nivel}
                   onChange={(e) => setFormData({ ...formData, nivel: e.target.value })}
+                  placeholder="Ej: 8° Básico"
                 />
               </div>
+            </div>
+
+            <div className="text-sm text-slate-400 bg-slate-900 p-3 rounded-lg">
+              <strong>Nota:</strong> Se creará automáticamente un perfil asociado al usuario con el rol y plan seleccionados.
+              Los créditos se asignarán según el plan elegido.
             </div>
 
             {/* Actions */}
@@ -240,7 +251,7 @@ export function EditUserModal({
                 Cancelar
               </Button>
               <Button type="submit" disabled={isLoading}>
-                {isLoading ? 'Guardando...' : 'Guardar Cambios'}
+                {isLoading ? 'Creando...' : 'Crear Usuario'}
               </Button>
             </div>
           </form>

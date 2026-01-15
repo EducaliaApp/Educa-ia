@@ -5,6 +5,7 @@ import type { Database } from '@/lib/supabase/types'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
 type ProfileUpdate = Database['public']['Tables']['profiles']['Update']
+type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
 
 // GET: Fetch all users with their data
 export async function GET(request: NextRequest) {
@@ -33,10 +34,10 @@ export async function GET(request: NextRequest) {
     // Use admin client to bypass RLS
     const adminClient = createAdminClient()
 
-    // Get all users - first fetch profiles
+    // Get all users with their role information from profiles_with_roles view
     const { data: profiles, error: profilesError } = await (adminClient
-      .from('profiles') as any)
-      .select('id, nombre, email, plan, role, asignatura, nivel, created_at, creditos_planificaciones, creditos_evaluaciones, creditos_usados_planificaciones, creditos_usados_evaluaciones')
+      .from('profiles_with_roles') as any)
+      .select('id, nombre, email, plan, role_legacy, role_id, role_codigo, role_nombre, asignatura, nivel, created_at, creditos_planificaciones, creditos_evaluaciones, creditos_usados_planificaciones, creditos_usados_evaluaciones')
       .order('created_at', { ascending: false })
 
     if (profilesError) {
@@ -65,12 +66,136 @@ export async function GET(request: NextRequest) {
     // Combine profiles with their counts
     const usersWithCounts = (profiles || []).map((profile: any) => ({
       ...profile,
+      role: profile.role_codigo || profile.role_legacy, // Use new role system, fallback to legacy
+      role_name: profile.role_nombre,
       total_planificaciones: countsMap.get(profile.id) || 0,
     }))
 
     return NextResponse.json({ users: usersWithCounts })
   } catch (error) {
     console.error('Error in GET /api/admin/usuarios:', error)
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
+  }
+}
+
+// POST: Create new user
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    }
+
+    // Check if user is admin
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile || profile.role !== 'admin') {
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const { email, password, nombre, asignatura, nivel, plan, roleId } = body
+
+    if (!email || !password) {
+      return NextResponse.json({ error: 'Email y contraseña son requeridos' }, { status: 400 })
+    }
+
+    // Use admin client to create user in Supabase Auth
+    const adminClient = createAdminClient()
+
+    // Create user in auth.users
+    const { data: newUser, error: createUserError } = await adminClient.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // Auto-confirm email for admin-created accounts
+      // This is appropriate for admin-created accounts as they are trusted
+      // Users can still reset password if needed
+    })
+
+    if (createUserError) {
+      console.error('Error creating user:', createUserError)
+      return NextResponse.json({ 
+        error: 'Error al crear el usuario en la autenticación',
+        details: createUserError.message 
+      }, { status: 500 })
+    }
+
+    if (!newUser.user) {
+      return NextResponse.json({ error: 'Usuario no fue creado correctamente' }, { status: 500 })
+    }
+
+    // Get role information
+    let finalRoleId = roleId
+    let finalRole = 'user'
+
+    if (roleId) {
+      const { data: roleData } = await (adminClient.from('roles') as any)
+        .select('codigo')
+        .eq('id', roleId)
+        .single()
+      
+      if (roleData) {
+        finalRole = roleData.codigo
+      }
+    } else {
+      // Get default user role
+      const { data: defaultRole } = await (adminClient.from('roles') as any)
+        .select('id, codigo')
+        .eq('codigo', 'user')
+        .eq('activo', true)
+        .single()
+      
+      if (defaultRole) {
+        finalRoleId = defaultRole.id
+      }
+    }
+
+    // Update the profile that was auto-created by the trigger
+    const { error: updateError } = await (adminClient.from('profiles') as any)
+      .update({
+        nombre: nombre || null,
+        email: email,
+        asignatura: asignatura || null,
+        nivel: nivel || null,
+        plan: plan || 'free',
+        role: finalRole,
+        role_id: finalRoleId,
+      })
+      .eq('id', newUser.user.id)
+
+    if (updateError) {
+      console.error('Error updating profile:', updateError)
+      // Try to clean up the auth user if profile creation failed
+      try {
+        await adminClient.auth.admin.deleteUser(newUser.user.id)
+      } catch (cleanupError) {
+        console.error('Failed to cleanup auth user after profile error:', cleanupError)
+        // Continue to return error to client even if cleanup fails
+      }
+      return NextResponse.json({ 
+        error: 'Error al crear el perfil del usuario',
+        details: updateError.message 
+      }, { status: 500 })
+    }
+
+    return NextResponse.json({ 
+      success: true,
+      user: {
+        id: newUser.user.id,
+        email: newUser.user.email,
+      }
+    })
+  } catch (error) {
+    console.error('Error in POST /api/admin/usuarios:', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
 }
@@ -108,6 +233,20 @@ export async function PUT(request: NextRequest) {
 
     // Use admin client to bypass RLS
     const adminClient = createAdminClient()
+
+    // If roleId is being updated, update both role and role_id
+    if (updates.roleId) {
+      const { data: roleData } = await (adminClient.from('roles') as any)
+        .select('codigo')
+        .eq('id', updates.roleId)
+        .single()
+      
+      if (roleData) {
+        updates.role = roleData.codigo
+        updates.role_id = updates.roleId
+      }
+      delete updates.roleId
+    }
 
     // If plan is being updated, use the RPC function to update credits automatically
     if (updates.plan) {

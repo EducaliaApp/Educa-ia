@@ -122,7 +122,7 @@ export function Tarea1BEditor({
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           <strong>Importante:</strong> Debes seleccionar UNA de las 3 experiencias diseñadas
-          en la Tarea 1A y fundamentar tus decisiones pedagógicas. Explica el "por qué"
+          en la Tarea 1A y fundamentar tus decisiones pedagógicas. Explica el &ldquo;por qué&rdquo;
           de tus elecciones didácticas.
         </AlertDescription>
       </Alert>
@@ -293,7 +293,7 @@ export function Tarea1BEditor({
             <li className="flex items-start gap-2">
               <span className="text-blue-600 mt-0.5">•</span>
               <span>
-                Explica el "por qué" y el "para qué" de cada estrategia didáctica
+                Explica el &ldquo;por qué&rdquo; y el &ldquo;para qué&rdquo; de cada estrategia didáctica
               </span>
             </li>
             <li className="flex items-start gap-2">
