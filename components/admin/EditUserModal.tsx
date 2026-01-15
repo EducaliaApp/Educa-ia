@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
 import { X } from 'lucide-react'
@@ -41,8 +40,6 @@ export function EditUserModal({
     nivel: currentData.nivel || '',
   })
 
-  const supabase = createClient()
-
   useEffect(() => {
     if (isOpen) {
       fetchPlanesYRoles()
@@ -59,20 +56,20 @@ export function EditUserModal({
 
   const fetchPlanesYRoles = async () => {
     try {
-      const { data: planesData } = await supabase
-        .from('planes')
-        .select('*')
-        .eq('activo', true)
-        .order('precio_mensual_clp', { ascending: true })
+      const [planesRes, rolesRes] = await Promise.all([
+        fetch('/api/admin/planes'),
+        fetch('/api/admin/roles'),
+      ])
 
-      const { data: rolesData } = await supabase
-        .from('roles')
-        .select('*')
-        .eq('activo', true)
-        .order('codigo', { ascending: true })
+      if (planesRes.ok) {
+        const planesData = await planesRes.json()
+        setPlanes((planesData.planes || []).filter((p: Plan) => p.activo))
+      }
 
-      setPlanes(planesData || [])
-      setRoles(rolesData || [])
+      if (rolesRes.ok) {
+        const rolesData = await rolesRes.json()
+        setRoles((rolesData.roles || []).filter((r: Role) => r.activo))
+      }
     } catch (error) {
       console.error('Error fetching planes y roles:', error)
     }
@@ -83,29 +80,25 @@ export function EditUserModal({
     setIsLoading(true)
 
     try {
-      // Si cambió el plan, usar la función que actualiza créditos automáticamente
-      if (formData.plan !== currentData.plan) {
-        const { error: planError } = await supabase.rpc('actualizar_plan_usuario', {
-          usuario_id: userId,
-          nuevo_plan_codigo: formData.plan,
-        })
+      const response = await fetch('/api/admin/usuarios', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          updates: {
+            nombre: formData.nombre,
+            email: formData.email,
+            role: formData.role,
+            asignatura: formData.asignatura,
+            nivel: formData.nivel,
+            ...(formData.plan !== currentData.plan && { plan: formData.plan }),
+          },
+        }),
+      })
 
-        if (planError) throw planError
+      if (!response.ok) {
+        throw new Error('Error al actualizar usuario')
       }
-
-      // Actualizar otros campos del perfil
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          nombre: formData.nombre,
-          email: formData.email,
-          role: formData.role,
-          asignatura: formData.asignatura,
-          nivel: formData.nivel,
-        })
-        .eq('id', userId)
-
-      if (profileError) throw profileError
 
       onSuccess()
       onClose()

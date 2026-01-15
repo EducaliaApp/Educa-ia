@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit2, Trash2, CheckCircle, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UNLIMITED_CREDITS, formatCredits } from '@/lib/constants/plans'
@@ -33,8 +32,6 @@ export default function PlanesPage() {
   })
   const [nuevaCaracteristica, setNuevaCaracteristica] = useState('')
 
-  const supabase = createClient()
-
   useEffect(() => {
     fetchPlanes()
   }, [])
@@ -42,25 +39,12 @@ export default function PlanesPage() {
   const fetchPlanes = async () => {
     setIsLoading(true)
     try {
-      const { data: planesData, error: planesError } = await supabase
-        .from('planes')
-        .select('*')
-        .order('codigo', { ascending: true })
-
-      if (planesError) throw planesError
-
-      const { data: limitesData, error: limitesError } = await supabase
-        .from('planes_limites')
-        .select('*')
-
-      if (limitesError) throw limitesError
-
-      const planesConLimites = planesData?.map(plan => ({
-        ...plan,
-        limites: limitesData?.find(l => l.plan_id === plan.id),
-      })) || []
-
-      setPlanes(planesConLimites)
+      const response = await fetch('/api/admin/planes')
+      if (!response.ok) {
+        throw new Error('Error al obtener planes')
+      }
+      const data = await response.json()
+      setPlanes(data.planes || [])
     } catch (error) {
       console.error('Error fetching planes:', error)
     } finally {
@@ -115,64 +99,54 @@ export default function PlanesPage() {
     try {
       if (editingPlan) {
         // Actualizar plan existente
-        const { error: planError } = await supabase
-          .from('planes')
-          .update({
-            nombre: formData.nombre,
-            descripcion: formData.descripcion,
-            precio_mensual_clp: formData.precio_mensual_clp,
-            activo: formData.activo,
-            caracteristicas: formData.caracteristicas,
-          })
-          .eq('id', editingPlan.id)
-
-        if (planError) throw planError
-
-        // Actualizar límites
-        if (editingPlan.limites) {
-          const { error: limitesError } = await supabase
-            .from('planes_limites')
-            .update({
+        const response = await fetch('/api/admin/planes', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            planId: editingPlan.id,
+            planUpdates: {
+              nombre: formData.nombre,
+              descripcion: formData.descripcion,
+              precio_mensual_clp: formData.precio_mensual_clp,
+              activo: formData.activo,
+              caracteristicas: formData.caracteristicas,
+            },
+            limitesUpdates: {
               creditos_planificaciones: formData.creditos_planificaciones,
               creditos_evaluaciones: formData.creditos_evaluaciones,
               analisis_portafolio: formData.analisis_portafolio,
               exportar_pdf: formData.exportar_pdf,
               soporte_prioritario: formData.soporte_prioritario,
-            })
-            .eq('plan_id', editingPlan.id)
+            },
+          }),
+        })
 
-          if (limitesError) throw limitesError
+        if (!response.ok) {
+          throw new Error('Error al actualizar el plan')
         }
       } else {
         // Crear nuevo plan
-        const { data: newPlan, error: planError } = await supabase
-          .from('planes')
-          .insert({
+        const response = await fetch('/api/admin/planes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
             nombre: formData.nombre,
             codigo: formData.codigo,
             descripcion: formData.descripcion,
             precio_mensual_clp: formData.precio_mensual_clp,
             activo: formData.activo,
             caracteristicas: formData.caracteristicas,
-          })
-          .select()
-          .single()
-
-        if (planError) throw planError
-
-        // Crear límites para el nuevo plan
-        const { error: limitesError } = await supabase
-          .from('planes_limites')
-          .insert({
-            plan_id: newPlan.id,
             creditos_planificaciones: formData.creditos_planificaciones,
             creditos_evaluaciones: formData.creditos_evaluaciones,
             analisis_portafolio: formData.analisis_portafolio,
             exportar_pdf: formData.exportar_pdf,
             soporte_prioritario: formData.soporte_prioritario,
-          })
+          }),
+        })
 
-        if (limitesError) throw limitesError
+        if (!response.ok) {
+          throw new Error('Error al crear el plan')
+        }
       }
 
       await fetchPlanes()
@@ -188,12 +162,13 @@ export default function PlanesPage() {
     if (!confirm('¿Estás seguro de eliminar este plan?')) return
 
     try {
-      const { error } = await supabase
-        .from('planes')
-        .delete()
-        .eq('id', planId)
+      const response = await fetch(`/api/admin/planes?planId=${planId}`, {
+        method: 'DELETE',
+      })
 
-      if (error) throw error
+      if (!response.ok) {
+        throw new Error('Error al eliminar el plan')
+      }
 
       await fetchPlanes()
     } catch (error) {
@@ -205,12 +180,19 @@ export default function PlanesPage() {
 
   const toggleActivo = async (plan: PlanConLimites) => {
     try {
-      const { error } = await supabase
-        .from('planes')
-        .update({ activo: !plan.activo })
-        .eq('id', plan.id)
+      const response = await fetch('/api/admin/planes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planId: plan.id,
+          planUpdates: { activo: !plan.activo },
+          limitesUpdates: {},
+        }),
+      })
 
-      if (error) throw error
+      if (!response.ok) {
+        throw new Error('Error al cambiar estado del plan')
+      }
 
       await fetchPlanes()
     } catch (error) {
