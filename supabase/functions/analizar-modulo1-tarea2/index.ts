@@ -15,6 +15,8 @@ import {
   obtenerEstadisticas,
   calcularPercentil
 } from '../shared/utils.ts'
+import { validarEntrada, respuestaErrorValidacion } from '../shared/validation.ts'
+import { manejarError } from '../shared/error-handler.ts'
 
 serve(async (req) => {
   try {
@@ -32,17 +34,20 @@ serve(async (req) => {
     const supabase = crearClienteSupabase(authHeader)
     const user = await autenticarUsuario(supabase)
     
-    // 2. Parsear request
-    const { 
-      tarea_id,
-      modelo = 'claude-sonnet-4'
-    } = await req.json()
+    // 2. Parsear y validar request
+    const requestData = await req.json() as Record<string, unknown>
     
-    if (!tarea_id) {
-      return new Response(
-        JSON.stringify({ error: 'tarea_id es requerido' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      )
+    const validacion = validarEntrada(requestData, [
+      { nombre: 'tarea_id', tipo: 'uuid' },
+      { nombre: 'modelo', tipo: 'modelo', opcional: true }
+    ])
+    
+    if (!validacion.valido) {
+      return respuestaErrorValidacion(validacion.errores)
+    }
+    
+    const tarea_id = requestData.tarea_id as string
+    const modelo = (requestData.modelo as string) || 'claude-sonnet-4'
     }
     
     // 3. Obtener tarea y contexto
@@ -210,17 +215,6 @@ serve(async (req) => {
     )
     
   } catch (error) {
-    console.error('Error en analizar-modulo1-tarea2:', error)
-    
-    return new Response(
-      JSON.stringify({
-        error: 'Error interno del servidor',
-        details: error.message
-      }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    )
+    return manejarError(error)
   }
 })
