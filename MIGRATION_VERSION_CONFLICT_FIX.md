@@ -28,7 +28,15 @@ This created a state where the CLI detected the remote migration but couldn't fi
 
 ## Solution
 
-Updated the `.github/workflows/deploy-and-migrate.yml` workflow to automatically detect and repair this specific migration conflict:
+Updated the `.github/workflows/deploy-and-migrate.yml` workflow to automatically detect and repair this specific migration conflict.
+
+**Note**: This is a targeted fix for the specific `20250115` version conflict. It's intentionally not made generic because:
+1. This is a one-time historical issue caused by overlapping date-based version numbers
+2. Future migrations should follow proper timestamp-based naming (YYYYMMDDHHMMSS format)
+3. Generic auto-repair could mask real migration issues that need manual intervention
+4. Each migration conflict should be understood and resolved deliberately
+
+If similar conflicts occur with other versions in the future, they should be analyzed individually and fixed with the same deliberate approach.
 
 ### Changes Made
 
@@ -86,9 +94,9 @@ To test this fix:
 ## Related Files
 
 - `.github/workflows/deploy-and-migrate.yml` - Main workflow file with repair logic
-- `supabase/migrations/20250115_admin_maintainers.sql` - Local migration file
-- `supabase/migrations/20250115001_user_role_management.sql` - Second migration with similar version
-- `MIGRATION_NAMING_GUIDE.md` - Guide for proper migration naming
+- `supabase/migrations/20250115_admin_maintainers.sql` - Local migration file (version 20250115)
+- `supabase/migrations/20250115001_user_role_management.sql` - Second migration (version 20250115001)
+- Migration naming guide documentation - See repository docs for migration best practices
 
 ## References
 

@@ -94,17 +94,20 @@ jobs:
           fi
           
           # Check if remote has migration 20250115 that CLI can't reconcile with local files
-          # This happens when there's a version conflict or naming mismatch
+          # SPECIFIC FIX: This version had a known conflict between remote and local state
+          # where the remote version couldn't be matched to local files due to multiple
+          # migrations sharing the same date prefix (20250115 and 20250115001).
+          # This is a targeted fix for this specific historical issue.
           # Look for lines where Remote column has 20250115 but Local column is empty or different
           if echo "$MIGRATION_LIST" | grep -E "^\s+\|\s*20250115\s+\|" > /dev/null 2>&1; then
             echo ""
             echo "⚠️  Found migration version conflict for 20250115"
             echo "Remote has 20250115 but CLI can't reconcile it with local files"
-            echo "This is likely due to multiple local migrations with similar version numbers"
+            echo "This is a known historical conflict from overlapping date-based version numbers"
             echo "Marking it as reverted to allow fresh migration..."
             
-            # Repair the migration history by marking 20250115 as reverted
-            # This corresponds to 20250115_admin_maintainers.sql in supabase/migrations/
+            # Repair by marking 20250115 as reverted to clear the conflict
+            # This allows the local migration with this version to be applied fresh
             supabase migration repair --status reverted 20250115
             REPAIRS_NEEDED=true
           fi
