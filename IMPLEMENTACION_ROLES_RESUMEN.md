@@ -13,7 +13,7 @@ Se ha implementado exitosamente un sistema completo de gestión de usuarios para
 ## 🎯 Objetivos Completados
 
 ### 1. Base de Datos ✅
-- Migración `20250115_user_role_management.sql` creada
+- Migración `20250115001_user_role_management.sql` creada
 - Columna `role_id` agregada a `profiles` con FK a `roles`
 - Vista `profiles_with_roles` para consultas optimizadas
 - Roles por defecto 'user' y 'admin' creados automáticamente
@@ -44,7 +44,7 @@ Se ha implementado exitosamente un sistema completo de gestión de usuarios para
 ### Nuevos Archivos (5)
 ```
 supabase/migrations/
-  └─ 20250115_user_role_management.sql (Migración completa)
+  └─ 20250115001_user_role_management.sql (Migración completa)
 
 components/admin/
   └─ CreateUserModal.tsx (Modal de creación)
@@ -129,7 +129,7 @@ lib/supabase/types.ts (Tipos con role_id)
 1. **Aplicar Migración**
    ```bash
    # Ejecutar en Supabase SQL Editor:
-   supabase/migrations/20250115_user_role_management.sql
+   supabase/migrations/20250115001_user_role_management.sql
    ```
 
 2. **Verificar Implementación**
@@ -226,7 +226,7 @@ Script de verificación que valida:
 ```bash
 $ bash scripts/verify-user-role-system.sh
 
-✓ supabase/migrations/20250115_user_role_management.sql
+✓ supabase/migrations/20250115001_user_role_management.sql
 ✓ components/admin/CreateUserModal.tsx
 ✓ docs/USER_ROLE_MANAGEMENT.md
 ✓ role_id agregado a tipos Profile

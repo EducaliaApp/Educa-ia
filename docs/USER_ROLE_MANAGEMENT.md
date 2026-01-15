@@ -8,7 +8,7 @@ Este documento describe la implementación del sistema de gestión de usuarios c
 
 ## Cambios Implementados
 
-### 1. Base de Datos (Migration: `20250115_user_role_management.sql`)
+### 1. Base de Datos (Migration: `20250115001_user_role_management.sql`)
 
 #### Esquema Actualizado
 - **Tabla `profiles`**: Agregada columna `role_id` (UUID, nullable) con foreign key a `roles.id`
@@ -186,7 +186,7 @@ VALUES (
 ## Testing
 
 Para probar el sistema:
-1. Ejecutar migración `20250115_user_role_management.sql` en Supabase
+1. Ejecutar migración `20250115001_user_role_management.sql` en Supabase
 2. Verificar que roles por defecto se crearon
 3. Probar creación de usuario desde `/admin/usuarios`
 4. Verificar que perfil y rol se asignaron correctamente
