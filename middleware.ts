@@ -56,7 +56,7 @@ export async function middleware(request: NextRequest) {
 
     // Check if user has admin role using service role to bypass RLS
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    if (serviceRoleKey) {
+    if (serviceRoleKey && serviceRoleKey.trim().length > 0) {
       try {
         const adminClient = createClient<Database>(getSupabaseConfig().url, serviceRoleKey, {
           auth: {
@@ -76,8 +76,11 @@ export async function middleware(request: NextRequest) {
           return NextResponse.redirect(new URL('/dashboard', request.url))
         }
 
-        if (!profile || (profile as { role: string }).role !== 'admin') {
-          console.warn('[ADMIN AUTH] User lacks admin role:', user.id)
+        type ProfileRole = { role: string }
+        const profileData = profile as ProfileRole | null
+        
+        if (!profileData || profileData.role !== 'admin') {
+          console.warn('[ADMIN AUTH] Access denied - insufficient permissions')
           return NextResponse.redirect(new URL('/dashboard', request.url))
         }
       } catch (error) {

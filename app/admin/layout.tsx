@@ -32,12 +32,12 @@ export default async function AdminLayout({
     .single()
 
   if (error) {
-    console.error('[ADMIN LAYOUT] Error fetching profile:', error.message, 'User ID:', user.id)
+    console.error('[ADMIN LAYOUT] Error fetching profile:', error.message)
     redirect('/dashboard')
   }
 
   if (!profile || profile.role !== 'admin') {
-    console.warn('[ADMIN LAYOUT] User lacks admin role:', user.id, 'Role:', profile?.role)
+    console.warn('[ADMIN LAYOUT] Access denied - insufficient permissions')
     redirect('/dashboard')
   }
 
