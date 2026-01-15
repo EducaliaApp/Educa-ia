@@ -34,31 +34,48 @@ CREATE TABLE IF NOT EXISTS function_logs (
 );
 
 -- Índices para consultas rápidas
-CREATE INDEX idx_function_logs_name ON function_logs(function_name, created_at DESC);
-CREATE INDEX idx_function_logs_level ON function_logs(level, created_at DESC);
-CREATE INDEX idx_function_logs_user ON function_logs(user_id, created_at DESC);
-CREATE INDEX idx_function_logs_request ON function_logs(request_id);
-CREATE INDEX idx_function_logs_created ON function_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_function_logs_name ON function_logs(function_name, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_function_logs_level ON function_logs(level, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_function_logs_user ON function_logs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_function_logs_request ON function_logs(request_id);
+CREATE INDEX IF NOT EXISTS idx_function_logs_created ON function_logs(created_at DESC);
 
 -- Índice en JSONB para búsqueda en metadata
-CREATE INDEX idx_function_logs_metadata ON function_logs USING GIN (metadata);
+CREATE INDEX IF NOT EXISTS idx_function_logs_metadata ON function_logs USING GIN (metadata);
 
 -- RLS: Solo admins y service role pueden ver logs
 ALTER TABLE function_logs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Administradores pueden ver todos los logs"
-  ON function_logs FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role = 'admin'
-    )
-  );
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public'
+    AND tablename = 'function_logs' 
+    AND policyname = 'Administradores pueden ver todos los logs'
+  ) THEN
+    CREATE POLICY "Administradores pueden ver todos los logs"
+      ON function_logs FOR SELECT
+      USING (
+        EXISTS (
+          SELECT 1 FROM profiles
+          WHERE profiles.id = auth.uid()
+          AND profiles.role = 'admin'
+        )
+      );
+  END IF;
 
-CREATE POLICY "Service role puede insertar logs"
-  ON function_logs FOR INSERT
-  WITH CHECK (true); -- Service role bypasses RLS anyway
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public'
+    AND tablename = 'function_logs' 
+    AND policyname = 'Service role puede insertar logs'
+  ) THEN
+    CREATE POLICY "Service role puede insertar logs"
+      ON function_logs FOR INSERT
+      WITH CHECK (true); -- Service role bypasses RLS anyway
+  END IF;
+END $$;
 
 -- Función para limpiar logs antiguos automáticamente (mantener últimos 30 días)
 CREATE OR REPLACE FUNCTION cleanup_old_function_logs()
