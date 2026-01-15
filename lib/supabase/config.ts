@@ -15,26 +15,28 @@ function formatEnvChoices(candidates: EnvCandidate[]) {
   return candidates.map((candidate) => candidate.name).join(' o ')
 }
 
-const SUPABASE_URL_ENV_CANDIDATES: EnvCandidate[] = [
-  { name: 'NEXT_PUBLIC_SUPABASE_URL', value: process.env.NEXT_PUBLIC_SUPABASE_URL },
-  { name: 'SUPABASE_URL', value: process.env.SUPABASE_URL },
-]
-
-const SUPABASE_ANON_KEY_ENV_CANDIDATES: EnvCandidate[] = [
-  { name: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', value: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY },
-  { name: 'SUPABASE_ANON_KEY', value: process.env.SUPABASE_ANON_KEY },
-]
-
-const SUPABASE_URL_ENV_NAMES = SUPABASE_URL_ENV_CANDIDATES.map(({ name }) => name)
-const SUPABASE_ANON_KEY_ENV_NAMES = SUPABASE_ANON_KEY_ENV_CANDIDATES.map(({ name }) => name)
+// Define env names for static reference
+const SUPABASE_URL_ENV_NAMES = ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'] as const
+const SUPABASE_ANON_KEY_ENV_NAMES = ['NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY'] as const
 
 export const SUPABASE_ENV_GROUPS = [SUPABASE_URL_ENV_NAMES, SUPABASE_ANON_KEY_ENV_NAMES] as const
-const urlChoicesText = formatEnvChoices(SUPABASE_URL_ENV_CANDIDATES)
-const anonKeyChoicesText = formatEnvChoices(SUPABASE_ANON_KEY_ENV_CANDIDATES)
-
 export const SUPABASE_ENV_HINT = SUPABASE_ENV_GROUPS.map((group) => group.join(' o ')).join(' y ')
 
 export function getSupabaseConfig() {
+  // Access process.env lazily inside the function to avoid Edge Runtime issues
+  const SUPABASE_URL_ENV_CANDIDATES: EnvCandidate[] = [
+    { name: 'NEXT_PUBLIC_SUPABASE_URL', value: process.env.NEXT_PUBLIC_SUPABASE_URL },
+    { name: 'SUPABASE_URL', value: process.env.SUPABASE_URL },
+  ]
+
+  const SUPABASE_ANON_KEY_ENV_CANDIDATES: EnvCandidate[] = [
+    { name: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', value: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY },
+    { name: 'SUPABASE_ANON_KEY', value: process.env.SUPABASE_ANON_KEY },
+  ]
+
+  const urlChoicesText = formatEnvChoices(SUPABASE_URL_ENV_CANDIDATES)
+  const anonKeyChoicesText = formatEnvChoices(SUPABASE_ANON_KEY_ENV_CANDIDATES)
+
   const urlCandidate = pickFirstDefined(SUPABASE_URL_ENV_CANDIDATES)
   const anonKeyCandidate = pickFirstDefined(SUPABASE_ANON_KEY_ENV_CANDIDATES)
 
@@ -64,8 +66,8 @@ export function isMissingSupabaseEnvError(error: unknown): error is MissingSupab
 
   if (error && typeof error === 'object' && 'message' in error) {
     const message = String((error as { message?: string }).message)
-    const mentionsUrl = SUPABASE_URL_ENV_CANDIDATES.some(({ name }) => message.includes(name))
-    const mentionsKey = SUPABASE_ANON_KEY_ENV_CANDIDATES.some(({ name }) => message.includes(name))
+    const mentionsUrl = SUPABASE_URL_ENV_NAMES.some((name) => message.includes(name))
+    const mentionsKey = SUPABASE_ANON_KEY_ENV_NAMES.some((name) => message.includes(name))
     return mentionsUrl && mentionsKey
   }
 

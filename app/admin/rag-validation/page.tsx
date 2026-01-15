@@ -3,8 +3,29 @@
 
 import { useEffect, useState } from 'react'
 
+interface CheckData {
+  estado: string
+  mensaje: string
+}
+
+interface ValidationReport {
+  sistema: {
+    checks: Record<string, CheckData>
+  }
+  documentos: {
+    total: number
+    aprobados: number
+    rechazados: number
+    calidad_promedio: number
+  }
+  alertas: Array<{
+    tipo: string
+    mensaje: string
+  }>
+}
+
 export default function RAGValidationDashboard() {
-  const [report, setReport] = useState(null)
+  const [report, setReport] = useState<ValidationReport | null>(null)
   
   useEffect(() => {
     fetch('/validation_report.json')
