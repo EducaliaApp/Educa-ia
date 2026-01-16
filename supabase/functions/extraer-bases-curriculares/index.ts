@@ -236,11 +236,11 @@ function extraerObjetivos(html: string, asignatura: string, curso: string, nivel
     let inicioContador = -1
  
     while (i < html.length) {
-      if (html.substr(i, 4) === '<div') {
+      if (html.substring(i, i + 4) === '<div') {
         if (inicioContador === -1) inicioContador = i
         nivel_div++
         i += 4
-      } else if (html.substr(i, 6) === '</div>') {
+      } else if (html.substring(i, i + 6) === '</div>') {
         nivel_div--
         if (nivel_div === 0 && inicioContador !== -1) {
           // Encontramos el cierre
