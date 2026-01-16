@@ -171,6 +171,7 @@ function validarURL(url: string): boolean {
  
 /**
  * Realiza fetch con retry y rate limiting
+ * MEJORA: No reintenta en errores 404 (páginas que no existen)
  */
 async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promise<string> {
   for (let attempt = 0; attempt < retries; attempt++) {
@@ -182,30 +183,44 @@ async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promis
           'Accept-Language': 'es-CL,es;q=0.9',
         },
       })
- 
+
       if (!response.ok) {
+        // No reintentar en 404 - el recurso no existe
+        if (response.status === 404) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+
+        // Para otros errores (500, 503, etc), reintentar
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
- 
+
       const html = await response.text()
- 
+
       // Rate limiting
       await new Promise(resolve => setTimeout(resolve, CONFIG.DELAY_BETWEEN_REQUESTS))
- 
+
       return html
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
-      console.error(`Intento ${attempt + 1}/${retries} falló para ${url}: ${errorMessage}`)
- 
-      if (attempt === retries - 1) {
+
+      // Si es un 404, no reintentar - fallar inmediatamente
+      if (errorMessage.includes('404')) {
+        throw new Error(errorMessage)
+      }
+
+      // Para otros errores, mostrar intento y continuar
+      if (attempt < retries - 1) {
+        console.warn(`Intento ${attempt + 1}/${retries} falló para ${url}: ${errorMessage}. Reintentando...`)
+      } else {
+        console.error(`Todos los intentos fallaron para ${url}: ${errorMessage}`)
         throw new Error(`Falló después de ${retries} intentos: ${errorMessage}`)
       }
- 
+
       // Backoff exponencial
       await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
     }
   }
- 
+
   throw new Error('fetchWithRetry: No se pudo completar la solicitud')
 }
  
@@ -827,20 +842,32 @@ export async function handler(req: Request): Promise<Response> {
 
           const objetivos = extraerObjetivos(htmlAsignatura, nombreAsignatura, curso, categoria)
           console.log(`  ✓ Extraídos ${objetivos.length} objetivos`)
- 
+
           // 5. Para cada objetivo, extraer actividades
+          // IMPORTANTE: Solo los objetivos de contenido (OA) tienen páginas de actividades
+          // Los OAH (habilidades) y OAA (actitudes) NO tienen páginas de detalle en el sitio
+          let objetivosConActividades = 0
+          let objetivosOmitidos = 0
+
           for (const obj of objetivos) {
+            // Filtrar: SOLO extraer actividades para objetivos de contenido
+            if (obj.tipo_objetivo !== 'contenido') {
+              objetivosOmitidos++
+              continue
+            }
+
             // Si tiene _detalleUrl (estructura Tipo B), usarlo; sino construir URL tradicional
             const objAny = obj as any
             const urlActividades = objAny._detalleUrl ||
-              `${asig.url}/${obj.oa_codigo.toLowerCase().replace(/\s+/g, '-')}#actividades`
- 
+              `${asig.url}/${obj.oa_codigo.toLowerCase().replace(/\s+/g, '-')}`
+
             try {
               const actividades = await extraerActividades(urlActividades)
- 
+
               if (actividades.length > 0) {
                 obj.actividad_1 = actividades[0]?.nombre || ''
                 obj.url_actividad_1 = actividades[0]?.url || ''
+                objetivosConActividades++
               }
               if (actividades.length > 1) {
                 obj.actividad_2 = actividades[1]?.nombre || ''
@@ -855,8 +882,17 @@ export async function handler(req: Request): Promise<Response> {
                 obj.url_actividad_4 = actividades[3]?.url || ''
               }
             } catch (error) {
-              console.warn(`  ⚠️  No se pudieron extraer actividades para ${obj.oa_codigo}`)
+              // Solo advertir si es un objetivo de contenido que debería tener actividades
+              const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+              console.warn(`  ⚠️  No se pudieron extraer actividades para ${obj.oa_codigo}: ${errorMessage}`)
             }
+          }
+
+          if (objetivosOmitidos > 0) {
+            console.log(`  ℹ️  Omitidos ${objetivosOmitidos} objetivos sin actividades (OAH/OAA)`)
+          }
+          if (objetivosConActividades > 0) {
+            console.log(`  ✓ Actividades extraídas para ${objetivosConActividades} objetivos`)
           }
  
           todosLosObjetivos.push(...objetivos)
