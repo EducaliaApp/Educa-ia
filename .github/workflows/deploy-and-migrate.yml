@@ -132,7 +132,9 @@ jobs:
         run: |
           echo "🚀 Running database migrations..."
           # Run migrations with debug flag for detailed output
-          supabase db push --debug
+          # --include-all flag allows migrations with timestamps that fall between already applied migrations
+          # This is necessary when migrations are created out of chronological order
+          supabase db push --debug --include-all
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
