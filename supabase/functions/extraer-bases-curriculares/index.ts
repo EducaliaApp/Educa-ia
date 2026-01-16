@@ -158,26 +158,39 @@ async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promis
 
 /**
  * Extrae links de asignaturas por curso de la página principal
- * Usa selector CSS: .asignatura a
+ * Usa estructura real del sitio: .subject-title + .grades-wrapper
  */
 function extraerAsignaturasYCursos(html: string): AsignaturaLink[] {
   const links: AsignaturaLink[] = []
 
-  // Patrón mejorado para buscar links dentro de elementos con clase 'asignatura'
-  // Busca: <div class="asignatura..."><a href="...">texto</a></div>
-  const patronAsignatura = /<div[^>]*class=[^>]*asignatura[^>]*>[\s\S]*?<a[^>]*href=["']([^"']*)["'][^>]*>([^<]*)<\/a>/gi
+  // Estructura real del sitio:
+  // <div class="subject subject-grades">
+  //   <a href="/curriculum/1o-6o-basico/artes-visuales">
+  //     <span class="subject-title">Artes Visuales</span>
+  //   </a>
+  //   <div class="grades-wrapper">
+  //     <a href=".../artes-visuales/1-basico" class="badge">1° Básico</a>
+  //     <a href=".../artes-visuales/2-basico" class="badge">2° Básico</a>
+  //   </div>
+  // </div>
+
+  const patronAsignatura = /<div[^>]*class=[^>]*subject-grades[^>]*>[\s\S]*?<span[^>]*class=[^>]*subject-title[^>]*>([^<]*)<\/span>[\s\S]*?<div[^>]*class=[^>]*grades-wrapper[^>]*>([\s\S]*?)<\/div>/gi
 
   let match
   while ((match = patronAsignatura.exec(html)) !== null) {
-    const href = match[1]
-    const texto = match[2].trim()
+    const nombreAsignatura = limpiarTexto(match[1])
+    const gradesWrapper = match[2]
 
-    // Filtrar solo links de asignaturas con curso específico
-    // Ejemplo: "artes-visuales/1-basico"
-    if (href.includes('/1-basico') || href.includes('/2-basico') ||
-        href.includes('/3-basico') || href.includes('/4-basico') ||
-        href.includes('/5-basico') || href.includes('/6-basico')) {
+    // Extraer todos los links de cursos dentro del grades-wrapper
+    const patronCurso = /<a[^>]*href=["']([^"']*)["'][^>]*>([^<]*)<\/a>/gi
+    let matchCurso
 
+    while ((matchCurso = patronCurso.exec(gradesWrapper)) !== null) {
+      const href = matchCurso[1]
+      const curso = limpiarTexto(matchCurso[2])
+
+      // Construir nombre completo y URL
+      const nombreCompleto = `${nombreAsignatura} ${curso}`
       const url = href.startsWith('http') ? href : CONFIG.BASE_URL + href
 
       // Validar URL
@@ -187,8 +200,8 @@ function extraerAsignaturasYCursos(html: string): AsignaturaLink[] {
       }
 
       // Evitar duplicados
-      if (!links.some(l => l.url === url) && texto.length > 0) {
-        links.push({ nombre: limpiarTexto(texto), url })
+      if (!links.some(l => l.url === url) && nombreCompleto.length > 0) {
+        links.push({ nombre: nombreCompleto, url })
       }
     }
   }
@@ -234,14 +247,22 @@ function extraerObjetivos(html: string, asignatura: string, curso: string, nivel
           const bloqueEje = html.substring(inicioWrapper, i + 6)
           foundTipoB = true
 
-          // Extraer eje
-          const ejeTitleMatch = bloqueEje.match(/<h3[^>]*>([^<]*)<\/h3>/i)
-          const ejeNombre = ejeTitleMatch ? limpiarTexto(ejeTitleMatch[1]) : ''
+          // Extraer eje (está dentro de un <a> en el <h3>)
+          // Estructura real: <h3 class="link"><a href="...">Nombre del Eje</a></h3>
+          const ejeTitleMatch = bloqueEje.match(/<h3[^>]*>[\s\S]*?<a[^>]*>([^<]*)<\/a>[\s\S]*?<\/h3>/i)
+          let ejeNombre = ejeTitleMatch ? limpiarTexto(ejeTitleMatch[1]) : ''
+
+          // Si no se encontró, intentar sin <a>
+          if (!ejeNombre) {
+            const ejeSimpleMatch = bloqueEje.match(/<h3[^>]*>([^<]*)<\/h3>/i)
+            ejeNombre = ejeSimpleMatch ? limpiarTexto(ejeSimpleMatch[1]) : ''
+          }
 
           // Extraer item-wrappers dentro de este bloque
+          // Buscar tanto '<div class="item-wrapper">' como '<div class="item-wrapper prioritized">'
           let posItem = 0
           while (true) {
-            const inicioItem = bloqueEje.indexOf('<div class="item-wrapper">', posItem)
+            const inicioItem = bloqueEje.indexOf('<div class="item-wrapper', posItem)
             if (inicioItem === -1) break
 
             // Buscar cierre del item-wrapper con balanceo
@@ -257,14 +278,21 @@ function extraerObjetivos(html: string, asignatura: string, curso: string, nivel
                   const itemHtml = bloqueEje.substring(inicioItem, j + 6)
 
                   try {
-                    const codigoMatch = itemHtml.match(/<div[^>]*class=[^>]*oa-title[^>]*>([^<]*)<\/div>/i)
-                    const codigo = codigoMatch ? limpiarTexto(codigoMatch[1]) : ''
+                    // Extraer código OA desde <span class="oa-title">
+                    // Texto real: "Objetivo de aprendizaje AR01 OA 01"
+                    const codigoMatch = itemHtml.match(/<span[^>]*class=[^>]*oa-title[^>]*>([^<]*)<\/span>/i)
+                    let codigoTexto = codigoMatch ? limpiarTexto(codigoMatch[1]) : ''
+
+                    // Extraer solo el código del formato "Objetivo de aprendizaje AR01 OA 01"
+                    const codigoExtraido = codigoTexto.match(/([A-Z]{2,4}\d{2}\s+OA\s+\d{1,2})/i)
+                    const codigo = codigoExtraido ? codigoExtraido[1] : ''
 
                     if (codigo && validarCodigoOA(codigo)) {
-                      const objetivoMatch = itemHtml.match(/<div[^>]*class=[^>]*field__item[^>]*>([^<]*)<\/div>/i)
+                      // Extraer descripción desde el <p> dentro de field__item
+                      const objetivoMatch = itemHtml.match(/<div[^>]*class=[^>]*field__item[^>]*>[\s\S]*?<p[^>]*>([^<]*)<\/p>/i)
                       const objetivo = objetivoMatch ? limpiarTexto(objetivoMatch[1]) : ''
 
-                      const esPriorizado = itemHtml.includes('class="prioritized"')
+                      const esPriorizado = itemHtml.includes('class="prioritized"') || itemHtml.includes('"prioritized"')
 
                       const detalleLinkMatch = itemHtml.match(/<a[^>]*class=[^>]*link-more[^>]*href=["']([^"']*)["']/i)
                       const detalleUrl = detalleLinkMatch ?
