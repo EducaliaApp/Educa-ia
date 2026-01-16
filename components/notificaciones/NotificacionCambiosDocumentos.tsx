@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/Button'
@@ -23,6 +23,21 @@ export function NotificacionCambiosDocumentos() {
   const [cambios, setCambios] = useState<CambioDocumento[]>([])
   const [mostrar, setMostrar] = useState(true)
   const supabase = createClient()
+
+  const cargarCambiosRecientes = useCallback(async () => {
+    const { data } = await supabase
+      .from('historial_cambios_documentos')
+      .select(`
+        *,
+        documento:documentos_oficiales(*)
+      `)
+      .order('detectado_at', { ascending: false })
+      .limit(5)
+
+    if (data) {
+      setCambios(data)
+    }
+  }, [supabase])
 
   useEffect(() => {
     cargarCambiosRecientes()
@@ -54,22 +69,7 @@ export function NotificacionCambiosDocumentos() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [])
-
-  async function cargarCambiosRecientes() {
-    const { data } = await supabase
-      .from('historial_cambios_documentos')
-      .select(`
-        *,
-        documento:documentos_oficiales(*)
-      `)
-      .order('detectado_at', { ascending: false })
-      .limit(5)
-
-    if (data) {
-      setCambios(data)
-    }
-  }
+  }, [supabase, cargarCambiosRecientes])
 
   if (!mostrar || cambios.length === 0) return null
 

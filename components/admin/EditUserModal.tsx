@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
 import { X } from 'lucide-react'
@@ -40,21 +40,7 @@ export function EditUserModal({
     nivel: currentData.nivel || '',
   })
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchPlanesYRoles()
-      setFormData({
-        nombre: currentData.nombre,
-        email: currentData.email,
-        plan: currentData.plan,
-        roleId: '', // Will be set in fetchPlanesYRoles after roles are loaded
-        asignatura: currentData.asignatura || '',
-        nivel: currentData.nivel || '',
-      })
-    }
-  }, [isOpen, currentData])
-
-  const fetchPlanesYRoles = async () => {
+  const fetchPlanesYRoles = useCallback(async () => {
     try {
       const [planesRes, rolesRes] = await Promise.all([
         fetch('/api/admin/planes'),
@@ -79,7 +65,21 @@ export function EditUserModal({
     } catch (error) {
       console.error('Error fetching planes y roles:', error)
     }
-  }
+  }, [currentData.role])
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchPlanesYRoles()
+      setFormData({
+        nombre: currentData.nombre,
+        email: currentData.email,
+        plan: currentData.plan,
+        roleId: '', // Will be set in fetchPlanesYRoles after roles are loaded
+        asignatura: currentData.asignatura || '',
+        nivel: currentData.nivel || '',
+      })
+    }
+  }, [isOpen, currentData, fetchPlanesYRoles])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
