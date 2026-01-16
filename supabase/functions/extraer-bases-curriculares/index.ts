@@ -171,6 +171,7 @@ function validarURL(url: string): boolean {
  
 /**
  * Realiza fetch con retry y rate limiting
+ * MEJORA: No reintenta en errores 404 (páginas que no existen)
  */
 async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promise<string> {
   for (let attempt = 0; attempt < retries; attempt++) {
@@ -182,30 +183,44 @@ async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promis
           'Accept-Language': 'es-CL,es;q=0.9',
         },
       })
- 
+
       if (!response.ok) {
+        // No reintentar en 404 - el recurso no existe
+        if (response.status === 404) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+
+        // Para otros errores (500, 503, etc), reintentar
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
- 
+
       const html = await response.text()
- 
+
       // Rate limiting
       await new Promise(resolve => setTimeout(resolve, CONFIG.DELAY_BETWEEN_REQUESTS))
- 
+
       return html
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
-      console.error(`Intento ${attempt + 1}/${retries} falló para ${url}: ${errorMessage}`)
- 
-      if (attempt === retries - 1) {
+
+      // Si es un 404, no reintentar - fallar inmediatamente
+      if (errorMessage.includes('404')) {
+        throw new Error(errorMessage)
+      }
+
+      // Para otros errores, mostrar intento y continuar
+      if (attempt < retries - 1) {
+        console.warn(`Intento ${attempt + 1}/${retries} falló para ${url}: ${errorMessage}. Reintentando...`)
+      } else {
+        console.error(`Todos los intentos fallaron para ${url}: ${errorMessage}`)
         throw new Error(`Falló después de ${retries} intentos: ${errorMessage}`)
       }
- 
+
       // Backoff exponencial
       await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
     }
   }
- 
+
   throw new Error('fetchWithRetry: No se pudo completar la solicitud')
 }
  
@@ -678,11 +693,39 @@ function generarJSON(objetivos: ObjetivoAprendizaje[]): string {
 }
  
 /**
- * Genera nombre de archivo CSV con timestamp
+ * Genera nombre de archivo con categoría y timestamp completo
+ * Formato: bases_curriculares_[categoria]_aaaa-mm-dd-hhmmss.{formato}
+ *
+ * Ejemplo:
+ * generarNombreArchivo('csv', 'Educación Básica 1° a 6°')
+ * → bases_curriculares_Educacion_Basica_1_a_6_2026-01-16-153045.csv
  */
-function generarNombreArchivo(formato: 'csv' | 'json', fecha: Date = new Date()): string {
-  const fechaStr = fecha.toISOString().split('T')[0]
-  return `bases_curriculares_1_a_6_basico_${fechaStr}.${formato}`
+function generarNombreArchivo(
+  formato: 'csv' | 'json',
+  categoria: string,
+  fecha: Date = new Date()
+): string {
+  // Formatear timestamp completo: 2026-01-16-153045
+  const year = fecha.getFullYear()
+  const month = String(fecha.getMonth() + 1).padStart(2, '0')
+  const day = String(fecha.getDate()).padStart(2, '0')
+  const hours = String(fecha.getHours()).padStart(2, '0')
+  const minutes = String(fecha.getMinutes()).padStart(2, '0')
+  const seconds = String(fecha.getSeconds()).padStart(2, '0')
+
+  const timestamp = `${year}-${month}-${day}-${hours}${minutes}${seconds}`
+
+  // Normalizar categoría para nombre de archivo
+  // "Educación Básica 1° a 6°" → "Educacion_Basica_1_a_6"
+  const categoriaNormalizada = categoria
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Eliminar acentos
+    .replace(/[°]/g, '') // Eliminar símbolos de grado
+    .replace(/\s+/g, '_') // Espacios a guiones bajos
+    .replace(/[()]/g, '') // Eliminar paréntesis
+    .replace(/[^\w_-]/g, '') // Eliminar caracteres especiales
+
+  return `bases_curriculares_${categoriaNormalizada}_${timestamp}.${formato}`
 }
  
 /**
@@ -690,14 +733,67 @@ function generarNombreArchivo(formato: 'csv' | 'json', fecha: Date = new Date())
  */
 function escaparCSV(valor: string): string {
   if (!valor) return ''
- 
+
   // Si contiene punto y coma, comillas o saltos de línea, envolver en comillas
   if (valor.includes(';') || valor.includes('"') || valor.includes('\n')) {
     // Duplicar comillas internas
     return '"' + valor.replace(/"/g, '""') + '"'
   }
- 
+
   return valor
+}
+
+/**
+ * Calcula hash SHA-256 de un objetivo para detectar cambios
+ * Hash incluye: código, objetivo, eje, priorizado, actividades
+ */
+async function calcularHashObjetivo(obj: any): Promise<string> {
+  const contenido = JSON.stringify({
+    codigo: obj.codigo,
+    objetivo: obj.objetivo,
+    eje: obj.eje || '',
+    priorizado: obj.priorizado || false,
+    actividades: obj.actividades || [],
+  })
+
+  const encoder = new TextEncoder()
+  const data = encoder.encode(contenido)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+/**
+ * Verifica si un objetivo ha cambiado comparando con el hash almacenado
+ * Retorna: { cambio: boolean, registroExiste: boolean }
+ */
+async function verificarCambios(
+  supabase: any,
+  codigo: string,
+  categoria: string,
+  nivel: string,
+  version: string,
+  nuevoHash: string
+): Promise<{ cambio: boolean; registroExiste: boolean }> {
+  const { data, error } = await supabase
+    .from('objetivos_aprendizaje')
+    .select('hash_contenido')
+    .eq('codigo', codigo)
+    .eq('categoria', categoria)
+    .eq('nivel', nivel)
+    .eq('version', version)
+    .maybeSingle()
+
+  if (error || !data) {
+    // Registro no existe o error → considerar como nuevo (hay cambio)
+    return { cambio: true, registroExiste: false }
+  }
+
+  // Comparar hash: si es diferente, hay cambio
+  return {
+    cambio: data.hash_contenido !== nuevoHash,
+    registroExiste: true
+  }
 }
  
 /**
@@ -752,13 +848,22 @@ export async function handler(req: Request): Promise<Response> {
  
   try {
     console.log('🚀 Iniciando extracción de Bases Curriculares...')
-    console.log(`📊 Modo: ${CONFIG.MAX_ASIGNATURAS > 0 ? 'TEST (' + CONFIG.MAX_ASIGNATURAS + ' asignaturas)' : 'PRODUCCIÓN (todas las asignaturas)'}`)
- 
+
     // Autenticación
     const supabase = crearClienteServicio(req)
- 
-    // Obtener configuración del request
-    const { force = false } = await req.json().catch(() => ({ force: false }))
+
+    // ✅ Obtener configuración del request
+    const requestBody = await req.json().catch(() => ({}))
+    const {
+      force = false,
+      persist_db = true,      // ✅ NUEVO: Controla si persiste a base de datos
+      generate_files = true,  // ✅ NUEVO: Controla si genera archivos CSV/JSON
+    } = requestBody
+
+    console.log(`📊 Configuración:`)
+    console.log(`  - Modo: ${CONFIG.MAX_ASIGNATURAS > 0 ? 'TEST (' + CONFIG.MAX_ASIGNATURAS + ' asignaturas)' : 'PRODUCCIÓN (todas las asignaturas)'}`)
+    console.log(`  - Persistir a BD: ${persist_db ? 'SÍ' : 'NO'}`)
+    console.log(`  - Generar archivos: ${generate_files ? 'SÍ' : 'NO'}`)
  
     // 1. Crear registro de proceso ETL
     const { data: proceso, error: procesoError } = await supabase
@@ -827,20 +932,32 @@ export async function handler(req: Request): Promise<Response> {
 
           const objetivos = extraerObjetivos(htmlAsignatura, nombreAsignatura, curso, categoria)
           console.log(`  ✓ Extraídos ${objetivos.length} objetivos`)
- 
+
           // 5. Para cada objetivo, extraer actividades
+          // IMPORTANTE: Solo los objetivos de contenido (OA) tienen páginas de actividades
+          // Los OAH (habilidades) y OAA (actitudes) NO tienen páginas de detalle en el sitio
+          let objetivosConActividades = 0
+          let objetivosOmitidos = 0
+
           for (const obj of objetivos) {
+            // Filtrar: SOLO extraer actividades para objetivos de contenido
+            if (obj.tipo_objetivo !== 'contenido') {
+              objetivosOmitidos++
+              continue
+            }
+
             // Si tiene _detalleUrl (estructura Tipo B), usarlo; sino construir URL tradicional
             const objAny = obj as any
             const urlActividades = objAny._detalleUrl ||
-              `${asig.url}/${obj.oa_codigo.toLowerCase().replace(/\s+/g, '-')}#actividades`
- 
+              `${asig.url}/${obj.oa_codigo.toLowerCase().replace(/\s+/g, '-')}`
+
             try {
               const actividades = await extraerActividades(urlActividades)
- 
+
               if (actividades.length > 0) {
                 obj.actividad_1 = actividades[0]?.nombre || ''
                 obj.url_actividad_1 = actividades[0]?.url || ''
+                objetivosConActividades++
               }
               if (actividades.length > 1) {
                 obj.actividad_2 = actividades[1]?.nombre || ''
@@ -855,8 +972,17 @@ export async function handler(req: Request): Promise<Response> {
                 obj.url_actividad_4 = actividades[3]?.url || ''
               }
             } catch (error) {
-              console.warn(`  ⚠️  No se pudieron extraer actividades para ${obj.oa_codigo}`)
+              // Solo advertir si es un objetivo de contenido que debería tener actividades
+              const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+              console.warn(`  ⚠️  No se pudieron extraer actividades para ${obj.oa_codigo}: ${errorMessage}`)
             }
+          }
+
+          if (objetivosOmitidos > 0) {
+            console.log(`  ℹ️  Omitidos ${objetivosOmitidos} objetivos sin actividades (OAH/OAA)`)
+          }
+          if (objetivosConActividades > 0) {
+            console.log(`  ✓ Actividades extraídas para ${objetivosConActividades} objetivos`)
           }
  
           todosLosObjetivos.push(...objetivos)
@@ -874,80 +1000,140 @@ export async function handler(req: Request): Promise<Response> {
  
       console.log(`\n✅ Extracción completada: ${todosLosObjetivos.length} objetivos`)
 
-      // 6. Persistir objetivos en la base de datos
-      console.log('💾 Persistiendo objetivos en la base de datos...')
-      await supabase.rpc('agregar_log_proceso_etl', {
-        p_proceso_id: procesoId,
-        p_mensaje: `Persistiendo ${todosLosObjetivos.length} objetivos en la base de datos`,
-      })
-
-      let objetivosInsertados = 0
+      // 6. Persistir objetivos en la base de datos (si persist_db=true)
+      let objetivosNuevos = 0
+      let objetivosActualizados = 0
+      let objetivosSinCambios = 0
       let objetivosError = 0
 
-      for (const obj of todosLosObjetivos) {
-        try {
-          const objAny = obj as any
-          const urlFuente = objAny._detalleUrl || ''
-          const version = new Date().getFullYear().toString()
+      if (persist_db) {
+        console.log('💾 Persistiendo objetivos en la base de datos...')
+        await supabase.rpc('agregar_log_proceso_etl', {
+          p_proceso_id: procesoId,
+          p_mensaje: `Persistiendo ${todosLosObjetivos.length} objetivos en la base de datos con tracking de cambios`,
+        })
 
-          // Preparar actividades en formato JSONB
-          const actividades = []
-          if (obj.actividad_1) actividades.push({ titulo: obj.actividad_1, url: obj.url_actividad_1 })
-          if (obj.actividad_2) actividades.push({ titulo: obj.actividad_2, url: obj.url_actividad_2 })
-          if (obj.actividad_3) actividades.push({ titulo: obj.actividad_3, url: obj.url_actividad_3 })
-          if (obj.actividad_4) actividades.push({ titulo: obj.actividad_4, url: obj.url_actividad_4 })
+        const fechaActual = new Date().toISOString()
 
-          const registro = {
-            codigo: obj.oa_codigo,
-            tipo_objetivo: obj.tipo_objetivo,
-            categoria: obj.categoria,
-            asignatura: obj.asignatura,
-            eje: obj.eje || null,
-            nivel: obj.nivel,
-            curso: obj.curso,
-            objetivo: obj.objetivo,
-            priorizado: obj.priorizado === 1,
-            actividades: actividades,
-            url_fuente: urlFuente || null,
-            version: version,
-            proceso_etl_id: procesoId,
-          }
+        for (const obj of todosLosObjetivos) {
+          try {
+            const objAny = obj as any
+            const urlFuente = objAny._detalleUrl || ''
+            const version = new Date().getFullYear().toString()
 
-          // Usar upsert para insertar o actualizar si ya existe
-          const { error } = await supabase
-            .from('objetivos_aprendizaje')
-            .upsert(registro, {
-              onConflict: 'codigo,categoria,nivel,version',
-              ignoreDuplicates: false,
-            })
+            // Preparar actividades en formato JSONB
+            const actividades = []
+            if (obj.actividad_1) actividades.push({ titulo: obj.actividad_1, url: obj.url_actividad_1 })
+            if (obj.actividad_2) actividades.push({ titulo: obj.actividad_2, url: obj.url_actividad_2 })
+            if (obj.actividad_3) actividades.push({ titulo: obj.actividad_3, url: obj.url_actividad_3 })
+            if (obj.actividad_4) actividades.push({ titulo: obj.actividad_4, url: obj.url_actividad_4 })
 
-          if (error) {
-            console.warn(`  ⚠️  Error insertando ${obj.oa_codigo}: ${error.message}`)
+            const registro = {
+              codigo: obj.oa_codigo,
+              tipo_objetivo: obj.tipo_objetivo,
+              categoria: obj.categoria,
+              asignatura: obj.asignatura,
+              eje: obj.eje || null,
+              nivel: obj.nivel,
+              curso: obj.curso,
+              objetivo: obj.objetivo,
+              priorizado: obj.priorizado === 1,
+              actividades: actividades,
+              url_fuente: urlFuente || null,
+              version: version,
+              proceso_etl_id: procesoId,
+            }
+
+            // ✅ Calcular hash del contenido
+            const hashContenido = await calcularHashObjetivo(registro)
+
+            // ✅ Verificar si hay cambios
+            const { cambio, registroExiste } = await verificarCambios(
+              supabase,
+              registro.codigo,
+              registro.categoria,
+              registro.nivel,
+              registro.version,
+              hashContenido
+            )
+
+            if (cambio) {
+              // ✅ HAY CAMBIOS: Actualizar registro completo
+              const registroConHash = {
+                ...registro,
+                hash_contenido: hashContenido,
+                ultima_verificacion: fechaActual,
+                ultima_actualizacion: fechaActual,
+              }
+
+              const { error } = await supabase
+                .from('objetivos_aprendizaje')
+                .upsert(registroConHash, {
+                  onConflict: 'codigo,categoria,nivel,version',
+                  ignoreDuplicates: false,
+                })
+
+              if (error) {
+                console.warn(`  ⚠️  Error insertando ${obj.oa_codigo}: ${error.message}`)
+                objetivosError++
+              } else {
+                if (registroExiste) {
+                  objetivosActualizados++
+                } else {
+                  objetivosNuevos++
+                }
+              }
+            } else {
+              // ✅ SIN CAMBIOS: Solo actualizar timestamp de verificación
+              const { error } = await supabase
+                .from('objetivos_aprendizaje')
+                .update({ ultima_verificacion: fechaActual })
+                .eq('codigo', registro.codigo)
+                .eq('categoria', registro.categoria)
+                .eq('nivel', registro.nivel)
+                .eq('version', registro.version)
+
+              if (error) {
+                console.warn(`  ⚠️  Error actualizando verificación ${obj.oa_codigo}: ${error.message}`)
+                objetivosError++
+              } else {
+                objetivosSinCambios++
+              }
+            }
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+            console.warn(`  ⚠️  Error procesando ${obj.oa_codigo}: ${errorMessage}`)
             objetivosError++
-          } else {
-            objetivosInsertados++
           }
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
-          console.warn(`  ⚠️  Error procesando ${obj.oa_codigo}: ${errorMessage}`)
-          objetivosError++
         }
-      }
 
-      console.log(`✓ Objetivos persistidos: ${objetivosInsertados} insertados/actualizados, ${objetivosError} errores`)
-      await supabase.rpc('agregar_log_proceso_etl', {
-        p_proceso_id: procesoId,
-        p_mensaje: `Objetivos persistidos: ${objetivosInsertados} insertados/actualizados, ${objetivosError} errores`,
-      })
+        console.log(`✓ Resultados: ${objetivosNuevos} nuevos, ${objetivosActualizados} actualizados, ${objetivosSinCambios} sin cambios, ${objetivosError} errores`)
+        await supabase.rpc('agregar_log_proceso_etl', {
+          p_proceso_id: procesoId,
+          p_mensaje: `Resultados: ${objetivosNuevos} nuevos, ${objetivosActualizados} actualizados, ${objetivosSinCambios} sin cambios, ${objetivosError} errores`,
+        })
+      } else {
+        console.log('⏭️  Omitiendo persistencia a base de datos (persist_db=false)')
+        await supabase.rpc('agregar_log_proceso_etl', {
+          p_proceso_id: procesoId,
+          p_mensaje: 'Persistencia a BD omitida (persist_db=false)',
+        })
+      }
 
       const archivosGenerados: any[] = []
 
+      // ✅ Detectar categoría desde los objetivos extraídos
+      const categoriaPrincipal = todosLosObjetivos.length > 0
+        ? todosLosObjetivos[0].categoria
+        : 'Educación Básica 1° a 6°'
+
       // 7. Generar y subir CSV si está habilitado
-      if (CONFIG.GENERAR_CSV) {
+      if (CONFIG.GENERAR_CSV && generate_files) {
         console.log('📝 Generando CSV...')
         const contenidoCSV = generarCSV(todosLosObjetivos)
- 
-        const nombreCSV = generarNombreArchivo('csv')
+
+        // ✅ Generar nombre con categoría y timestamp completo
+        const nombreCSV = generarNombreArchivo('csv', categoriaPrincipal)
         console.log(`💾 Subiendo ${nombreCSV} a Storage...`)
  
         const urlCSV = await subirArchivoStorage(
@@ -999,11 +1185,12 @@ export async function handler(req: Request): Promise<Response> {
       }
  
       // 8. Generar y subir JSON si está habilitado
-      if (CONFIG.GENERAR_JSON) {
+      if (CONFIG.GENERAR_JSON && generate_files) {
         console.log('📝 Generando JSON...')
         const contenidoJSON = generarJSON(todosLosObjetivos)
- 
-        const nombreJSON = generarNombreArchivo('json')
+
+        // ✅ Generar nombre con categoría y timestamp completo
+        const nombreJSON = generarNombreArchivo('json', categoriaPrincipal)
         console.log(`💾 Subiendo ${nombreJSON} a Storage...`)
  
         const urlJSON = await subirArchivoStorage(
@@ -1066,6 +1253,10 @@ export async function handler(req: Request): Promise<Response> {
           success: true,
           proceso_id: procesoId,
           archivos: archivosGenerados,
+          configuracion: {
+            persist_db,
+            generate_files,
+          },
           estadisticas: {
             asignaturas_procesadas: asignaturasProcesadas,
             total_objetivos: todosLosObjetivos.length,
@@ -1074,6 +1265,13 @@ export async function handler(req: Request): Promise<Response> {
             objetivos_habilidades: todosLosObjetivos.filter(o => o.tipo_objetivo === 'habilidad').length,
             objetivos_actitudes: todosLosObjetivos.filter(o => o.tipo_objetivo === 'actitud').length,
             duracion_ms: duracionMs,
+            // ✅ Estadísticas de tracking de cambios
+            tracking: persist_db ? {
+              objetivos_nuevos: objetivosNuevos,
+              objetivos_actualizados: objetivosActualizados,
+              objetivos_sin_cambios: objetivosSinCambios,
+              objetivos_error: objetivosError,
+            } : null,
           },
         }),
         {

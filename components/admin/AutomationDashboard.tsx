@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -21,7 +21,7 @@ export function AutomationDashboard() {
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
-  const fetchMetricas = async () => {
+  const fetchMetricas = useCallback(async () => {
     try {
       setLoading(true)
       
@@ -49,7 +49,7 @@ export function AutomationDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase])
 
   const ejecutarProcesamiento = async () => {
     try {
@@ -85,7 +85,7 @@ export function AutomationDashboard() {
     fetchMetricas()
     const interval = setInterval(fetchMetricas, 30000) // Cada 30 segundos
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchMetricas])
 
   if (loading && !metricas) {
     return (
