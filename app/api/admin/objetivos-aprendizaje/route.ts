@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createClientServiceRole } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
  * GET /api/admin/objetivos-aprendizaje
@@ -166,10 +166,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Usar service role para crear el objetivo (bypass RLS)
-    const adminSupabase = createClientServiceRole()
+    const adminSupabase = createAdminClient()
 
-    const { data, error } = await adminSupabase
-      .from('objetivos_aprendizaje')
+    const { data, error } = await (adminSupabase
+      .from('objetivos_aprendizaje') as any)
       .insert({
         codigo: body.codigo,
         tipo_objetivo: body.tipo_objetivo,
@@ -250,7 +250,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Usar service role para actualizar (bypass RLS)
-    const adminSupabase = createClientServiceRole()
+    const adminSupabase = createAdminClient()
 
     const updateData: any = {}
 
@@ -277,8 +277,8 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    const { data, error } = await adminSupabase
-      .from('objetivos_aprendizaje')
+    const { data, error } = await (adminSupabase
+      .from('objetivos_aprendizaje') as any)
       .update(updateData)
       .eq('id', body.id)
       .select()
@@ -339,10 +339,10 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Usar service role para eliminar (bypass RLS)
-    const adminSupabase = createClientServiceRole()
+    const adminSupabase = createAdminClient()
 
-    const { error } = await adminSupabase
-      .from('objetivos_aprendizaje')
+    const { error } = await (adminSupabase
+      .from('objetivos_aprendizaje') as any)
       .delete()
       .eq('id', id)
 

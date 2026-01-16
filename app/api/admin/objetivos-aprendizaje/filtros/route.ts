@@ -52,10 +52,10 @@ export async function GET(request: NextRequest) {
       .order('tipo_objetivo')
 
     // Obtener valores únicos
-    const categoriasUnicas = [...new Set(categorias?.map((c) => c.categoria) || [])]
-    const asignaturasUnicas = [...new Set(asignaturas?.map((a) => a.asignatura) || [])]
-    const nivelesUnicos = [...new Set(niveles?.map((n) => n.nivel) || [])]
-    const tiposUnicos = [...new Set(tipos?.map((t) => t.tipo_objetivo) || [])]
+    const categoriasUnicas = Array.from(new Set(categorias?.map((c) => c.categoria) || []))
+    const asignaturasUnicas = Array.from(new Set(asignaturas?.map((a) => a.asignatura) || []))
+    const nivelesUnicos = Array.from(new Set(niveles?.map((n) => n.nivel) || []))
+    const tiposUnicos = Array.from(new Set(tipos?.map((t) => t.tipo_objetivo) || []))
 
     return NextResponse.json({
       categorias: categoriasUnicas,
