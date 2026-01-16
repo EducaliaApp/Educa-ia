@@ -30,13 +30,27 @@ import { PATRON_VALIDACION_OA, PATRON_EXTRACCION_OA } from './constants.ts'
  
 const CONFIG = {
   BASE_URL: 'https://www.curriculumnacional.cl',
-  START_URL: 'https://www.curriculumnacional.cl/curriculum/1o-6o-basico/',
+  // URLs de todas las categorías curriculares a extraer
+  CATEGORY_URLS: [
+    'https://www.curriculumnacional.cl/curriculum/1o-6o-basico/',
+    'https://www.curriculumnacional.cl/curriculum/educacion-parvularia/',
+    'https://www.curriculumnacional.cl/curriculum/7o-basico-a-2o-medio/',
+    'https://www.curriculumnacional.cl/curriculum/formacion-diferenciada-tecnico-profesional/',
+    'https://www.curriculumnacional.cl/curriculum/formacion-diferenciada-artistica/',
+    'https://www.curriculumnacional.cl/curriculum/formacion-diferenciada-cientifico-humanista/',
+    'https://www.curriculumnacional.cl/curriculum/modalidad-educacion-de-personas-jovenes-y-adultas-epja/',
+    'https://www.curriculumnacional.cl/curriculum/lengua-y-cultura-de-los-pueblos-originarios-ancestrales/',
+    'https://www.curriculumnacional.cl/curriculum/marco-curricular-de-lengua-indigena/',
+  ],
   DELAY_BETWEEN_REQUESTS: 500, // ms para rate limiting
   MAX_RETRIES: 3,
   USER_AGENT: 'Mozilla/5.0 (compatible; ProfeFlow-Bot/1.0; +https://profeflow.cl)',
   // Límite de asignaturas a procesar (0 = todas)
   // MODO PRODUCCIÓN: 0
   MAX_ASIGNATURAS: 0,
+  // Límite de categorías a procesar (0 = todas)
+  // MODO PRODUCCIÓN: 0
+  MAX_CATEGORIAS: 0,
   // Generar ambos formatos
   GENERAR_CSV: true,
   GENERAR_JSON: true,
@@ -881,7 +895,9 @@ export async function handler(req: Request): Promise<Response> {
     } = requestBody
 
     console.log(`📊 Configuración:`)
-    console.log(`  - Modo: ${CONFIG.MAX_ASIGNATURAS > 0 ? 'TEST (' + CONFIG.MAX_ASIGNATURAS + ' asignaturas)' : 'PRODUCCIÓN (todas las asignaturas)'}`)
+    console.log(`  - Categorías disponibles: ${CONFIG.CATEGORY_URLS.length}`)
+    console.log(`  - Modo asignaturas: ${CONFIG.MAX_ASIGNATURAS > 0 ? 'TEST (' + CONFIG.MAX_ASIGNATURAS + ' por categoría)' : 'PRODUCCIÓN (todas)'}`)
+    console.log(`  - Modo categorías: ${CONFIG.MAX_CATEGORIAS > 0 ? 'TEST (' + CONFIG.MAX_CATEGORIAS + ' categorías)' : 'PRODUCCIÓN (todas las categorías)'}`)
     console.log(`  - Persistir a BD: ${persist_db ? 'SÍ' : 'NO'}`)
     console.log(`  - Generar archivos: ${generate_files ? 'SÍ' : 'NO'}`)
  
@@ -890,8 +906,13 @@ export async function handler(req: Request): Promise<Response> {
       .rpc('iniciar_proceso_etl', {
         p_nombre: 'extraer_bases_curriculares',
         p_tipo_proceso: 'extraccion',
-        p_descripcion: 'Extracción de Bases Curriculares 1° a 6° básico desde curriculumnacional.cl',
-        p_configuracion: JSON.stringify({ force, modo: CONFIG.MAX_ASIGNATURAS > 0 ? 'test' : 'produccion' }),
+        p_descripcion: 'Extracción de Bases Curriculares de todas las categorías desde curriculumnacional.cl',
+        p_configuracion: JSON.stringify({ 
+          force, 
+          modo_asignaturas: CONFIG.MAX_ASIGNATURAS > 0 ? 'test' : 'produccion',
+          modo_categorias: CONFIG.MAX_CATEGORIAS > 0 ? 'test' : 'produccion',
+          total_categorias: CONFIG.CATEGORY_URLS.length,
+        }),
       })
  
     if (procesoError) {
@@ -900,39 +921,59 @@ export async function handler(req: Request): Promise<Response> {
  
     const procesoId = proceso
     console.log(`📝 Proceso ETL creado: ${procesoId}`)
- 
+
     try {
-      // 2. Obtener página principal
-      console.log('📡 Obteniendo página principal...')
-      await supabase.rpc('agregar_log_proceso_etl', {
-        p_proceso_id: procesoId,
-        p_mensaje: 'Obteniendo página principal de curriculumnacional.cl',
-      })
- 
-      const htmlPrincipal = await fetchWithRetry(CONFIG.START_URL)
- 
-      // 3. Extraer links de asignaturas
-      console.log('🔍 Extrayendo asignaturas y cursos...')
-      const asignaturas = extraerAsignaturasYCursos(htmlPrincipal)
-      console.log(`✓ Encontradas ${asignaturas.length} asignaturas`)
- 
-      await supabase.rpc('agregar_log_proceso_etl', {
-        p_proceso_id: procesoId,
-        p_mensaje: `Encontradas ${asignaturas.length} asignaturas`,
-      })
- 
-      // 4. Extraer objetivos de cada asignatura
+      // 2. Determinar qué categorías procesar
+      const categoriasAProcesar = CONFIG.MAX_CATEGORIAS > 0
+        ? CONFIG.CATEGORY_URLS.slice(0, CONFIG.MAX_CATEGORIAS)
+        : CONFIG.CATEGORY_URLS
+      
+      console.log(`📋 Procesando ${categoriasAProcesar.length} de ${CONFIG.CATEGORY_URLS.length} categorías`)
+      
+      // Array para acumular TODOS los objetivos de TODAS las categorías
       const todosLosObjetivos: ObjetivoAprendizaje[] = []
       let asignaturasProcesadas = 0
- 
-      // Aplicar límite si está configurado (0 = sin límite)
-      const asignaturasAProcesar = CONFIG.MAX_ASIGNATURAS > 0
-        ? asignaturas.slice(0, CONFIG.MAX_ASIGNATURAS)
-        : asignaturas
- 
-      console.log(`📝 Procesando ${asignaturasAProcesar.length} de ${asignaturas.length} asignaturas`)
- 
-      for (const asig of asignaturasAProcesar) {
+      let categoriasProcesadas = 0
+
+      // 3. LOOP POR CADA CATEGORÍA
+      for (const categoryUrl of categoriasAProcesar) {
+        try {
+          // Extraer nombre de categoría desde URL
+          const categoriaMatch = categoryUrl.match(/\/curriculum\/([^/]+)/)
+          const categoriaNombre = categoriaMatch ? extraerCategoriaDesdeURL(categoryUrl) : 'Desconocida'
+          
+          console.log(`\n${'='.repeat(60)}`)
+          console.log(`📂 CATEGORÍA: ${categoriaNombre}`)
+          console.log(`${'='.repeat(60)}`)
+
+          await supabase.rpc('agregar_log_proceso_etl', {
+            p_proceso_id: procesoId,
+            p_mensaje: `Procesando categoría: ${categoriaNombre}`,
+          })
+
+          // Obtener página de la categoría
+          console.log('📡 Obteniendo página de categoría...')
+          const htmlCategoria = await fetchWithRetry(categoryUrl)
+
+          // Extraer links de asignaturas de esta categoría
+          console.log('🔍 Extrayendo asignaturas y cursos...')
+          const asignaturas = extraerAsignaturasYCursos(htmlCategoria)
+          console.log(`✓ Encontradas ${asignaturas.length} asignaturas en esta categoría`)
+
+          await supabase.rpc('agregar_log_proceso_etl', {
+            p_proceso_id: procesoId,
+            p_mensaje: `Encontradas ${asignaturas.length} asignaturas en ${categoriaNombre}`,
+          })
+
+          // Aplicar límite de asignaturas si está configurado (0 = sin límite)
+          const asignaturasAProcesar = CONFIG.MAX_ASIGNATURAS > 0
+            ? asignaturas.slice(0, CONFIG.MAX_ASIGNATURAS)
+            : asignaturas
+
+          console.log(`📝 Procesando ${asignaturasAProcesar.length} de ${asignaturas.length} asignaturas`)
+
+          // 4. LOOP POR CADA ASIGNATURA EN ESTA CATEGORÍA
+          for (const asig of asignaturasAProcesar) {
         try {
           console.log(`\n📚 Procesando: ${asig.nombre}`)
           await supabase.rpc('agregar_log_proceso_etl', {
@@ -1032,9 +1073,29 @@ export async function handler(req: Request): Promise<Response> {
             p_mensaje: `Error en ${asig.nombre}: ${errorMessage}`,
           })
         }
-      }
- 
-      console.log(`\n✅ Extracción completada: ${todosLosObjetivos.length} objetivos`)
+      } // Fin loop asignaturas
+
+      categoriasProcesadas++
+      console.log(`\n✅ Categoría completada: ${categoriaNombre}`)
+      console.log(`   📊 Total objetivos extraídos hasta ahora: ${todosLosObjetivos.length}`)
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      console.error(`\n❌ Error procesando categoría ${categoryUrl}: ${errorMessage}`)
+      await supabase.rpc('agregar_log_proceso_etl', {
+        p_proceso_id: procesoId,
+        p_mensaje: `Error en categoría: ${errorMessage}`,
+      })
+      // Continuar con la siguiente categoría
+    }
+  } // Fin loop categorías
+
+      console.log(`\n${'='.repeat(60)}`)
+      console.log(`✅ EXTRACCIÓN COMPLETADA`)
+      console.log(`${'='.repeat(60)}`)
+      console.log(`   📂 Categorías procesadas: ${categoriasProcesadas} de ${categoriasAProcesar.length}`)
+      console.log(`   📚 Asignaturas procesadas: ${asignaturasProcesadas}`)
+      console.log(`   🎯 Total objetivos extraídos: ${todosLosObjetivos.length}`)
       console.log(`   📊 Desglose por tipo:`)
       console.log(`      - Contenido (OA): ${todosLosObjetivos.filter(o => o.tipo_objetivo === 'contenido').length}`)
       console.log(`      - Habilidades (OAH): ${todosLosObjetivos.filter(o => o.tipo_objetivo === 'habilidad').length}`)
