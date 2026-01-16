@@ -22,6 +22,7 @@
  
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.ts'
+import { PATRON_VALIDACION_OA, PATRON_EXTRACCION_OA } from './constants.ts'
  
 // ============================================
 // CONFIGURACIÓN
@@ -99,9 +100,7 @@ function limpiarTexto(texto: string): string {
  * Ejemplos válidos: "AR01 OA 01", "CN03 OA 05", "HI05 OA 12"
  */
 function validarCodigoOA(codigo: string): boolean {
-  // Patrón: 2-4 letras, 2 dígitos, espacio, "OA", espacio, 1-2 dígitos
-  const patron = /^[A-Z]{2,4}\d{2}\s+OA\s+\d{1,2}$/i
-  return patron.test(codigo.trim())
+  return PATRON_VALIDACION_OA.test(codigo.trim())
 }
  
 /**
@@ -269,10 +268,10 @@ function extraerObjetivos(html: string, asignatura: string, curso: string, nivel
             let nivelItem = 0
             let j = inicioItem
             while (j < bloqueEje.length) {
-              if (bloqueEje.substr(j, 4) === '<div') {
+              if (bloqueEje.substring(j, j + 4) === '<div') {
                 nivelItem++
                 j += 4
-              } else if (bloqueEje.substr(j, 6) === '</div>') {
+              } else if (bloqueEje.substring(j, j + 6) === '</div>') {
                 nivelItem--
                 if (nivelItem === 0) {
                   const itemHtml = bloqueEje.substring(inicioItem, j + 6)
@@ -284,7 +283,7 @@ function extraerObjetivos(html: string, asignatura: string, curso: string, nivel
                     let codigoTexto = codigoMatch ? limpiarTexto(codigoMatch[1]) : ''
  
                     // Extraer solo el código del formato "Objetivo de aprendizaje AR01 OA 01"
-                    const codigoExtraido = codigoTexto.match(/([A-Z]{2,4}\d{2}\s+OA\s+\d{1,2})/i)
+                    const codigoExtraido = codigoTexto.match(PATRON_EXTRACCION_OA)
                     const codigo = codigoExtraido ? codigoExtraido[1] : ''
  
                     if (codigo && validarCodigoOA(codigo)) {

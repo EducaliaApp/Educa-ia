@@ -79,6 +79,8 @@ function limpiarTexto(texto) {
 }
 
 function validarCodigoOA(codigo) {
+  // IMPORTANTE: Este patrón está definido en supabase/functions/extraer-bases-curriculares/constants.ts
+  // como PATRON_VALIDACION_OA. Mantener ambos sincronizados.
   // Valida formato: 2-4 letras mayúsculas, 2 dígitos, ' OA ', 1-2 dígitos (ej: 'AR01 OA 01')
   const patron = /^[A-Z]{2,4}\d{2}\s+OA\s+\d{1,2}$/i
   return patron.test(codigo.trim())
