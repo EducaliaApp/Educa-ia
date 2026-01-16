@@ -1,7 +1,10 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { ensureProfileForUser } from '@/lib/supabase/profiles'
+import type { Profile } from '@/lib/supabase/types'
 import Sidebar from '@/components/Sidebar'
 import { ToastProvider } from '@/components/ui/Toast'
+import { getRoadmapCategoryFlags } from '@/flags'
 
 export default async function DashboardLayout({
   children,
@@ -18,23 +21,30 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
-  // Obtener perfil del usuario
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  let profile: Profile | null = null
+
+  try {
+    profile = await ensureProfileForUser(user)
+  } catch (error) {
+    console.error('Failed to load profile for dashboard layout', error)
+    await supabase.auth.signOut()
+    redirect('/onboarding?status=profile-error')
+  }
 
   if (!profile) {
-    redirect('/login')
+    await supabase.auth.signOut()
+    redirect('/onboarding?status=profile-error')
   }
+
+  const resolvedProfile = profile as Profile
+  const roadmapFlags = await getRoadmapCategoryFlags()
 
   return (
     <ToastProvider>
       <div className="flex h-screen overflow-hidden bg-gray-50">
         {/* Sidebar */}
         <aside className="hidden md:flex md:flex-col md:w-64 lg:w-72">
-          <Sidebar profile={profile} />
+          <Sidebar profile={resolvedProfile} flags={roadmapFlags} />
         </aside>
 
         {/* Main content */}

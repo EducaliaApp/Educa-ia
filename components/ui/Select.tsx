@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string
   error?: string
-  options: { value: string; label: string }[]
+  options?: { value: string; label: string }[]
 }
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
@@ -34,11 +34,11 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           {...props}
         >
           <option value="">Selecciona una opción</option>
-          {options.map((option) => (
+          {options?.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
-          ))}
+          )) || []}
         </select>
         {error && (
           <p className="mt-1 text-sm text-red-600">{error}</p>

@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, FileText, BarChart3, ArrowLeft, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, FileText, BarChart3, Settings, ArrowLeft, LogOut, ClipboardCheck, Briefcase, GraduationCap, Cpu, CreditCard, Shield, Database } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
   name: string
   href: string
   icon: React.ComponentType<{ className?: string }>
+  group?: string
 }
 
 const navItems: NavItem[] = [
@@ -21,6 +22,13 @@ const navItems: NavItem[] = [
     name: 'Usuarios',
     href: '/admin/usuarios',
     icon: Users,
+    group: 'usuarios',
+  },
+  {
+    name: 'Roles',
+    href: '/admin/roles',
+    icon: Shield,
+    group: 'usuarios',
   },
   {
     name: 'Planificaciones',
@@ -28,9 +36,44 @@ const navItems: NavItem[] = [
     icon: FileText,
   },
   {
+    name: 'Evaluaciones',
+    href: '/admin/evaluaciones',
+    icon: ClipboardCheck,
+  },
+  {
+    name: 'Portafolios',
+    href: '/admin/portafolios',
+    icon: Briefcase,
+  },
+  {
+    name: 'Planes',
+    href: '/admin/planes',
+    icon: CreditCard,
+  },
+  {
+    name: 'MINEDUC',
+    href: '/admin/mineduc',
+    icon: GraduationCap,
+  },
+  {
+    name: 'ETL / Procesos',
+    href: '/admin/etl',
+    icon: Database,
+  },
+  {
+    name: 'Métricas IA',
+    href: '/admin/metricas-ia',
+    icon: Cpu,
+  },
+  {
     name: 'Analytics',
     href: '/admin/analytics',
     icon: BarChart3,
+  },
+  {
+    name: 'Sistema',
+    href: '/admin/system',
+    icon: Settings,
   },
 ]
 
@@ -41,6 +84,35 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ userName, userEmail }: AdminSidebarProps) {
   const pathname = usePathname()
+
+  // Group navigation items
+  const groupedItems = navItems.reduce((acc, item) => {
+    const group = item.group || 'main'
+    if (!acc[group]) acc[group] = []
+    acc[group].push(item)
+    return acc
+  }, {} as Record<string, NavItem[]>)
+
+  const renderNavItem = (item: NavItem) => {
+    const Icon = item.icon
+    const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href))
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={cn(
+          'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+          isActive
+            ? 'bg-blue-600 text-white'
+            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+        )}
+      >
+        <Icon className="w-5 h-5" />
+        <span className="font-medium">{item.name}</span>
+      </Link>
+    )
+  }
 
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 min-h-screen flex flex-col">
@@ -59,26 +131,20 @@ export function AdminSidebar({ userName, userEmail }: AdminSidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1">
-        {navItems.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href))
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
-                isActive
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              )}
-            >
-              <Icon className="w-5 h-5" />
-              <span className="font-medium">{item.name}</span>
-            </Link>
-          )
-        })}
+        {/* Main items (no group) */}
+        {groupedItems.main?.map(renderNavItem)}
+        
+        {/* Usuarios group */}
+        {groupedItems.usuarios && (
+          <>
+            <div className="pt-4 pb-2">
+              <h3 className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Gestión de Usuarios
+              </h3>
+            </div>
+            {groupedItems.usuarios.map(renderNavItem)}
+          </>
+        )}
       </nav>
 
       {/* Footer */}

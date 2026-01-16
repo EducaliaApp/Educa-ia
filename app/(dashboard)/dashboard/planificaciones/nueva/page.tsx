@@ -96,7 +96,7 @@ export default function NuevaPlanificacionPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <Loading size="lg" text="Generando planificación con IA... Esto puede tomar unos momentos." />
+        <Loading size="lg" text="Generando planificación con LIA... Esto puede tomar unos momentos." />
       </div>
     )
   }
@@ -106,7 +106,7 @@ export default function NuevaPlanificacionPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Nueva Planificación</h1>
         <p className="text-gray-600 mt-2">
-          Genera una planificación curricular completa con IA en minutos
+          Genera una planificación curricular completa con LIA en minutos
         </p>
       </div>
 
@@ -169,7 +169,7 @@ export default function NuevaPlanificacionPage() {
                 Cancelar
               </Button>
               <Button type="submit" className="flex-1">
-                Generar con IA
+                Generar con LIA
               </Button>
             </div>
           </form>

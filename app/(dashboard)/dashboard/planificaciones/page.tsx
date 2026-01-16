@@ -91,7 +91,7 @@ export default async function PlanificacionesPage() {
               No tienes planificaciones aún
             </h3>
             <p className="text-gray-600 mb-6">
-              Crea tu primera planificación curricular con IA en minutos
+              Crea tu primera planificación curricular con LIA en minutos
             </p>
             <Link href="/dashboard/planificaciones/nueva">
               <Button>

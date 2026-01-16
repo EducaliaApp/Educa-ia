@@ -6,8 +6,10 @@ import { useRouter } from 'next/navigation'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
+import GoogleIcon from '@/components/icons/GoogleIcon'
 import { createClient } from '@/lib/supabase/client'
 import { SUPABASE_ENV_HINT, isMissingSupabaseEnvError } from '@/lib/supabase/config'
+import { getAuthCallbackUrl } from '@/lib/supabase/urls'
 
 const ASIGNATURAS = [
   { value: 'matematica', label: 'Matemática' },
@@ -47,6 +49,7 @@ export default function RegisterPage() {
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -66,6 +69,13 @@ export default function RegisterPage() {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
+        options: {
+          data: {
+            nombre: formData.nombre,
+            asignatura: formData.asignatura,
+            nivel: formData.nivel,
+          },
+        },
       })
 
       if (authError) {
@@ -74,26 +84,7 @@ export default function RegisterPage() {
         return
       }
 
-      // Actualizar perfil con datos adicionales
-      if (authData.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            nombre: formData.nombre,
-            asignatura: formData.asignatura,
-            nivel: formData.nivel,
-          })
-          .eq('id', authData.user.id)
-
-        if (profileError) {
-          setError(profileError.message)
-          setLoading(false)
-          return
-        }
-      }
-
-      router.push('/dashboard')
-      router.refresh()
+      router.push(`/register/verify-email?email=${encodeURIComponent(formData.email)}`)
     } catch (error) {
       if (isMissingSupabaseEnvError(error)) {
         setError(`Configura ${SUPABASE_ENV_HINT} para crear una cuenta.`)
@@ -102,6 +93,43 @@ export default function RegisterPage() {
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleGoogleSignUp = async () => {
+    setError('')
+    setGoogleLoading(true)
+
+    try {
+      const supabase = createClient()
+      const redirectTo = getAuthCallbackUrl('/dashboard')
+
+      const { data, error: signInError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          queryParams: {
+            prompt: 'select_account',
+          },
+        },
+      })
+
+      if (signInError) {
+        setError(signInError.message)
+        return
+      }
+
+      if (data?.url) {
+        window.location.href = data.url
+      }
+    } catch (error) {
+      if (isMissingSupabaseEnvError(error)) {
+        setError(`Configura ${SUPABASE_ENV_HINT} para registrarte con Google.`)
+      } else {
+        setError('Error inesperado al conectar con Google')
+      }
+    } finally {
+      setGoogleLoading(false)
     }
   }
 
@@ -122,7 +150,7 @@ export default function RegisterPage() {
           <p className="text-gray-600 mt-2">Crea tu cuenta gratis</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" aria-busy={loading || googleLoading}>
           <Input
             type="text"
             name="nombre"
@@ -131,6 +159,7 @@ export default function RegisterPage() {
             value={formData.nombre}
             onChange={handleChange}
             required
+            autoComplete="name"
           />
 
           <Input
@@ -141,6 +170,7 @@ export default function RegisterPage() {
             value={formData.email}
             onChange={handleChange}
             required
+            autoComplete="email"
           />
 
           <Input
@@ -152,6 +182,7 @@ export default function RegisterPage() {
             onChange={handleChange}
             required
             minLength={6}
+            autoComplete="new-password"
           />
 
           <Select
@@ -178,10 +209,32 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <Button type="submit" className="w-full" loading={loading}>
+          <Button type="submit" className="w-full" loading={loading} disabled={googleLoading}>
             Crear Cuenta
           </Button>
         </form>
+
+        <div className="mt-6 space-y-4">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center" aria-hidden="true">
+              <span className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-white px-2 text-gray-500">O crea tu cuenta con</span>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full gap-2"
+            onClick={handleGoogleSignUp}
+            loading={googleLoading}
+            disabled={loading}
+          >
+            <GoogleIcon className="h-5 w-5" />
+            Google
+          </Button>
+        </div>
 
         <div className="mt-6 text-center">
           <p className="text-gray-600">

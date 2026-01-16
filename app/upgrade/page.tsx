@@ -8,7 +8,7 @@ export default function UpgradePage() {
     free: [
       { text: '5 planificaciones por mes', included: true },
       { text: '3 evaluaciones por mes', included: true },
-      { text: 'Generación con IA', included: true },
+      { text: 'Generación con LIA', included: true },
       { text: 'Exportación a PDF con marca de agua', included: true },
       { text: 'Planificaciones ilimitadas', included: false },
       { text: 'Evaluaciones ilimitadas', included: false },
@@ -19,7 +19,7 @@ export default function UpgradePage() {
     pro: [
       { text: '5 planificaciones por mes', included: true },
       { text: '3 evaluaciones por mes', included: true },
-      { text: 'Generación con IA', included: true },
+      { text: 'Generación con LIA', included: true },
       { text: 'Exportación a PDF', included: true },
       { text: 'Planificaciones ilimitadas', included: true },
       { text: 'Evaluaciones ilimitadas', included: true },

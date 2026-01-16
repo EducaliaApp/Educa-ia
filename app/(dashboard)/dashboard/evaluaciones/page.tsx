@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Plus, ClipboardCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import type { Evaluacion } from '@/lib/supabase/types'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 
@@ -21,13 +22,15 @@ export default async function EvaluacionesPage() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
+  const evaluacionesList = (evaluaciones ?? []) as Evaluacion[]
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Evaluaciones</h1>
           <p className="text-gray-600 mt-2">
-            Evalúa trabajos de estudiantes con IA
+            Evalúa trabajos de estudiantes con LIA
           </p>
         </div>
         <Link href="/dashboard/evaluaciones/nueva">
@@ -38,9 +41,9 @@ export default async function EvaluacionesPage() {
         </Link>
       </div>
 
-      {evaluaciones && evaluaciones.length > 0 ? (
+      {evaluacionesList.length > 0 ? (
         <div className="grid gap-4">
-          {evaluaciones.map((evaluacion) => {
+          {evaluacionesList.map((evaluacion) => {
             const feedback = evaluacion.feedback as any
             return (
               <Card key={evaluacion.id} hover>
@@ -60,7 +63,7 @@ export default async function EvaluacionesPage() {
                       {feedback && (
                         <div className="mt-3 pt-3 border-t border-gray-200">
                           <p className="text-sm text-gray-700 font-medium">
-                            Feedback generado por IA disponible
+                            Feedback generado por LIA disponible
                           </p>
                         </div>
                       )}
@@ -88,7 +91,7 @@ export default async function EvaluacionesPage() {
               No tienes evaluaciones aún
             </h3>
             <p className="text-gray-600 mb-6">
-              Evalúa trabajos de estudiantes con retroalimentación generada por IA
+              Evalúa trabajos de estudiantes con retroalimentación generada por LIA
             </p>
             <Link href="/dashboard/evaluaciones/nueva">
               <Button variant="secondary">

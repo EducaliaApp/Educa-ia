@@ -1,19 +1,28 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { UserTable } from '@/components/admin/user-table'
+import { AjustarCreditosModal } from '@/components/admin/AjustarCreditosModal'
+import { EditUserModal } from '@/components/admin/EditUserModal'
+import { CreateUserModal } from '@/components/admin/CreateUserModal'
 import Input from '@/components/ui/Input'
-import { Search, Users as UsersIcon } from 'lucide-react'
+import Button from '@/components/ui/Button'
+import { Search, Users as UsersIcon, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface User {
   id: string
   nombre: string
   email: string
-  plan: 'free' | 'pro'
+  plan: string
+  role: string
   asignatura: string
+  nivel: string
   created_at: string
+  creditos_planificaciones?: number
+  creditos_evaluaciones?: number
+  creditos_usados_planificaciones?: number
+  creditos_usados_evaluaciones?: number
   total_planificaciones?: number
 }
 
@@ -23,8 +32,11 @@ export default function UsuariosPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [planFilter, setPlanFilter] = useState('all')
-
-  const supabase = createClient()
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
 
   useEffect(() => {
     fetchUsers()
@@ -32,36 +44,18 @@ export default function UsuariosPage() {
 
   useEffect(() => {
     filterUsers()
-  }, [searchTerm, planFilter, users])
+  }, [searchTerm, planFilter, roleFilter, users])
 
   const fetchUsers = async () => {
     setIsLoading(true)
     try {
-      // Get all users with their planificaciones count
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, nombre, email, plan, asignatura, created_at')
-        .order('created_at', { ascending: false })
-
-      if (profiles) {
-        // Get planificaciones count for each user
-        const usersWithCounts = await Promise.all(
-          profiles.map(async (profile) => {
-            const { count } = await supabase
-              .from('planificaciones')
-              .select('*', { count: 'exact', head: true })
-              .eq('user_id', profile.id)
-
-            return {
-              ...profile,
-              total_planificaciones: count || 0,
-            }
-          })
-        )
-
-        setUsers(usersWithCounts as User[])
-        setFilteredUsers(usersWithCounts as User[])
+      const response = await fetch('/api/admin/usuarios')
+      if (!response.ok) {
+        throw new Error('Error al obtener usuarios')
       }
+      const data = await response.json()
+      setUsers(data.users || [])
+      setFilteredUsers(data.users || [])
     } catch (error) {
       console.error('Error fetching users:', error)
     } finally {
@@ -86,39 +80,50 @@ export default function UsuariosPage() {
       filtered = filtered.filter((user) => user.plan === planFilter)
     }
 
+    // Filter by role
+    if (roleFilter !== 'all') {
+      filtered = filtered.filter((user) => user.role === roleFilter)
+    }
+
     setFilteredUsers(filtered)
   }
 
-  const handlePlanToggle = async (userId: string, currentPlan: 'free' | 'pro') => {
-    const newPlan = currentPlan === 'free' ? 'pro' : 'free'
-
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ plan: newPlan })
-        .eq('id', userId)
-
-      if (error) throw error
-
-      // Update local state
-      setUsers((prev) =>
-        prev.map((user) => (user.id === userId ? { ...user, plan: newPlan } : user))
-      )
-    } catch (error) {
-      console.error('Error updating plan:', error)
-      alert('Error al actualizar el plan')
-    }
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user)
+    setIsEditModalOpen(true)
   }
 
-  const freeUsersCount = users.filter((u) => u.plan === 'free').length
-  const proUsersCount = users.filter((u) => u.plan === 'pro').length
+  const handleAjustarCreditos = (user: User) => {
+    setSelectedUser(user)
+    setIsModalOpen(true)
+  }
+
+  const handleCreditosSuccess = () => {
+    fetchUsers()
+  }
+
+  const handleEditSuccess = () => {
+    fetchUsers()
+  }
+
+  const adminUsersCount = users.filter((u) => u.role === 'admin').length
+  const regularUsersCount = users.filter((u) => u.role === 'user').length
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Gestión de Usuarios</h1>
-        <p className="text-slate-400">Administra todos los usuarios de ProfeFlow</p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">Gestión de Usuarios</h1>
+          <p className="text-slate-400">Administra todos los usuarios de ProfeFlow</p>
+        </div>
+        <Button
+          onClick={() => setIsCreateModalOpen(true)}
+          className="flex items-center gap-2"
+        >
+          <Plus className="w-5 h-5" />
+          Crear Usuario
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -138,8 +143,8 @@ export default function UsuariosPage() {
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-sm font-medium mb-1">Usuarios FREE</p>
-              <h3 className="text-white text-3xl font-bold">{freeUsersCount}</h3>
+              <p className="text-slate-400 text-sm font-medium mb-1">Usuarios Regulares</p>
+              <h3 className="text-white text-3xl font-bold">{regularUsersCount}</h3>
             </div>
             <div className="p-3 bg-slate-600/10 rounded-lg">
               <UsersIcon className="w-6 h-6 text-slate-400" />
@@ -150,8 +155,8 @@ export default function UsuariosPage() {
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-sm font-medium mb-1">Usuarios PRO</p>
-              <h3 className="text-white text-3xl font-bold">{proUsersCount}</h3>
+              <p className="text-slate-400 text-sm font-medium mb-1">Administradores</p>
+              <h3 className="text-white text-3xl font-bold">{adminUsersCount}</h3>
             </div>
             <div className="p-3 bg-green-600/10 rounded-lg">
               <UsersIcon className="w-6 h-6 text-green-600" />
@@ -162,7 +167,7 @@ export default function UsuariosPage() {
 
       {/* Filters */}
       <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="relative">
             <Input
               type="text"
@@ -184,8 +189,22 @@ export default function UsuariosPage() {
             )}
           >
             <option value="all">Todos los planes</option>
-            <option value="free">Solo FREE</option>
-            <option value="pro">Solo PRO</option>
+            <option value="free">Plan Free</option>
+            <option value="pro">Plan Pro</option>
+          </select>
+
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className={cn(
+              'w-full px-3 py-2 border rounded-lg',
+              'focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent',
+              'bg-slate-800 border-slate-700 text-white'
+            )}
+          >
+            <option value="all">Todos los roles</option>
+            <option value="user">Usuarios</option>
+            <option value="admin">Administradores</option>
           </select>
         </div>
       </div>
@@ -193,7 +212,8 @@ export default function UsuariosPage() {
       {/* Users Table */}
       <UserTable
         users={filteredUsers}
-        onPlanToggle={handlePlanToggle}
+        onEditUser={handleEditUser}
+        onAjustarCreditos={handleAjustarCreditos}
         isLoading={isLoading}
       />
 
@@ -205,6 +225,48 @@ export default function UsuariosPage() {
           </p>
         </div>
       )}
+
+      {/* Ajustar Creditos Modal */}
+      {selectedUser && (
+        <AjustarCreditosModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          userId={selectedUser.id}
+          userName={selectedUser.nombre}
+          currentCreditos={{
+            planificaciones: selectedUser.creditos_planificaciones || 0,
+            evaluaciones: selectedUser.creditos_evaluaciones || 0,
+            usados_planificaciones: selectedUser.creditos_usados_planificaciones || 0,
+            usados_evaluaciones: selectedUser.creditos_usados_evaluaciones || 0,
+          }}
+          onSuccess={handleCreditosSuccess}
+        />
+      )}
+
+      {/* Edit User Modal */}
+      {selectedUser && (
+        <EditUserModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          userId={selectedUser.id}
+          currentData={{
+            nombre: selectedUser.nombre,
+            email: selectedUser.email,
+            plan: selectedUser.plan,
+            role: selectedUser.role,
+            asignatura: selectedUser.asignatura,
+            nivel: selectedUser.nivel,
+          }}
+          onSuccess={handleEditSuccess}
+        />
+      )}
+
+      {/* Create User Modal */}
+      <CreateUserModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={handleEditSuccess}
+      />
     </div>
   )
 }

@@ -102,7 +102,7 @@ export default function NuevaEvaluacionPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <Loading size="lg" text="Analizando con IA... Esto puede tomar unos momentos." />
+        <Loading size="lg" text="Analizando con LIA... Esto puede tomar unos momentos." />
       </div>
     )
   }
@@ -113,7 +113,7 @@ export default function NuevaEvaluacionPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Feedback Generado</h1>
           <p className="text-gray-600 mt-2">
-            Retroalimentación constructiva generada por IA
+            Retroalimentación constructiva generada por LIA
           </p>
         </div>
 
@@ -209,7 +209,7 @@ export default function NuevaEvaluacionPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Nueva Evaluación</h1>
         <p className="text-gray-600 mt-2">
-          Sube el trabajo de un estudiante y recibe feedback constructivo generado por IA
+          Sube el trabajo de un estudiante y recibe feedback constructivo generado por LIA
         </p>
       </div>
 
@@ -278,7 +278,7 @@ export default function NuevaEvaluacionPage() {
                 Cancelar
               </Button>
               <Button type="submit" variant="secondary" className="flex-1">
-                Evaluar con IA
+                Evaluar con LIA
               </Button>
             </div>
           </form>

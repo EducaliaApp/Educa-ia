@@ -1,0 +1,90 @@
+name: Pipeline RAG MINEDUC - Curriculum Nacional
+
+on:
+    schedule:
+        - cron: '0 3 * * 1'  # Cada lunes a las 03:00 AM
+
+    workflow_dispatch:
+        inputs:
+            run-type:
+                description: 'Tipo de ejecución: full o incremental'
+                required: true
+                default: 'incremental'
+
+env:
+    PYTHON_VERSION: '3.11'
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }} # CUENTA GEMINI FREE
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # SIN CREDITOS DISPONIBLES
+    SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+    SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+    COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }} # CUENTA COHERE TRIAL.
+    AI_EXTRACTION_ENABLED: 'true'
+
+permissions:
+    contents: read
+    actions: write
+
+jobs:
+    preflight:
+        name: "🔍 Pre-flight: Verificar Sistema"
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        outputs:
+            system_healthy: ${{ steps.health.outputs.healthy }}
+            can_proceed: ${{ steps.health.outputs.can_proceed }}
+        
+        steps:
+            - uses: actions/checkout@v4
+            
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                python-version: ${{ env.PYTHON_VERSION }}
+                cache: 'pip'
+            
+            - name: Instalar dependencias mínimas
+              run: pip install supabase python-dotenv
+            
+            - name: Verificar salud del sistema
+              id: health
+              run: |
+                python - <<'PYTHON'
+                import os
+                from supabase import create_client
+                
+                supabase = create_client(
+                    os.getenv('SUPABASE_URL'),
+                    os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+                )
+                
+                # Verificar conectividad
+                try:
+                    result = supabase.table('documentos_oficiales').select('id').limit(1).execute()
+                    print("✅ Conexión Supabase OK")
+                    healthy = True
+                except Exception as e:
+                    print(f"❌ Error Supabase: {e}")
+                    healthy = False
+                
+                # Verificar índices críticos (vía RPC)
+                try:
+                    indices = supabase.rpc('verificar_indice_hnsw_existe').execute()
+                    if indices.data and indices.data.get('existe'):
+                        print("✅ Índice HNSW presente")
+                    else:
+                        print("⚠️ Índice HNSW faltante (se creará)")
+                except:
+                    pass
+                
+                # Output
+                print(f"::set-output name=healthy::{str(healthy).lower()}")
+                print(f"::set-output name=can_proceed::{str(healthy).lower()}")
+                PYTHON
+            
+            - name: Bloquear si sistema no está saludable
+              if: steps.health.outputs.healthy == 'false'
+              run: |
+                echo "❌ Sistema no está operativo - abortando pipeline"
+                exit 1

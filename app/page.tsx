@@ -8,7 +8,7 @@ export default function Home() {
           Profe<span className="text-primary">Flow</span>
         </h1>
         <p className="text-xl text-gray-600 max-w-2xl">
-          Planificación curricular inteligente con IA para profesores chilenos
+          Planificación curricular inteligente con LIA para profesores chilenos
         </p>
         <div className="flex gap-4 justify-center mt-8">
           <Link

@@ -1,10 +1,19 @@
 {
+  "tasks": {
+    "test": "deno test --allow-net --allow-env",
+    "test:monitor": "deno test monitor-documentos-oficiales/test.ts --allow-net --allow-env",
+    "test:processor": "deno test procesar-documentos/test.ts --allow-net --allow-env", 
+    "test:integration": "deno test test-integration.ts --allow-net --allow-env",
+    "test:watch": "deno test --allow-net --allow-env --watch",
+    "test:coverage": "deno test --allow-net --allow-env --coverage=coverage",
+    "coverage": "deno coverage coverage"
+  },
+  "imports": {
+    "supabase": "https://esm.sh/@supabase/supabase-js@2"
+  },
   "compilerOptions": {
     "allowJs": true,
     "lib": ["deno.window"],
     "strict": true
-  },
-  "imports": {
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.39.3"
   }
 }

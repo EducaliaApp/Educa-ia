@@ -1,35 +1,34 @@
 'use client'
 
-import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
 import { formatDate } from '@/lib/utils'
+import { Edit, Shield } from 'lucide-react'
 
 interface User {
   id: string
   nombre: string
   email: string
-  plan: 'free' | 'pro'
+  plan: string
+  role: string
+  role_name?: string
   asignatura: string
+  nivel: string
   total_planificaciones?: number
+  creditos_planificaciones?: number
+  creditos_evaluaciones?: number
+  creditos_usados_planificaciones?: number
+  creditos_usados_evaluaciones?: number
   created_at: string
 }
 
 interface UserTableProps {
   users: User[]
-  onPlanToggle?: (userId: string, currentPlan: 'free' | 'pro') => void
+  onEditUser?: (user: User) => void
+  onAjustarCreditos?: (user: User) => void
   isLoading?: boolean
 }
 
-export function UserTable({ users, onPlanToggle, isLoading }: UserTableProps) {
-  const [loadingUserId, setLoadingUserId] = useState<string | null>(null)
-
-  const handlePlanToggle = async (userId: string, currentPlan: 'free' | 'pro') => {
-    setLoadingUserId(userId)
-    await onPlanToggle?.(userId, currentPlan)
-    setLoadingUserId(null)
-  }
-
+export function UserTable({ users, onEditUser, onAjustarCreditos, isLoading }: UserTableProps) {
   if (isLoading) {
     return (
       <div className="bg-slate-900 border border-slate-800 rounded-lg p-8">
@@ -65,19 +64,23 @@ export function UserTable({ users, onPlanToggle, isLoading }: UserTableProps) {
                 Plan
               </th>
               <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
+                Rol
+              </th>
+              <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
                 Asignatura
               </th>
               <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
-                Planificaciones
+                Créditos Plan.
+              </th>
+              <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
+                Créditos Eval.
               </th>
               <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
                 Registro
               </th>
-              {onPlanToggle && (
-                <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
-                  Acciones
-                </th>
-              )}
+              <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
+                Acciones
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
@@ -102,31 +105,57 @@ export function UserTable({ users, onPlanToggle, isLoading }: UserTableProps) {
                     {user.plan.toUpperCase()}
                   </Badge>
                 </td>
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-1">
+                    {user.role === 'admin' && <Shield className="w-4 h-4 text-yellow-500" />}
+                    <span className={user.role === 'admin' ? 'text-yellow-500 font-medium' : 'text-slate-400'}>
+                      {user.role_name || (user.role === 'admin' ? 'Administrador' : 'Usuario')}
+                    </span>
+                  </div>
+                </td>
                 <td className="px-6 py-4 text-slate-400 text-sm">
                   {user.asignatura || '-'}
                 </td>
-                <td className="px-6 py-4 text-slate-400 text-sm">
-                  {user.total_planificaciones ?? '-'}
+                <td className="px-6 py-4">
+                  <div className="text-sm">
+                    <span className="text-slate-300 font-medium">
+                      {user.creditos_usados_planificaciones || 0}/{user.creditos_planificaciones || 0}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="text-sm">
+                    <span className="text-slate-300 font-medium">
+                      {user.creditos_usados_evaluaciones || 0}/{user.creditos_evaluaciones || 0}
+                    </span>
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-slate-400 text-sm">
                   {formatDate(user.created_at)}
                 </td>
-                {onPlanToggle && (
-                  <td className="px-6 py-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePlanToggle(user.id, user.plan)}
-                      disabled={loadingUserId === user.id}
-                    >
-                      {loadingUserId === user.id ? (
-                        'Cambiando...'
-                      ) : (
-                        `Cambiar a ${user.plan === 'free' ? 'PRO' : 'FREE'}`
-                      )}
-                    </Button>
-                  </td>
-                )}
+                <td className="px-6 py-4">
+                  <div className="flex gap-2">
+                    {onEditUser && (
+                      <button
+                        onClick={() => onEditUser(user)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
+                        title="Editar usuario"
+                      >
+                        <Edit className="w-4 h-4" />
+                        Editar
+                      </button>
+                    )}
+                    {onAjustarCreditos && (
+                      <button
+                        onClick={() => onAjustarCreditos(user)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors text-sm"
+                        title="Ajustar créditos"
+                      >
+                        Créditos
+                      </button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

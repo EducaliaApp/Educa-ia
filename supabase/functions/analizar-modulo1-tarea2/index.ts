@@ -1,0 +1,219 @@
+// supabase/functions/analizar-modulo1-tarea2/index.ts
+
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { RubricasEngine } from '../shared/rubricas-engine.ts'
+import { IAEvaluator } from '../shared/ia-evaluator.ts'
+import {
+  crearClienteSupabase,
+  autenticarUsuario,
+  recuperarRubricasRelevantes,
+  guardarEvaluacion,
+  calcularCosto,
+  calcularPuntajePromedio,
+  determinarCategoriaLogro,
+  determinarNivelPredominante,
+  obtenerEstadisticas,
+  calcularPercentil
+} from '../shared/utils.ts'
+import { validarEntrada, respuestaErrorValidacion } from '../shared/validation.ts'
+import { manejarError } from '../shared/error-handler.ts'
+
+serve(async (req) => {
+  try {
+    const startTime = Date.now()
+    
+    // 1. Autenticación
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization header es requerido' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    
+    const supabase = crearClienteSupabase(authHeader)
+    const user = await autenticarUsuario(supabase)
+    
+    // 2. Parsear y validar request
+    const requestData = await req.json() as Record<string, unknown>
+    
+    const validacion = validarEntrada(requestData, [
+      { nombre: 'tarea_id', tipo: 'uuid' },
+      { nombre: 'modelo', tipo: 'modelo', opcional: true }
+    ])
+    
+    if (!validacion.valido) {
+      return respuestaErrorValidacion(validacion.errores)
+    }
+    
+    const tarea_id = requestData.tarea_id as string
+    const modelo = (requestData.modelo as string) || 'claude-sonnet-4'
+    
+    // 3. Obtener tarea y contexto
+    const { data: tarea, error: errorTarea } = await supabase
+      .from('tareas_portafolio')
+      .select(`
+        *,
+        modulo:modulos_portafolio(
+          *,
+          portafolio:portafolios(*)
+        )
+      `)
+      .eq('id', tarea_id)
+      .single()
+    
+    if (errorTarea || !tarea) {
+      return new Response(
+        JSON.stringify({ error: 'Tarea no encontrada' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    
+    // 4. Validar que sea Módulo 1, Tarea 2
+    if (tarea.modulo.numero_modulo !== 1 || tarea.numero_tarea !== 2) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Esta función solo analiza Módulo 1, Tarea 2 (Evaluación formativa)'
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    
+    const portafolio = tarea.modulo.portafolio
+    
+    // 5. Recuperar rúbricas relevantes
+    const rubricas = await recuperarRubricasRelevantes(
+      supabase,
+      1, // Módulo
+      2, // Tarea
+      portafolio.nivel_educativo,
+      portafolio.asignatura,
+      portafolio.año_evaluacion,
+      portafolio.modalidad || 'regular'
+    )
+    
+    console.log(`✓ Recuperadas ${rubricas.length} rúbricas para Tarea 2`)
+    
+    // 6. Inicializar motores
+    const rubricasEngine = new RubricasEngine()
+    const iaEvaluator = new IAEvaluator()
+    
+    // 7. Evaluar cada indicador
+    const evaluaciones = []
+    let tokensTotal = 0
+    
+    for (const rubrica of rubricas) {
+      console.log(`Evaluando indicador: ${rubrica.nombre_indicador}`)
+      
+      const evaluacion = await rubricasEngine.evaluarIndicador(
+        rubrica,
+        {
+          tarea_id: tarea.id,
+          modulo: 1,
+          numero_tarea: 2,
+          contenido: tarea.contenido
+        },
+        iaEvaluator
+      )
+      
+      // Agregar estadísticas comparativas
+      const stats = await obtenerEstadisticas(
+        supabase,
+        rubrica.indicador_id,
+        portafolio.nivel_educativo,
+        portafolio.asignatura,
+        portafolio.año_evaluacion
+      )
+      
+      if (stats) {
+        evaluacion.promedio_nacional = stats.promedio_puntaje
+        evaluacion.percentil = calcularPercentil(evaluacion.puntaje, stats)
+      }
+      
+      evaluaciones.push(evaluacion)
+      tokensTotal += evaluacion.tokens_usados
+      
+      console.log(`  → ${evaluacion.nivel_alcanzado} (${evaluacion.puntaje} pts)`)
+    }
+    
+    // 8. Calcular resumen general
+    const puntajePromedio = calcularPuntajePromedio(evaluaciones)
+    const categoriaLogro = determinarCategoriaLogro(puntajePromedio)
+    const nivelPredominante = determinarNivelPredominante(evaluaciones)
+    
+    // 9. Priorizar recomendaciones
+    const recomendaciones = await iaEvaluator.priorizarRecomendaciones(
+      evaluaciones,
+      3.5
+    )
+    
+    // 10. Calcular costos
+    const latenciaTotal = Date.now() - startTime
+    const costoUsd = calcularCosto(modelo, tokensTotal * 0.6, tokensTotal * 0.4)
+    
+    // 11. Preparar metadata
+    const metadata = {
+      modelo,
+      tokens_prompt: Math.floor(tokensTotal * 0.6),
+      tokens_completion: Math.floor(tokensTotal * 0.4),
+      costo_usd: costoUsd,
+      latencia_ms: latenciaTotal,
+      puntaje_promedio: puntajePromedio,
+      categoria_logro: categoriaLogro,
+      nivel_predominante: nivelPredominante,
+      resumen: `Evaluación de Módulo 1, Tarea 2 (Evaluación formativa) completada. Puntaje: ${puntajePromedio}/4.0 (${categoriaLogro}).`,
+      recomendaciones
+    }
+    
+    // 12. Guardar evaluación
+    const analisisId = await guardarEvaluacion(
+      supabase,
+      tarea_id,
+      evaluaciones,
+      metadata
+    )
+    
+    // 13. Actualizar progreso
+    await supabase.rpc('calcular_progreso_portafolio', {
+      p_portafolio_id: portafolio.id
+    })
+    
+    // 14. Actualizar métricas
+    await supabase.rpc('incrementar_metricas_uso', {
+      p_profesor_id: user.id,
+      p_fecha: new Date().toISOString().split('T')[0],
+      analisis_evaluacion: 1,
+      tokens_usados: tokensTotal,
+      costo_usd: costoUsd
+    })
+    
+    // 15. Responder
+    return new Response(
+      JSON.stringify({
+        success: true,
+        analisis_id: analisisId,
+        resumen: {
+          puntaje_promedio: puntajePromedio,
+          categoria_logro: categoriaLogro,
+          nivel_predominante: nivelPredominante,
+          indicadores_evaluados: evaluaciones.length
+        },
+        indicadores: evaluaciones,
+        recomendaciones: recomendaciones.slice(0, 5),
+        metadata: {
+          modelo,
+          tokens_usados: tokensTotal,
+          latencia_ms: latenciaTotal,
+          costo_usd: costoUsd
+        }
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    )
+    
+  } catch (error) {
+    return manejarError(error)
+  }
+})
