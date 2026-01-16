@@ -35,6 +35,8 @@ interface ProcesoETL {
   num_logs: number
   num_errores: number
   num_archivos: number
+  logs: string[]
+  errores: any[]
   created_at: string
   updated_at: string
 }
