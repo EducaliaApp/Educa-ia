@@ -104,6 +104,12 @@ function limpiarTexto(texto: string): string {
 /**
  * Verifica si un error es un 404 (página no encontrada)
  * Usado para detectar errores esperados vs errores reales
+ * 
+ * @param error - El error a verificar
+ * @returns true si el error es un 404, false en caso contrario
+ * 
+ * Nota: Este método verifica el mensaje del error porque el fetch de Deno
+ * no siempre provee un objeto de error estructurado con código de estado.
  */
 function es404(error: unknown): boolean {
   if (error instanceof Error) {
