@@ -61,9 +61,9 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
-      - name: Repair Migration History
+      - name: Sync and Repair Migration History
         run: |
-          echo "🔧 Repairing migration history..."
+          echo "🔧 Synchronizing and repairing migration history..."
           echo "Checking for orphaned remote migrations..."
           
           # Get the migration list and check for orphaned migrations
@@ -72,12 +72,40 @@ jobs:
           
           # Track if any repairs were needed
           REPAIRS_NEEDED=false
+          ORPHANED_MIGRATIONS=()
+          
+          # Extract orphaned migrations (those with empty Local column but populated Remote column)
+          # Skip known legacy migrations (00, 01, 02) and the specific conflict (20250115)
+          # Pattern: lines starting with whitespace + | (empty Local) followed by version in Remote column
+          while IFS= read -r line; do
+            # Extract the version from Remote column (second column after splitting by |)
+            version=$(echo "$line" | awk -F'|' '{print $2}' | tr -d ' ')
+            
+            # Skip if empty or is a known legacy/conflict migration
+            if [[ -n "$version" && "$version" != "00" && "$version" != "01" && "$version" != "02" && "$version" != "20250115" ]]; then
+              ORPHANED_MIGRATIONS+=("$version")
+              echo "⚠️  Found orphaned remote migration: $version"
+            fi
+          done < <(echo "$MIGRATION_LIST" | grep -E "^\s+\|\s+[0-9]+\s+\|")
+          
+          # Handle orphaned migrations by marking them as reverted
+          # This allows the workflow to continue and sync them properly via db pull
+          if [ ${#ORPHANED_MIGRATIONS[@]} -gt 0 ]; then
+            echo ""
+            echo "⚠️  Found ${#ORPHANED_MIGRATIONS[@]} orphaned remote migration(s)"
+            echo "These migrations exist remotely but not in the local repository"
+            echo "Marking them as reverted to sync with local state..."
+            
+            for migration in "${ORPHANED_MIGRATIONS[@]}"; do
+              echo "  - Reverting: $migration"
+              supabase migration repair --status reverted "$migration" || echo "⚠️  Could not revert $migration"
+            done
+            
+            REPAIRS_NEEDED=true
+          fi
           
           # Check if remote has orphaned legacy migrations (00, 01, 02) that don't exist locally
           # These are legacy migrations that were applied before adopting the timestamp naming convention
-          # Look for lines with empty Local column but populated Remote column for these versions
-          # Pattern explanation: ^\s+\| matches lines starting with whitespace then pipe (empty Local column)
-          # followed by \s*(00|01|02)\s+\| matching the version in Remote column
           if echo "$MIGRATION_LIST" | grep -E "^\s+\|\s*(00|01|02)\s+\|" > /dev/null 2>&1; then
             echo ""
             echo "⚠️  Found orphaned remote migrations (00, 01, 02)"
@@ -89,7 +117,7 @@ jobs:
             # - 00: 00_create_enums.sql
             # - 01: 01_function_logs_fixed.sql  
             # - 02: 02_schema_rubricas_fixed.sql
-            supabase migration repair --status reverted 00 01 02
+            supabase migration repair --status reverted 00 01 02 || echo "⚠️  Could not revert legacy migrations"
             REPAIRS_NEEDED=true
           fi
           
@@ -98,17 +126,23 @@ jobs:
           # where the remote version couldn't be matched to local files due to multiple
           # migrations sharing the same date prefix (20250115 and 20250115001).
           # This is a targeted fix for this specific historical issue.
-          # Look for lines where Remote column has 20250115 but Local column is empty or different
           if echo "$MIGRATION_LIST" | grep -E "^\s+\|\s*20250115\s+\|" > /dev/null 2>&1; then
             echo ""
             echo "⚠️  Found migration version conflict for 20250115"
             echo "Remote has 20250115 but CLI can't reconcile it with local files"
             echo "This is a known historical conflict from overlapping date-based version numbers"
-            echo "Marking it as reverted to allow fresh migration..."
+            echo "Marking it as reverted and removing conflicting local file..."
+            
+            # Remove the conflicting local file if it exists
+            if [ -f "supabase/migrations/20250115_admin_maintainers.sql" ]; then
+              echo "  Moving 20250115_admin_maintainers.sql to archive/"
+              mkdir -p supabase/migrations/archive
+              mv supabase/migrations/20250115_admin_maintainers.sql supabase/migrations/archive/ || echo "⚠️  Could not move file"
+            fi
             
             # Repair by marking 20250115 as reverted to clear the conflict
-            # This allows the local migration with this version to be applied fresh
-            supabase migration repair --status reverted 20250115
+            # This allows the remote migration to be recognized without conflicts
+            supabase migration repair --status reverted 20250115 || echo "⚠️  Could not revert 20250115"
             REPAIRS_NEEDED=true
           fi
           
@@ -129,15 +163,47 @@ jobs:
         continue-on-error: false
 
       - name: Run Migrations
+        id: run_migrations
         run: |
           echo "🚀 Running database migrations..."
-          # Run migrations with debug flag for detailed output
+          
+          # Try to run migrations with debug flag for detailed output
           # --include-all flag allows migrations with timestamps that fall between already applied migrations
           # This is necessary when migrations are created out of chronological order
-          supabase db push --debug --include-all
+          if ! supabase db push --debug --include-all 2>&1; then
+            echo ""
+            echo "⚠️  Migration failed. Checking for additional orphaned migrations..."
+            
+            # List migrations again to see current state
+            MIGRATION_LIST=$(supabase migration list 2>&1 || true)
+            echo "$MIGRATION_LIST"
+            
+            # Check if error is due to orphaned migrations that were not caught earlier
+            if echo "$MIGRATION_LIST" | grep -E "^\s+\|\s+[0-9]+\s+\|" > /dev/null 2>&1; then
+              echo ""
+              echo "❌ Found additional orphaned migrations after initial repair"
+              echo "This indicates migrations were created directly on the remote database"
+              echo ""
+              echo "To resolve this issue:"
+              echo "  1. Run locally: supabase migration repair --status reverted <version>"
+              echo "  2. Then run: supabase db pull"
+              echo "  3. Commit the new migration files"
+              echo "  4. Re-run this workflow"
+              exit 1
+            fi
+            
+            # If no orphaned migrations, report the actual error
+            echo ""
+            echo "❌ Migration failed with an unexpected error"
+            echo "Check the logs above for details"
+            exit 1
+          fi
+          
+          echo "✅ Migrations completed successfully"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        continue-on-error: false
 
       - name: Verify Migrations
         run: |
