@@ -51,22 +51,22 @@ const navItems: NavItem[] = [
     icon: CreditCard,
   },
   {
-    name: 'MINEDUC',
+    name: 'Estadísticas MINEDUC',
     href: '/admin/mineduc',
     icon: GraduationCap,
-    group: 'mineduc',
+    group: 'data_maestra',
   },
   {
     name: 'Objetivos Aprendizaje',
     href: '/admin/objetivos-aprendizaje',
     icon: BookOpen,
-    group: 'mineduc',
+    group: 'data_maestra',
   },
   {
     name: 'ETL / Procesos',
     href: '/admin/etl',
     icon: Database,
-    group: 'mineduc',
+    group: 'data_maestra',
   },
   {
     name: 'Métricas IA',
@@ -154,15 +154,15 @@ export function AdminSidebar({ userName, userEmail }: AdminSidebarProps) {
           </>
         )}
 
-        {/* MINEDUC group */}
-        {groupedItems.mineduc && (
+        {/* Data Maestra group */}
+        {groupedItems.data_maestra && (
           <>
             <div className="pt-4 pb-2">
               <h3 className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                MINEDUC / Bases Curriculares
+                Data Maestra
               </h3>
             </div>
-            {groupedItems.mineduc.map(renderNavItem)}
+            {groupedItems.data_maestra.map(renderNavItem)}
           </>
         )}
       </nav>

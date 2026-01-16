@@ -322,7 +322,7 @@ export default function ObjetivosAprendizajePage() {
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">Objetivos de Aprendizaje</h1>
           <p className="text-slate-400">
-            Gestión de objetivos extraídos de Bases Curriculares MINEDUC
+            Gestión y mantenimiento de objetivos de aprendizaje del currículum nacional de Chile
           </p>
         </div>
         <div className="flex gap-3">
