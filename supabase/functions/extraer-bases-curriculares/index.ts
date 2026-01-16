@@ -198,7 +198,7 @@ function extraerAsignaturasYCursos(html: string): AsignaturaLink[] {
 
 /**
  * Extrae objetivos de aprendizaje de una página de asignatura
- * Soporta dos estructuras HTML diferentes:
+ * Soporta dos estructuras HTML diferentes usando balanceo de divs (más robusto que regex):
  * TIPO A: .oa-cnt, .oa-numero, .oa-eje, .oa-descripcion, .oa-basal
  * TIPO B: .items-wrapper, .item-wrapper, .oa-title, .field__item, .prioritized
  */
@@ -209,129 +209,188 @@ function extraerObjetivos(html: string, asignatura: string, curso: string, nivel
   const nivelMatch = html.match(/<[^>]*class=[^>]*nivel-titulo[^>]*>[\s\S]*?<span[^>]*>([^<]*)<\/span>/i)
   const cursoExtraido = nivelMatch ? limpiarTexto(nivelMatch[1]) : curso
 
-  // INTENTAR ESTRUCTURA TIPO B PRIMERO (.items-wrapper/.item-wrapper)
-  const patronItemsWrapper = /<div[^>]*class=[^>]*items-wrapper[^>]*>([\s\S]*?)<\/div>(?=\s*<div[^>]*class=[^>]*items-wrapper|\s*<\/)/gi
-  let matchWrapper
+  // ESTRUCTURA TIPO B - Con balanceo de divs (más robusto)
+  let posicion = 0
   let foundTipoB = false
 
-  while ((matchWrapper = patronItemsWrapper.exec(html)) !== null) {
-    const bloqueEje = matchWrapper[1]
+  while (true) {
+    const inicioWrapper = html.indexOf('<div class="items-wrapper">', posicion)
+    if (inicioWrapper === -1) break
 
-    // Extraer título del eje
-    const ejeTitleMatch = bloqueEje.match(/<h3[^>]*>([^<]*)<\/h3>/i)
-    const ejeNombre = ejeTitleMatch ? limpiarTexto(ejeTitleMatch[1]) : ''
+    // Encontrar el cierre del div balanceando apertura/cierre
+    let nivel_div = 0
+    let i = inicioWrapper
+    let inicioContador = -1
 
-    // Buscar OAs dentro de este eje
-    const patronItemWrapper = /<div[^>]*class=[^>]*item-wrapper[^>]*>([\s\S]*?)<\/div>(?=\s*<div[^>]*class=[^>]*item-wrapper|<\/div>)/gi
-    let matchItem
+    while (i < html.length) {
+      if (html.substr(i, 4) === '<div') {
+        if (inicioContador === -1) inicioContador = i
+        nivel_div++
+        i += 4
+      } else if (html.substr(i, 6) === '</div>') {
+        nivel_div--
+        if (nivel_div === 0 && inicioContador !== -1) {
+          // Encontramos el cierre
+          const bloqueEje = html.substring(inicioWrapper, i + 6)
+          foundTipoB = true
 
-    while ((matchItem = patronItemWrapper.exec(bloqueEje)) !== null) {
-      const bloqueOA = matchItem[1]
-      foundTipoB = true
+          // Extraer eje
+          const ejeTitleMatch = bloqueEje.match(/<h3[^>]*>([^<]*)<\/h3>/i)
+          const ejeNombre = ejeTitleMatch ? limpiarTexto(ejeTitleMatch[1]) : ''
 
-      try {
-        // Extraer código/título OA (.oa-title)
-        const codigoMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-title[^>]*>([^<]*)<\/[^>]*>/i)
-        const codigo = codigoMatch ? limpiarTexto(codigoMatch[1]) : ''
+          // Extraer item-wrappers dentro de este bloque
+          let posItem = 0
+          while (true) {
+            const inicioItem = bloqueEje.indexOf('<div class="item-wrapper">', posItem)
+            if (inicioItem === -1) break
 
-        if (!codigo) continue
+            // Buscar cierre del item-wrapper con balanceo
+            let nivelItem = 0
+            let j = inicioItem
+            while (j < bloqueEje.length) {
+              if (bloqueEje.substr(j, 4) === '<div') {
+                nivelItem++
+                j += 4
+              } else if (bloqueEje.substr(j, 6) === '</div>') {
+                nivelItem--
+                if (nivelItem === 0) {
+                  const itemHtml = bloqueEje.substring(inicioItem, j + 6)
 
-        // Validar código OA
-        if (!validarCodigoOA(codigo)) {
-          console.warn(`Código OA inválido ignorado: ${codigo}`)
-          continue
+                  try {
+                    const codigoMatch = itemHtml.match(/<div[^>]*class=[^>]*oa-title[^>]*>([^<]*)<\/div>/i)
+                    const codigo = codigoMatch ? limpiarTexto(codigoMatch[1]) : ''
+
+                    if (codigo && validarCodigoOA(codigo)) {
+                      const objetivoMatch = itemHtml.match(/<div[^>]*class=[^>]*field__item[^>]*>([^<]*)<\/div>/i)
+                      const objetivo = objetivoMatch ? limpiarTexto(objetivoMatch[1]) : ''
+
+                      const esPriorizado = itemHtml.includes('class="prioritized"')
+
+                      const detalleLinkMatch = itemHtml.match(/<a[^>]*class=[^>]*link-more[^>]*href=["']([^"']*)["']/i)
+                      const detalleUrl = detalleLinkMatch ?
+                        (detalleLinkMatch[1].startsWith('http') ? detalleLinkMatch[1] : CONFIG.BASE_URL + detalleLinkMatch[1]) :
+                        ''
+
+                      objetivos.push({
+                        asignatura,
+                        oa_codigo: codigo,
+                        eje: ejeNombre,
+                        objetivo: objetivo,
+                        actividad_1: '',
+                        url_actividad_1: '',
+                        actividad_2: '',
+                        url_actividad_2: '',
+                        actividad_3: '',
+                        url_actividad_3: '',
+                        actividad_4: '',
+                        url_actividad_4: '',
+                        priorizado: esPriorizado ? 1 : 0,
+                        _detalleUrl: detalleUrl,
+                        _curso: cursoExtraido,
+                        _nivel: nivel || cursoExtraido,
+                      } as any)
+                    } else if (codigo) {
+                      console.warn(`Código OA inválido ignorado: ${codigo}`)
+                    }
+                  } catch (error) {
+                    console.error('Error procesando item-wrapper:', error)
+                  }
+
+                  posItem = j + 6
+                  break
+                }
+                j += 6
+              } else {
+                j++
+              }
+            }
+          }
+
+          posicion = i + 6
+          break
         }
-
-        // Extraer objetivo (.field__item)
-        const objetivoMatch = bloqueOA.match(/<[^>]*class=[^>]*field__item[^>]*>([^<]*)<\/[^>]*>/i)
-        const objetivo = objetivoMatch ? limpiarTexto(objetivoMatch[1]) : ''
-
-        // Detectar priorización (.prioritized)
-        const esPriorizado = /<[^>]*class=[^>]*prioritized[^>]*>/i.test(bloqueOA)
-
-        // Extraer link de detalle (a.link-more)
-        const detalleLinkMatch = bloqueOA.match(/<a[^>]*class=[^>]*link-more[^>]*href=["']([^"']*)["']/i)
-        const detalleUrl = detalleLinkMatch ?
-          (detalleLinkMatch[1].startsWith('http') ? detalleLinkMatch[1] : CONFIG.BASE_URL + detalleLinkMatch[1]) :
-          ''
-
-        objetivos.push({
-          asignatura,
-          oa_codigo: codigo,
-          eje: ejeNombre,
-          objetivo: objetivo,
-          actividad_1: '',
-          url_actividad_1: '',
-          actividad_2: '',
-          url_actividad_2: '',
-          actividad_3: '',
-          url_actividad_3: '',
-          actividad_4: '',
-          url_actividad_4: '',
-          priorizado: esPriorizado ? 1 : 0,
-          _detalleUrl: detalleUrl, // URL temporal para extraer actividades después
-          _curso: cursoExtraido,
-          _nivel: nivel || cursoExtraido,
-        } as any)
-      } catch (error) {
-        console.error('Error extrayendo OA (Tipo B):', error)
-        continue
+        i += 6
+      } else {
+        i++
       }
+    }
+
+    if (nivel_div !== 0) {
+      // No se pudo balancear, saltar
+      posicion = inicioWrapper + 1
     }
   }
 
   // SI NO SE ENCONTRÓ ESTRUCTURA TIPO B, INTENTAR TIPO A (.oa-cnt)
   if (!foundTipoB) {
-    const patronOA = /<div[^>]*class=[^>]*oa-cnt[^>]*>([\s\S]*?)<\/div>(?=\s*<div[^>]*class=[^>]*oa-cnt|$)/gi
+    posicion = 0
 
-    let matchOA
-    while ((matchOA = patronOA.exec(html)) !== null) {
-      const bloqueOA = matchOA[1]
+    while (true) {
+      const inicioCnt = html.indexOf('<div class="oa-cnt">', posicion)
+      if (inicioCnt === -1) break
 
-      try {
-        // Extraer eje curricular (.oa-eje)
-        const ejeMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-eje[^>]*>([^<]*)<\/[^>]*>/i)
-        const eje = ejeMatch ? limpiarTexto(ejeMatch[1]) : ''
+      // Encontrar cierre balanceado
+      let nivel_div = 0
+      let i = inicioCnt
 
-        // Extraer código OA (.oa-numero)
-        const codigoMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-numero[^>]*>([^<]*)<\/[^>]*>/i)
-        const codigo = codigoMatch ? limpiarTexto(codigoMatch[1]) : ''
+      while (i < html.length) {
+        if (html.substr(i, 4) === '<div') {
+          nivel_div++
+          i += 4
+        } else if (html.substr(i, 6) === '</div>') {
+          nivel_div--
+          if (nivel_div === 0) {
+            const bloqueOA = html.substring(inicioCnt, i + 6)
 
-        if (!codigo) continue
+            try {
+              const ejeMatch = bloqueOA.match(/<div[^>]*class=[^>]*oa-eje[^>]*>([^<]*)<\/div>/i)
+              const eje = ejeMatch ? limpiarTexto(ejeMatch[1]) : ''
 
-        // Validar código OA
-        if (!validarCodigoOA(codigo)) {
-          console.warn(`Código OA inválido ignorado: ${codigo}`)
-          continue
+              const codigoMatch = bloqueOA.match(/<div[^>]*class=[^>]*oa-numero[^>]*>([^<]*)<\/div>/i)
+              const codigo = codigoMatch ? limpiarTexto(codigoMatch[1]) : ''
+
+              if (codigo && validarCodigoOA(codigo)) {
+                const objetivoMatch = bloqueOA.match(/<div[^>]*class=[^>]*oa-descripcion[^>]*>([^<]*)<\/div>/i)
+                const objetivo = objetivoMatch ? limpiarTexto(objetivoMatch[1]) : ''
+
+                const esBasal = bloqueOA.includes('class="oa-basal"')
+
+                objetivos.push({
+                  asignatura,
+                  oa_codigo: codigo,
+                  eje: eje,
+                  objetivo: objetivo,
+                  actividad_1: '',
+                  url_actividad_1: '',
+                  actividad_2: '',
+                  url_actividad_2: '',
+                  actividad_3: '',
+                  url_actividad_3: '',
+                  actividad_4: '',
+                  url_actividad_4: '',
+                  priorizado: esBasal ? 1 : 0,
+                  _curso: cursoExtraido,
+                  _nivel: nivel || cursoExtraido,
+                } as any)
+              } else if (codigo) {
+                console.warn(`Código OA inválido ignorado: ${codigo}`)
+              }
+            } catch (error) {
+              console.error('Error procesando oa-cnt:', error)
+            }
+
+            posicion = i + 6
+            break
+          }
+          i += 6
+        } else {
+          i++
         }
+      }
 
-        // Extraer objetivo (.oa-descripcion)
-        const objetivoMatch = bloqueOA.match(/<[^>]*class=[^>]*oa-descripcion[^>]*>([^<]*)<\/[^>]*>/i)
-        const objetivo = objetivoMatch ? limpiarTexto(objetivoMatch[1]) : ''
-
-        // Detectar priorización (.oa-basal)
-        const esBasal = /<[^>]*class=[^>]*oa-basal[^>]*>/i.test(bloqueOA)
-
-        objetivos.push({
-          asignatura,
-          oa_codigo: codigo,
-          eje: eje,
-          objetivo: objetivo,
-          actividad_1: '',
-          url_actividad_1: '',
-          actividad_2: '',
-          url_actividad_2: '',
-          actividad_3: '',
-          url_actividad_3: '',
-          actividad_4: '',
-          url_actividad_4: '',
-          priorizado: esBasal ? 1 : 0,
-          _curso: cursoExtraido,
-          _nivel: nivel || cursoExtraido,
-        } as any)
-      } catch (error) {
-        console.error('Error extrayendo OA (Tipo A):', error)
-        continue
+      if (nivel_div !== 0) {
+        // No se pudo balancear
+        posicion = inicioCnt + 1
       }
     }
   }
