@@ -194,6 +194,30 @@ git push origin feature/nueva-migracion
 
 ## 🔍 Troubleshooting
 
+### Error: "Found local migration files to be inserted before the last migration"
+
+```
+Found local migration files to be inserted before the last migration on remote database.
+
+Rerun the command with --include-all flag to apply these migrations:
+supabase/migrations/20250115_admin_maintainers.sql
+```
+
+**Causa**: Una migración local tiene un timestamp que la coloca entre migraciones que ya fueron aplicadas en remoto. Esto ocurre cuando se crean migraciones en diferentes momentos que no siguen el orden cronológico de aplicación.
+
+**Ejemplo del problema**:
+- Remoto tiene: 20250107, 20250115001, 20250115002, 20250116001
+- Local tiene: 20250115_admin_maintainers.sql (que cae entre 20250107 y 20250115001)
+
+**Solución automática**: El workflow usa el flag `--include-all` en el comando `supabase db push` que permite aplicar migraciones "fuera de orden" de manera segura. Esto está configurado desde 2025-01-16.
+
+**Solución manual** (si necesitas hacerlo localmente):
+```bash
+supabase db push --include-all
+```
+
+**Nota**: El flag `--include-all` es seguro de usar porque Supabase CLI garantiza que todas las migraciones se aplican en el orden correcto de timestamps, incluso si algunas fueron creadas después de otras ya aplicadas.
+
 ### Error: "Remote migration versions not found in local migrations directory"
 
 ```
