@@ -149,7 +149,7 @@ export default function ETLPage() {
       case 'en_progreso':
         return <Badge variant="warning">En Progreso</Badge>
       case 'error':
-        return <Badge variant="error">Error</Badge>
+        return <Badge variant="danger">Error</Badge>
       case 'pendiente':
         return <Badge variant="default">Pendiente</Badge>
       case 'cancelado':
