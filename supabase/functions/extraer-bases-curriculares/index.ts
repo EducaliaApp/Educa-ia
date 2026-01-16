@@ -48,9 +48,13 @@ const CONFIG = {
  
 interface ObjetivoAprendizaje {
   asignatura: string
-  oa_codigo: string // "AR01 OA 01"
+  oa_codigo: string // "AR01 OA 01", "MA04 OAH a", "LE05 OAA A"
   eje: string // Eje o Núcleo curricular
   objetivo: string
+  tipo_objetivo: 'contenido' | 'habilidad' | 'actitud' // Tipo de OA basado en OA/OAH/OAA
+  categoria: string // "Educación Básica 1° a 6°", "Educación Parvularia", etc.
+  nivel: string // "1° Básico", "2° Básico", etc.
+  curso: string // "1° Básico", "2° Básico", etc.
   actividad_1: string
   url_actividad_1: string
   actividad_2: string
@@ -67,6 +71,8 @@ interface ObjetivoAprendizajeJSON {
   codigo: string
   eje: string
   objetivo: string
+  tipo_objetivo: 'contenido' | 'habilidad' | 'actitud'
+  categoria: string
   actividades: {
     titulo: string
     url: string
@@ -97,12 +103,60 @@ function limpiarTexto(texto: string): string {
  
 /**
  * Valida que un código OA tenga formato correcto
- * Ejemplos válidos: "AR01 OA 01", "CN03 OA 05", "HI05 OA 12"
+ * Ejemplos válidos: "AR01 OA 01", "MA04 OAH a", "LE05 OAA A"
  */
 function validarCodigoOA(codigo: string): boolean {
   return PATRON_VALIDACION_OA.test(codigo.trim())
 }
- 
+
+/**
+ * Determina el tipo de objetivo basándose en el código OA
+ * - OA: Objetivo de Aprendizaje de Contenido
+ * - OAH: Objetivo de Aprendizaje de Habilidades
+ * - OAA: Objetivo de Aprendizaje de Actitudes
+ */
+function obtenerTipoObjetivo(codigo: string): 'contenido' | 'habilidad' | 'actitud' {
+  const codigoLimpio = codigo.trim().toUpperCase()
+
+  if (codigoLimpio.includes(' OAH ')) {
+    return 'habilidad'
+  } else if (codigoLimpio.includes(' OAA ')) {
+    return 'actitud'
+  } else {
+    return 'contenido'
+  }
+}
+
+/**
+ * Extrae la categoría curricular desde la URL
+ * Ejemplos:
+ * - /curriculum/1o-6o-basico/ -> "Educación Básica 1° a 6°"
+ * - /curriculum/educacion-parvularia/ -> "Educación Parvularia"
+ * - /curriculum/7o-basico-a-2o-medio/ -> "Educación Media 7° a 2° Medio"
+ */
+function extraerCategoriaDesdeURL(url: string): string {
+  const categoriaMap: Record<string, string> = {
+    '1o-6o-basico': 'Educación Básica 1° a 6°',
+    'educacion-parvularia': 'Educación Parvularia',
+    '7o-basico-a-2o-medio': 'Educación Media 7° a 2° Medio',
+    'formacion-diferenciada-tecnico-profesional': 'Formación Diferenciada Técnico Profesional',
+    'formacion-diferenciada-artistica': 'Formación Diferenciada Artística',
+    'formacion-diferenciada-cientifico-humanista': 'Formación Diferenciada Científico-Humanista',
+    'modalidad-educacion-de-personas-jovenes-y-adultas-epja': 'Modalidad Educación de Personas Jóvenes y Adultas (EPJA)',
+    'lengua-y-cultura-de-los-pueblos-originarios-ancestrales': 'Lengua y Cultura de los Pueblos Originarios Ancestrales',
+    'marco-curricular-de-lengua-indigena': 'Marco curricular de Lengua Indígena',
+  }
+
+  // Extraer el slug de la URL
+  const match = url.match(/\/curriculum\/([^/]+)/)
+  if (!match) {
+    return 'Educación Básica 1° a 6°' // Default
+  }
+
+  const slug = match[1]
+  return categoriaMap[slug] || 'Educación Básica 1° a 6°'
+}
+
 /**
  * Valida que una URL sea válida
  */
@@ -214,13 +268,14 @@ function extraerAsignaturasYCursos(html: string): AsignaturaLink[] {
  * TIPO A: .oa-cnt, .oa-numero, .oa-eje, .oa-descripcion, .oa-basal
  * TIPO B: .items-wrapper, .item-wrapper, .oa-title, .field__item, .prioritized
  */
-function extraerObjetivos(html: string, asignatura: string, curso: string, nivel: string = ''): ObjetivoAprendizaje[] {
+function extraerObjetivos(html: string, asignatura: string, curso: string, categoria: string, nivel: string = ''): ObjetivoAprendizaje[] {
   const objetivos: ObjetivoAprendizaje[] = []
- 
+
   // Extraer curso/nivel si está disponible en la página
   const nivelMatch = html.match(/<[^>]*class=[^>]*nivel-titulo[^>]*>[\s\S]*?<span[^>]*>([^<]*)<\/span>/i)
   const cursoExtraido = nivelMatch ? limpiarTexto(nivelMatch[1]) : curso
- 
+  const nivelExtraido = nivel || cursoExtraido
+
   // ESTRUCTURA TIPO B - Con balanceo de divs (más robusto)
   let posicion = 0
   let foundTipoB = false
@@ -303,6 +358,10 @@ function extraerObjetivos(html: string, asignatura: string, curso: string, nivel
                         oa_codigo: codigo,
                         eje: ejeNombre,
                         objetivo: objetivo,
+                        tipo_objetivo: obtenerTipoObjetivo(codigo),
+                        categoria: categoria,
+                        nivel: nivelExtraido,
+                        curso: cursoExtraido,
                         actividad_1: '',
                         url_actividad_1: '',
                         actividad_2: '',
@@ -313,8 +372,6 @@ function extraerObjetivos(html: string, asignatura: string, curso: string, nivel
                         url_actividad_4: '',
                         priorizado: esPriorizado ? 1 : 0,
                         _detalleUrl: detalleUrl,
-                        _curso: cursoExtraido,
-                        _nivel: nivel || cursoExtraido,
                       } as any)
                     } else if (codigo) {
                       console.warn(`Código OA inválido ignorado: ${codigo}`)
@@ -387,6 +444,10 @@ function extraerObjetivos(html: string, asignatura: string, curso: string, nivel
                   oa_codigo: codigo,
                   eje: eje,
                   objetivo: objetivo,
+                  tipo_objetivo: obtenerTipoObjetivo(codigo),
+                  categoria: categoria,
+                  nivel: nivelExtraido,
+                  curso: cursoExtraido,
                   actividad_1: '',
                   url_actividad_1: '',
                   actividad_2: '',
@@ -396,8 +457,6 @@ function extraerObjetivos(html: string, asignatura: string, curso: string, nivel
                   actividad_4: '',
                   url_actividad_4: '',
                   priorizado: esBasal ? 1 : 0,
-                  _curso: cursoExtraido,
-                  _nivel: nivel || cursoExtraido,
                 } as any)
               } else if (codigo) {
                 console.warn(`Código OA inválido ignorado: ${codigo}`)
@@ -525,10 +584,14 @@ async function extraerActividades(url: string): Promise<{ nombre: string; url: s
 function generarCSV(objetivos: ObjetivoAprendizaje[]): string {
   // Headers según el formato del ejemplo
   const headers = [
+    'Categoria',
     'Asignatura',
+    'Nivel',
+    'Curso',
     'OA',
     'Eje',
     'Objetivo de Aprendizaje',
+    'Tipo',
     'Actividad 1',
     'URL Actividad 1',
     'Actividad 2',
@@ -539,15 +602,19 @@ function generarCSV(objetivos: ObjetivoAprendizaje[]): string {
     'URL Actividad 4',
     'Priorizado',
   ]
- 
+
   let csv = headers.join(';') + '\n'
- 
+
   for (const obj of objetivos) {
     const row = [
+      escaparCSV(obj.categoria),
       escaparCSV(obj.asignatura),
+      escaparCSV(obj.nivel),
+      escaparCSV(obj.curso),
       escaparCSV(obj.oa_codigo),
       escaparCSV(obj.eje),
       escaparCSV(obj.objetivo),
+      escaparCSV(obj.tipo_objetivo),
       escaparCSV(obj.actividad_1),
       escaparCSV(obj.url_actividad_1),
       escaparCSV(obj.actividad_2),
@@ -573,24 +640,24 @@ function generarJSON(objetivos: ObjetivoAprendizaje[]): string {
  
   const objetivosJSON: ObjetivoAprendizajeJSON[] = objetivos.map(obj => {
     const actividades: { titulo: string; url: string }[] = []
- 
+
     if (obj.actividad_1) actividades.push({ titulo: obj.actividad_1, url: obj.url_actividad_1 })
     if (obj.actividad_2) actividades.push({ titulo: obj.actividad_2, url: obj.url_actividad_2 })
     if (obj.actividad_3) actividades.push({ titulo: obj.actividad_3, url: obj.url_actividad_3 })
     if (obj.actividad_4) actividades.push({ titulo: obj.actividad_4, url: obj.url_actividad_4 })
- 
-    const objAny = obj as any
- 
+
     return {
       asignatura: obj.asignatura,
       codigo: obj.oa_codigo,
       eje: obj.eje,
       objetivo: obj.objetivo,
+      tipo_objetivo: obj.tipo_objetivo,
+      categoria: obj.categoria,
       actividades,
       priorizado: obj.priorizado === 1,
       metadata: {
-        nivel: objAny._nivel || '',
-        curso: objAny._curso || '',
+        nivel: obj.nivel,
+        curso: obj.curso,
         fecha_extraccion: fechaExtraccion,
       },
     }
@@ -754,8 +821,11 @@ export async function handler(req: Request): Promise<Response> {
           const partes = asig.nombre.split(/\s+/)
           const curso = partes[partes.length - 2] + ' ' + partes[partes.length - 1] // "1° Básico"
           const nombreAsignatura = partes.slice(0, -2).join(' ')
- 
-          const objetivos = extraerObjetivos(htmlAsignatura, nombreAsignatura, curso)
+
+          // Extraer categoria desde la URL
+          const categoria = extraerCategoriaDesdeURL(asig.url)
+
+          const objetivos = extraerObjetivos(htmlAsignatura, nombreAsignatura, curso, categoria)
           console.log(`  ✓ Extraídos ${objetivos.length} objetivos`)
  
           // 5. Para cada objetivo, extraer actividades
@@ -803,10 +873,76 @@ export async function handler(req: Request): Promise<Response> {
       }
  
       console.log(`\n✅ Extracción completada: ${todosLosObjetivos.length} objetivos`)
- 
+
+      // 6. Persistir objetivos en la base de datos
+      console.log('💾 Persistiendo objetivos en la base de datos...')
+      await supabase.rpc('agregar_log_proceso_etl', {
+        p_proceso_id: procesoId,
+        p_mensaje: `Persistiendo ${todosLosObjetivos.length} objetivos en la base de datos`,
+      })
+
+      let objetivosInsertados = 0
+      let objetivosError = 0
+
+      for (const obj of todosLosObjetivos) {
+        try {
+          const objAny = obj as any
+          const urlFuente = objAny._detalleUrl || ''
+          const version = new Date().getFullYear().toString()
+
+          // Preparar actividades en formato JSONB
+          const actividades = []
+          if (obj.actividad_1) actividades.push({ titulo: obj.actividad_1, url: obj.url_actividad_1 })
+          if (obj.actividad_2) actividades.push({ titulo: obj.actividad_2, url: obj.url_actividad_2 })
+          if (obj.actividad_3) actividades.push({ titulo: obj.actividad_3, url: obj.url_actividad_3 })
+          if (obj.actividad_4) actividades.push({ titulo: obj.actividad_4, url: obj.url_actividad_4 })
+
+          const registro = {
+            codigo: obj.oa_codigo,
+            tipo_objetivo: obj.tipo_objetivo,
+            categoria: obj.categoria,
+            asignatura: obj.asignatura,
+            eje: obj.eje || null,
+            nivel: obj.nivel,
+            curso: obj.curso,
+            objetivo: obj.objetivo,
+            priorizado: obj.priorizado === 1,
+            actividades: actividades,
+            url_fuente: urlFuente || null,
+            version: version,
+            proceso_etl_id: procesoId,
+          }
+
+          // Usar upsert para insertar o actualizar si ya existe
+          const { error } = await supabase
+            .from('objetivos_aprendizaje')
+            .upsert(registro, {
+              onConflict: 'codigo,categoria,nivel,version',
+              ignoreDuplicates: false,
+            })
+
+          if (error) {
+            console.warn(`  ⚠️  Error insertando ${obj.oa_codigo}: ${error.message}`)
+            objetivosError++
+          } else {
+            objetivosInsertados++
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+          console.warn(`  ⚠️  Error procesando ${obj.oa_codigo}: ${errorMessage}`)
+          objetivosError++
+        }
+      }
+
+      console.log(`✓ Objetivos persistidos: ${objetivosInsertados} insertados/actualizados, ${objetivosError} errores`)
+      await supabase.rpc('agregar_log_proceso_etl', {
+        p_proceso_id: procesoId,
+        p_mensaje: `Objetivos persistidos: ${objetivosInsertados} insertados/actualizados, ${objetivosError} errores`,
+      })
+
       const archivosGenerados: any[] = []
- 
-      // 6. Generar y subir CSV si está habilitado
+
+      // 7. Generar y subir CSV si está habilitado
       if (CONFIG.GENERAR_CSV) {
         console.log('📝 Generando CSV...')
         const contenidoCSV = generarCSV(todosLosObjetivos)
@@ -845,7 +981,7 @@ export async function handler(req: Request): Promise<Response> {
             url_descarga: urlCSV,
             num_registros: todosLosObjetivos.length,
             columnas: [
-              'Asignatura', 'OA', 'Eje', 'Objetivo de Aprendizaje',
+              'Categoria', 'Asignatura', 'Nivel', 'Curso', 'OA', 'Eje', 'Objetivo de Aprendizaje', 'Tipo',
               'Actividad 1', 'URL Actividad 1', 'Actividad 2', 'URL Actividad 2',
               'Actividad 3', 'URL Actividad 3', 'Actividad 4', 'URL Actividad 4',
               'Priorizado',
@@ -854,12 +990,15 @@ export async function handler(req: Request): Promise<Response> {
               asignaturas_procesadas: asignaturasProcesadas,
               total_objetivos: todosLosObjetivos.length,
               objetivos_priorizados: todosLosObjetivos.filter(o => o.priorizado === 1).length,
+              objetivos_contenido: todosLosObjetivos.filter(o => o.tipo_objetivo === 'contenido').length,
+              objetivos_habilidades: todosLosObjetivos.filter(o => o.tipo_objetivo === 'habilidad').length,
+              objetivos_actitudes: todosLosObjetivos.filter(o => o.tipo_objetivo === 'actitud').length,
             },
             version: new Date().toISOString().split('T')[0],
           })
       }
  
-      // 7. Generar y subir JSON si está habilitado
+      // 8. Generar y subir JSON si está habilitado
       if (CONFIG.GENERAR_JSON) {
         console.log('📝 Generando JSON...')
         const contenidoJSON = generarJSON(todosLosObjetivos)
@@ -901,12 +1040,15 @@ export async function handler(req: Request): Promise<Response> {
               asignaturas_procesadas: asignaturasProcesadas,
               total_objetivos: todosLosObjetivos.length,
               objetivos_priorizados: todosLosObjetivos.filter(o => o.priorizado === 1).length,
+              objetivos_contenido: todosLosObjetivos.filter(o => o.tipo_objetivo === 'contenido').length,
+              objetivos_habilidades: todosLosObjetivos.filter(o => o.tipo_objetivo === 'habilidad').length,
+              objetivos_actitudes: todosLosObjetivos.filter(o => o.tipo_objetivo === 'actitud').length,
             },
             version: new Date().toISOString().split('T')[0],
           })
       }
  
-      // 8. Finalizar proceso ETL
+      // 9. Finalizar proceso ETL
       await supabase.rpc('finalizar_proceso_etl', {
         p_proceso_id: procesoId,
         p_estado: 'completado',
@@ -928,6 +1070,9 @@ export async function handler(req: Request): Promise<Response> {
             asignaturas_procesadas: asignaturasProcesadas,
             total_objetivos: todosLosObjetivos.length,
             objetivos_priorizados: todosLosObjetivos.filter(o => o.priorizado === 1).length,
+            objetivos_contenido: todosLosObjetivos.filter(o => o.tipo_objetivo === 'contenido').length,
+            objetivos_habilidades: todosLosObjetivos.filter(o => o.tipo_objetivo === 'habilidad').length,
+            objetivos_actitudes: todosLosObjetivos.filter(o => o.tipo_objetivo === 'actitud').length,
             duracion_ms: duracionMs,
           },
         }),
