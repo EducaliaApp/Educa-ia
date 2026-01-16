@@ -29,8 +29,9 @@ Error fetching documentos: Object
 
 #### Agregados encabezados CORS
 ```typescript
+// CORS headers - Configurar origen específico en producción
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
@@ -39,6 +40,8 @@ if (req.method === 'OPTIONS') {
   return new Response('ok', { headers: corsHeaders })
 }
 ```
+
+**Mejora de Seguridad**: El origen CORS es configurable via variable de entorno `ALLOWED_ORIGIN` para restringir acceso en producción.
 
 #### Cambiada autenticación de servicio a usuario
 **Antes**:
@@ -60,16 +63,26 @@ const supabase = crearClienteSupabase(authHeader)
 const user = await autenticarUsuario(supabase)
 
 // Verificar rol admin
-const { data: profile } = await supabase
+const { data: profile, error: profileError } = await supabase
   .from('profiles')
   .select('role')
   .eq('id', user.id)
   .single()
 
+if (profileError) {
+  console.error('[AUTH] Error obteniendo perfil:', profileError)
+  return new Response(JSON.stringify({ error: 'Error verificando permisos' }), { status: 500 })
+}
+
 if (!profile || profile.role !== 'admin') {
+  console.warn('[AUTH] Acceso denegado - usuario no admin:', user.id)
   return new Response(JSON.stringify({ error: 'No autorizado' }), { status: 403 })
 }
 ```
+
+**Mejora de Seguridad**: 
+- Manejo explícito de errores de base de datos
+- Logging de intentos de acceso no autorizado para auditoría
 
 #### Agregado user.id a llamadas RPC
 ```typescript
@@ -95,8 +108,29 @@ CREATE OR REPLACE FUNCTION iniciar_proceso_etl(...)
 RETURNS UUID
 SECURITY DEFINER  -- <- Permite bypass de RLS
 SET search_path = public
-AS $$ ... $$ LANGUAGE plpgsql;
+AS $$ 
+DECLARE
+    v_proceso_id UUID;
+    v_ejecutor UUID;
+BEGIN
+    -- Determinar ejecutor con manejo explícito de NULL
+    v_ejecutor := COALESCE(p_ejecutado_por, auth.uid());
+    
+    -- Log si no hay ejecutor (importante para auditoría)
+    IF v_ejecutor IS NULL THEN
+        RAISE WARNING 'iniciar_proceso_etl: No se pudo determinar ejecutor';
+    END IF;
+    
+    INSERT INTO procesos_etl (...)
+    VALUES (..., v_ejecutor)
+    RETURNING id INTO v_proceso_id;
+    
+    RETURN v_proceso_id;
+END;
+$$ LANGUAGE plpgsql;
 ```
+
+**Mejora de Seguridad**: Manejo explícito de NULL con warning logging cuando no se puede determinar el ejecutor.
 
 #### Otorgados permisos EXECUTE
 ```sql
@@ -162,6 +196,9 @@ Asegurarse que las siguientes variables estén configuradas en el proyecto:
 Y en Supabase para las Edge Functions:
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
+- `ALLOWED_ORIGIN` (recomendado): URL del frontend para CORS, ej: `https://educa-ia-six.vercel.app`
+
+**Nota**: Si no se configura `ALLOWED_ORIGIN`, se usa wildcard `*` (menos seguro).
 
 ### 4. Desplegar Frontend (si es necesario)
 
