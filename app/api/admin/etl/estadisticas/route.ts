@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { isUserAdmin } from '@/lib/supabase/admin'
 
 /**
  * API Route para obtener estadísticas de procesos ETL
@@ -25,13 +26,9 @@ export async function GET(request: Request) {
     }
 
     // 2. Verificar que el usuario sea admin
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    const isAdmin = await isUserAdmin(user.id)
 
-    if (!profile || profile.role !== 'admin') {
+    if (!isAdmin) {
       return NextResponse.json(
         { error: 'No autorizado. Se requiere rol de administrador.' },
         { status: 403 }

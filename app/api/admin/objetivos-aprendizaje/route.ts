@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Verificar rol de admin
-    const { data: profile } = await supabase
+    const adminClient = createAdminClient()
+    const { data: profile } = await adminClient
       .from('profiles')
       .select('role')
       .eq('id', user.id)
@@ -125,7 +126,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar rol de admin/maintainer
-    const { data: profile } = await supabase
+    const adminClient = createAdminClient()
+    const { data: profile } = await adminClient
       .from('profiles')
       .select('role')
       .eq('id', user.id)
@@ -222,7 +224,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Verificar rol de admin/maintainer
-    const { data: profile } = await supabase
+    const adminClient = createAdminClient()
+    const { data: profile } = await adminClient
       .from('profiles')
       .select('role')
       .eq('id', user.id)
@@ -318,7 +321,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Verificar rol de admin (solo admin puede eliminar, no maintainer)
-    const { data: profile } = await supabase
+    const adminClient = createAdminClient()
+    const { data: profile } = await adminClient
       .from('profiles')
       .select('role')
       .eq('id', user.id)
