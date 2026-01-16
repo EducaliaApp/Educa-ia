@@ -1,48 +1,65 @@
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const HEADER_API_KEY = 'x-api-key'
-
-class UnauthorizedError extends Error {
-  constructor(message: string) {
+// Utilidad de autenticación para Edge Functions
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+ 
+export class UnauthorizedError extends Error {
+  constructor(message = 'No autorizado') {
     super(message)
     this.name = 'UnauthorizedError'
   }
 }
-
-function validarClaveServicio(req: Request): void {
-  const customSecret = Deno.env.get('SERVICE_FUNCTION_SECRET')
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  
-  if (!customSecret && !serviceRoleKey) {
-    throw new Error('Falta SERVICE_FUNCTION_SECRET o SUPABASE_SERVICE_ROLE_KEY en configuración')
+ 
+/**
+ * Crea un cliente de Supabase con role service_role
+ * Para operaciones administrativas desde Edge Functions
+ */
+export function crearClienteServicio(req: Request) {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+ 
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Variables de entorno SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY son requeridas')
   }
-
-  const headerValue = req.headers.get(HEADER_API_KEY) ?? req.headers.get('authorization')
-  const clave = headerValue?.startsWith('Bearer ')
-    ? headerValue.slice(7)
-    : headerValue || ''
-
-  if (!clave) {
-    throw new UnauthorizedError('No se proporcionó clave de autenticación')
-  }
-
-  // Aceptar solo secret personalizado o service role key (NO anon key por seguridad)
-  const esValido = (customSecret && clave === customSecret) || 
-                   (serviceRoleKey && clave === serviceRoleKey)
-  
-  if (!esValido) {
-    throw new UnauthorizedError('No autorizado para ejecutar esta función')
-  }
+ 
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
 }
-
-export function crearClienteServicio(req: Request): SupabaseClient {
-  validarClaveServicio(req)
-
-  return createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    { auth: { persistSession: false } }
-  )
+ 
+/**
+ * Valida autenticación del usuario desde el request
+ * Lanza UnauthorizedError si no está autenticado
+ */
+export async function validarAutenticacion(req: Request) {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')
+ 
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Variables de entorno no configuradas')
+  }
+ 
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader) {
+    throw new UnauthorizedError('Token de autorización no proporcionado')
+  }
+ 
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+    global: {
+      headers: { Authorization: authHeader },
+    },
+  })
+ 
+  const { data: { user }, error } = await supabase.auth.getUser()
+ 
+  if (error || !user) {
+    throw new UnauthorizedError('Token inválido o expirado')
+  }
+ 
+  return user
 }
-
-export { UnauthorizedError }
