@@ -18,6 +18,8 @@ function limpiarTexto(texto) {
 }
 
 function validarCodigoOA(codigo) {
+  // IMPORTANTE: Este patrón está definido en supabase/functions/extraer-bases-curriculares/constants.ts
+  // como PATRON_VALIDACION_OA. Mantener ambos sincronizados.
   const patron = /^[A-Z]{2,4}\d{2}\s+OA\s+\d{1,2}$/i
   return patron.test(codigo.trim())
 }
@@ -109,6 +111,8 @@ function extraerObjetivos(html, asignatura, curso) {
                     let codigoTexto = codigoMatch ? limpiarTexto(codigoMatch[1]) : ''
 
                     // Extraer solo el código del formato "Objetivo de aprendizaje AR01 OA 01"
+                    // IMPORTANTE: Este patrón está definido en supabase/functions/extraer-bases-curriculares/constants.ts
+                    // como PATRON_EXTRACCION_OA. Mantener ambos sincronizados.
                     const codigoExtraido = codigoTexto.match(/([A-Z]{2,4}\d{2}\s+OA\s+\d{1,2})/i)
                     const codigo = codigoExtraido ? codigoExtraido[1] : ''
 
