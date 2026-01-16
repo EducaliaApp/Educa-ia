@@ -29,9 +29,9 @@ Error fetching documentos: Object
 
 #### Agregados encabezados CORS
 ```typescript
-// CORS headers - Configurar origen específico en producción
+// CORS headers - ALLOWED_ORIGIN debe estar configurado en producción
 const corsHeaders = {
-  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || '*',
+  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || 'http://localhost:3000',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
@@ -41,7 +41,10 @@ if (req.method === 'OPTIONS') {
 }
 ```
 
-**Mejora de Seguridad**: El origen CORS es configurable via variable de entorno `ALLOWED_ORIGIN` para restringir acceso en producción.
+**Mejora de Seguridad**: 
+- El origen CORS es configurable via variable de entorno `ALLOWED_ORIGIN`
+- Fallback seguro a `localhost:3000` para desarrollo local
+- **IMPORTANTE**: `ALLOWED_ORIGIN` debe configurarse en producción
 
 #### Cambiada autenticación de servicio a usuario
 **Antes**:
@@ -196,9 +199,9 @@ Asegurarse que las siguientes variables estén configuradas en el proyecto:
 Y en Supabase para las Edge Functions:
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
-- `ALLOWED_ORIGIN` (recomendado): URL del frontend para CORS, ej: `https://educa-ia-six.vercel.app`
+- `ALLOWED_ORIGIN` (**requerido en producción**): URL del frontend, ej: `https://educa-ia-six.vercel.app`
 
-**Nota**: Si no se configura `ALLOWED_ORIGIN`, se usa wildcard `*` (menos seguro).
+**Nota**: Si no se configura `ALLOWED_ORIGIN`, se usa `http://localhost:3000` por defecto (solo para desarrollo local).
 
 ### 4. Desplegar Frontend (si es necesario)
 

@@ -24,9 +24,9 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { crearClienteSupabase, autenticarUsuario } from '../shared/utils.ts'
 
-// CORS headers - Configurar origen específico en producción
+// CORS headers - ALLOWED_ORIGIN debe estar configurado en producción
 const corsHeaders = {
-  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || '*',
+  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || 'http://localhost:3000',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
