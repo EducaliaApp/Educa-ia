@@ -383,6 +383,11 @@ function generarNombreArchivo(fecha: Date = new Date()): string {
   const fechaStr = fecha.toISOString().split('T')[0]
   return `bases_curriculares_1_a_6_basico_con_actividades_${fechaStr}.csv`
 }
+
+/**
+ * Escapa caracteres especiales para CSV
+ */
+function escaparCSV(valor: string): string {
   if (!valor) return ''
   
   // Si contiene punto y coma, comillas o saltos de línea, envolver en comillas
@@ -395,9 +400,9 @@ function generarNombreArchivo(fecha: Date = new Date()): string {
 }
 
 /**
- * Escapa caracteres especiales para CSV
+ * Sube archivo a Supabase Storage
  */
-function escaparCSV(valor: string): string {
+async function subirCSVaStorage(
   supabase: any,
   contenidoCSV: string,
   nombreArchivo: string
@@ -438,9 +443,9 @@ function escaparCSV(valor: string): string {
 }
 
 /**
- * Sube archivo a Supabase Storage
+ * Handler principal de la Edge Function
  */
-async function subirCSVaStorage(
+export async function handler(req: Request): Promise<Response> {
   const startTime = Date.now()
   
   try {

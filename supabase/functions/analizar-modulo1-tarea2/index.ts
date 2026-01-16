@@ -48,7 +48,6 @@ serve(async (req) => {
     
     const tarea_id = requestData.tarea_id as string
     const modelo = (requestData.modelo as string) || 'claude-sonnet-4'
-    }
     
     // 3. Obtener tarea y contexto
     const { data: tarea, error: errorTarea } = await supabase
