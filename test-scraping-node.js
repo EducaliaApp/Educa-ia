@@ -28,6 +28,8 @@ function limpiarTexto(texto) {
 }
 
 function validarCodigoOA(codigo) {
+  // IMPORTANTE: Este patrón está definido en supabase/functions/extraer-bases-curriculares/constants.ts
+  // como PATRON_VALIDACION_OA. Mantener ambos sincronizados.
   const patron = /^[A-Z]{2,4}\d{2}\s+OA\s+\d{1,2}$/i
   return patron.test(codigo.trim())
 }

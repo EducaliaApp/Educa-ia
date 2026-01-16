@@ -5,6 +5,8 @@
  * Uso: deno run --allow-net test-scraping.ts
  */
 
+import { PATRON_VALIDACION_OA } from './constants.ts'
+
 // ============================================
 // CONFIGURACIÓN
 // ============================================
@@ -28,8 +30,7 @@ function limpiarTexto(texto: string): string {
 }
 
 function validarCodigoOA(codigo: string): boolean {
-  const patron = /^[A-Z]{2,4}\d{2}\s+OA\s+\d{1,2}$/i
-  return patron.test(codigo.trim())
+  return PATRON_VALIDACION_OA.test(codigo.trim())
 }
 
 function validarURL(url: string): boolean {
