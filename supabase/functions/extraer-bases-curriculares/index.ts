@@ -48,9 +48,10 @@ const CONFIG = {
  
 interface ObjetivoAprendizaje {
   asignatura: string
-  oa_codigo: string // "AR01 OA 01"
+  oa_codigo: string // "AR01 OA 01", "MA04 OAH a", "LE05 OAA A"
   eje: string // Eje o Núcleo curricular
   objetivo: string
+  tipo_objetivo: 'contenido' | 'habilidad' | 'actitud' // Tipo de OA basado en OA/OAH/OAA
   actividad_1: string
   url_actividad_1: string
   actividad_2: string
@@ -67,6 +68,7 @@ interface ObjetivoAprendizajeJSON {
   codigo: string
   eje: string
   objetivo: string
+  tipo_objetivo: 'contenido' | 'habilidad' | 'actitud'
   actividades: {
     titulo: string
     url: string
@@ -97,10 +99,28 @@ function limpiarTexto(texto: string): string {
  
 /**
  * Valida que un código OA tenga formato correcto
- * Ejemplos válidos: "AR01 OA 01", "CN03 OA 05", "HI05 OA 12"
+ * Ejemplos válidos: "AR01 OA 01", "MA04 OAH a", "LE05 OAA A"
  */
 function validarCodigoOA(codigo: string): boolean {
   return PATRON_VALIDACION_OA.test(codigo.trim())
+}
+
+/**
+ * Determina el tipo de objetivo basándose en el código OA
+ * - OA: Objetivo de Aprendizaje de Contenido
+ * - OAH: Objetivo de Aprendizaje de Habilidades
+ * - OAA: Objetivo de Aprendizaje de Actitudes
+ */
+function obtenerTipoObjetivo(codigo: string): 'contenido' | 'habilidad' | 'actitud' {
+  const codigoLimpio = codigo.trim().toUpperCase()
+
+  if (codigoLimpio.includes(' OAH ')) {
+    return 'habilidad'
+  } else if (codigoLimpio.includes(' OAA ')) {
+    return 'actitud'
+  } else {
+    return 'contenido'
+  }
 }
  
 /**
@@ -303,6 +323,7 @@ function extraerObjetivos(html: string, asignatura: string, curso: string, nivel
                         oa_codigo: codigo,
                         eje: ejeNombre,
                         objetivo: objetivo,
+                        tipo_objetivo: obtenerTipoObjetivo(codigo),
                         actividad_1: '',
                         url_actividad_1: '',
                         actividad_2: '',
@@ -387,6 +408,7 @@ function extraerObjetivos(html: string, asignatura: string, curso: string, nivel
                   oa_codigo: codigo,
                   eje: eje,
                   objetivo: objetivo,
+                  tipo_objetivo: obtenerTipoObjetivo(codigo),
                   actividad_1: '',
                   url_actividad_1: '',
                   actividad_2: '',
@@ -529,6 +551,7 @@ function generarCSV(objetivos: ObjetivoAprendizaje[]): string {
     'OA',
     'Eje',
     'Objetivo de Aprendizaje',
+    'Tipo',
     'Actividad 1',
     'URL Actividad 1',
     'Actividad 2',
@@ -548,6 +571,7 @@ function generarCSV(objetivos: ObjetivoAprendizaje[]): string {
       escaparCSV(obj.oa_codigo),
       escaparCSV(obj.eje),
       escaparCSV(obj.objetivo),
+      escaparCSV(obj.tipo_objetivo),
       escaparCSV(obj.actividad_1),
       escaparCSV(obj.url_actividad_1),
       escaparCSV(obj.actividad_2),
@@ -586,6 +610,7 @@ function generarJSON(objetivos: ObjetivoAprendizaje[]): string {
       codigo: obj.oa_codigo,
       eje: obj.eje,
       objetivo: obj.objetivo,
+      tipo_objetivo: obj.tipo_objetivo,
       actividades,
       priorizado: obj.priorizado === 1,
       metadata: {
@@ -845,7 +870,7 @@ export async function handler(req: Request): Promise<Response> {
             url_descarga: urlCSV,
             num_registros: todosLosObjetivos.length,
             columnas: [
-              'Asignatura', 'OA', 'Eje', 'Objetivo de Aprendizaje',
+              'Asignatura', 'OA', 'Eje', 'Objetivo de Aprendizaje', 'Tipo',
               'Actividad 1', 'URL Actividad 1', 'Actividad 2', 'URL Actividad 2',
               'Actividad 3', 'URL Actividad 3', 'Actividad 4', 'URL Actividad 4',
               'Priorizado',
@@ -854,6 +879,9 @@ export async function handler(req: Request): Promise<Response> {
               asignaturas_procesadas: asignaturasProcesadas,
               total_objetivos: todosLosObjetivos.length,
               objetivos_priorizados: todosLosObjetivos.filter(o => o.priorizado === 1).length,
+              objetivos_contenido: todosLosObjetivos.filter(o => o.tipo_objetivo === 'contenido').length,
+              objetivos_habilidades: todosLosObjetivos.filter(o => o.tipo_objetivo === 'habilidad').length,
+              objetivos_actitudes: todosLosObjetivos.filter(o => o.tipo_objetivo === 'actitud').length,
             },
             version: new Date().toISOString().split('T')[0],
           })
@@ -901,6 +929,9 @@ export async function handler(req: Request): Promise<Response> {
               asignaturas_procesadas: asignaturasProcesadas,
               total_objetivos: todosLosObjetivos.length,
               objetivos_priorizados: todosLosObjetivos.filter(o => o.priorizado === 1).length,
+              objetivos_contenido: todosLosObjetivos.filter(o => o.tipo_objetivo === 'contenido').length,
+              objetivos_habilidades: todosLosObjetivos.filter(o => o.tipo_objetivo === 'habilidad').length,
+              objetivos_actitudes: todosLosObjetivos.filter(o => o.tipo_objetivo === 'actitud').length,
             },
             version: new Date().toISOString().split('T')[0],
           })
@@ -928,6 +959,9 @@ export async function handler(req: Request): Promise<Response> {
             asignaturas_procesadas: asignaturasProcesadas,
             total_objetivos: todosLosObjetivos.length,
             objetivos_priorizados: todosLosObjetivos.filter(o => o.priorizado === 1).length,
+            objetivos_contenido: todosLosObjetivos.filter(o => o.tipo_objetivo === 'contenido').length,
+            objetivos_habilidades: todosLosObjetivos.filter(o => o.tipo_objetivo === 'habilidad').length,
+            objetivos_actitudes: todosLosObjetivos.filter(o => o.tipo_objetivo === 'actitud').length,
             duracion_ms: duracionMs,
           },
         }),
