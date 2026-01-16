@@ -587,7 +587,11 @@ async function extraerActividades(url: string): Promise<{ nombre: string; url: s
  
     return actividades
   } catch (error) {
-    console.error(`Error extrayendo actividades de ${url}:`, error)
+    // Solo registrar como error si NO es un 404 (páginas que no existen son esperadas)
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+    if (!errorMessage.includes('404')) {
+      console.error(`Error extrayendo actividades de ${url}:`, error)
+    }
     return []
   }
 }
@@ -937,12 +941,13 @@ export async function handler(req: Request): Promise<Response> {
           // IMPORTANTE: Solo los objetivos de contenido (OA) tienen páginas de actividades
           // Los OAH (habilidades) y OAA (actitudes) NO tienen páginas de detalle en el sitio
           let objetivosConActividades = 0
-          let objetivosOmitidos = 0
+          let objetivosSinActividades = 0
+          let objetivosHabilidadesActitudes = 0
 
           for (const obj of objetivos) {
             // Filtrar: SOLO extraer actividades para objetivos de contenido
             if (obj.tipo_objetivo !== 'contenido') {
-              objetivosOmitidos++
+              objetivosHabilidadesActitudes++
               continue
             }
 
@@ -958,6 +963,9 @@ export async function handler(req: Request): Promise<Response> {
                 obj.actividad_1 = actividades[0]?.nombre || ''
                 obj.url_actividad_1 = actividades[0]?.url || ''
                 objetivosConActividades++
+              } else {
+                // Objetivo de contenido pero sin actividades encontradas
+                objetivosSinActividades++
               }
               if (actividades.length > 1) {
                 obj.actividad_2 = actividades[1]?.nombre || ''
@@ -972,17 +980,24 @@ export async function handler(req: Request): Promise<Response> {
                 obj.url_actividad_4 = actividades[3]?.url || ''
               }
             } catch (error) {
-              // Solo advertir si es un objetivo de contenido que debería tener actividades
+              // Solo advertir si NO es un 404 (páginas inexistentes son esperadas)
               const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
-              console.warn(`  ⚠️  No se pudieron extraer actividades para ${obj.oa_codigo}: ${errorMessage}`)
+              if (!errorMessage.includes('404')) {
+                console.warn(`  ⚠️  Error extrayendo actividades para ${obj.oa_codigo}: ${errorMessage}`)
+              }
+              objetivosSinActividades++
             }
           }
 
-          if (objetivosOmitidos > 0) {
-            console.log(`  ℹ️  Omitidos ${objetivosOmitidos} objetivos sin actividades (OAH/OAA)`)
+          // Mostrar resumen más claro
+          if (objetivosHabilidadesActitudes > 0) {
+            console.log(`  ℹ️  ${objetivosHabilidadesActitudes} objetivos de habilidades/actitudes (OAH/OAA) - no requieren actividades`)
           }
           if (objetivosConActividades > 0) {
-            console.log(`  ✓ Actividades extraídas para ${objetivosConActividades} objetivos`)
+            console.log(`  ✓ Actividades extraídas para ${objetivosConActividades} objetivos de contenido`)
+          }
+          if (objetivosSinActividades > 0) {
+            console.log(`  ⚠️  ${objetivosSinActividades} objetivos de contenido sin actividades disponibles`)
           }
  
           todosLosObjetivos.push(...objetivos)
@@ -999,6 +1014,19 @@ export async function handler(req: Request): Promise<Response> {
       }
  
       console.log(`\n✅ Extracción completada: ${todosLosObjetivos.length} objetivos`)
+      console.log(`   📊 Desglose por tipo:`)
+      console.log(`      - Contenido (OA): ${todosLosObjetivos.filter(o => o.tipo_objetivo === 'contenido').length}`)
+      console.log(`      - Habilidades (OAH): ${todosLosObjetivos.filter(o => o.tipo_objetivo === 'habilidad').length}`)
+      console.log(`      - Actitudes (OAA): ${todosLosObjetivos.filter(o => o.tipo_objetivo === 'actitud').length}`)
+      console.log(`   ⭐ Priorizados: ${todosLosObjetivos.filter(o => o.priorizado === 1).length}`)
+      
+      // Validación: verificar que se extrajeron objetivos
+      if (todosLosObjetivos.length === 0) {
+        console.warn('⚠️  ADVERTENCIA: No se extrajeron objetivos. Posibles causas:')
+        console.warn('   - La estructura HTML del sitio cambió')
+        console.warn('   - Problemas de conectividad')
+        console.warn('   - Los selectores CSS necesitan actualización')
+      }
 
       // 6. Persistir objetivos en la base de datos (si persist_db=true)
       let objetivosNuevos = 0
