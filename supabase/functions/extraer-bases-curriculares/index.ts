@@ -24,9 +24,9 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { crearClienteSupabase, autenticarUsuario } from '../shared/utils.ts'
 
-// CORS headers
+// CORS headers - Configurar origen específico en producción
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
@@ -481,14 +481,23 @@ export async function handler(req: Request): Promise<Response> {
       .eq('id', user.id)
       .single()
     
-    if (profileError || !profile || profile.role !== 'admin') {
+    if (profileError) {
+      console.error('[AUTH] Error obteniendo perfil:', profileError)
+      return new Response(
+        JSON.stringify({ error: 'Error verificando permisos' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    
+    if (!profile || profile.role !== 'admin') {
+      console.warn('[AUTH] Acceso denegado - usuario no admin:', user.id)
       return new Response(
         JSON.stringify({ error: 'No autorizado. Se requiere rol de administrador.' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
     
-    console.log(`✓ Usuario autenticado: ${user.id}`)
+    console.log(`✓ Usuario autenticado: ${user.id} (admin)`)
     
     // Obtener configuración del request
     const { force = false } = await req.json().catch(() => ({ force: false }))

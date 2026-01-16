@@ -16,7 +16,17 @@ SET search_path = public
 AS $$
 DECLARE
     v_proceso_id UUID;
+    v_ejecutor UUID;
 BEGIN
+    -- Determinar ejecutor: parámetro, usuario autenticado, o NULL
+    -- En contexto SECURITY DEFINER, auth.uid() puede ser NULL
+    v_ejecutor := COALESCE(p_ejecutado_por, auth.uid());
+    
+    -- Log si no hay ejecutor identificado
+    IF v_ejecutor IS NULL THEN
+        RAISE WARNING 'iniciar_proceso_etl: No se pudo determinar ejecutor';
+    END IF;
+    
     INSERT INTO procesos_etl (
         nombre,
         tipo_proceso,
@@ -32,7 +42,7 @@ BEGIN
         'en_progreso',
         NOW(),
         p_configuracion,
-        COALESCE(p_ejecutado_por, auth.uid())
+        v_ejecutor
     ) RETURNING id INTO v_proceso_id;
     
     RETURN v_proceso_id;
