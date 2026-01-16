@@ -221,9 +221,9 @@ export default function ETLPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Procesos ETL</h1>
+        <h1 className="text-3xl font-bold text-white mb-2">Procesos ETL - Data Maestra</h1>
         <p className="text-slate-400">
-          Extracción y transformación de datos desde fuentes oficiales MINEDUC
+          Extracción y transformación de data maestra desde fuentes oficiales MINEDUC
         </p>
       </div>
 
@@ -235,7 +235,7 @@ export default function ETLPage() {
               Extraer Bases Curriculares
             </h2>
             <p className="text-slate-400">
-              Extrae objetivos de aprendizaje de 1° a 6° básico desde curriculumnacional.cl
+              Extrae objetivos de aprendizaje categorizados desde el currículum nacional de Chile (curriculumnacional.cl)
             </p>
           </div>
           <button

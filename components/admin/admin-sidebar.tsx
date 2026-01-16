@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, FileText, BarChart3, Settings, ArrowLeft, LogOut, ClipboardCheck, Briefcase, GraduationCap, Cpu, CreditCard, Shield, Database } from 'lucide-react'
+import { LayoutDashboard, Users, FileText, BarChart3, Settings, ArrowLeft, LogOut, ClipboardCheck, Briefcase, GraduationCap, Cpu, CreditCard, Shield, Database, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
@@ -51,14 +51,22 @@ const navItems: NavItem[] = [
     icon: CreditCard,
   },
   {
-    name: 'MINEDUC',
+    name: 'Estadísticas MINEDUC',
     href: '/admin/mineduc',
     icon: GraduationCap,
+    group: 'data_maestra',
+  },
+  {
+    name: 'Objetivos Aprendizaje',
+    href: '/admin/objetivos-aprendizaje',
+    icon: BookOpen,
+    group: 'data_maestra',
   },
   {
     name: 'ETL / Procesos',
     href: '/admin/etl',
     icon: Database,
+    group: 'data_maestra',
   },
   {
     name: 'Métricas IA',
@@ -130,7 +138,7 @@ export function AdminSidebar({ userName, userEmail }: AdminSidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {/* Main items (no group) */}
         {groupedItems.main?.map(renderNavItem)}
         
@@ -143,6 +151,18 @@ export function AdminSidebar({ userName, userEmail }: AdminSidebarProps) {
               </h3>
             </div>
             {groupedItems.usuarios.map(renderNavItem)}
+          </>
+        )}
+
+        {/* Data Maestra group */}
+        {groupedItems.data_maestra && (
+          <>
+            <div className="pt-4 pb-2">
+              <h3 className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Data Maestra
+              </h3>
+            </div>
+            {groupedItems.data_maestra.map(renderNavItem)}
           </>
         )}
       </nav>

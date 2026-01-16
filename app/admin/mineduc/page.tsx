@@ -109,9 +109,9 @@ export default function MinEducPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Panel MINEDUC</h1>
+        <h1 className="text-3xl font-bold text-white mb-2">Estadísticas MINEDUC</h1>
         <p className="text-slate-400">
-          Estadísticas alineadas con Bases Curriculares y Marco para la Buena Enseñanza
+          Estadísticas de uso alineadas con Bases Curriculares y Marco para la Buena Enseñanza
         </p>
       </div>
 
