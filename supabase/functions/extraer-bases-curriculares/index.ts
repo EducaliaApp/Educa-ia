@@ -269,10 +269,10 @@ function extraerObjetivos(html: string, asignatura: string, curso: string, nivel
             let nivelItem = 0
             let j = inicioItem
             while (j < bloqueEje.length) {
-              if (bloqueEje.substr(j, 4) === '<div') {
+              if (bloqueEje.substring(j, j + 4) === '<div') {
                 nivelItem++
                 j += 4
-              } else if (bloqueEje.substr(j, 6) === '</div>') {
+              } else if (bloqueEje.substring(j, j + 6) === '</div>') {
                 nivelItem--
                 if (nivelItem === 0) {
                   const itemHtml = bloqueEje.substring(inicioItem, j + 6)
