@@ -935,7 +935,12 @@ export async function handler(req: Request): Promise<Response> {
           const categoria = extraerCategoriaDesdeURL(asig.url)
 
           const objetivos = extraerObjetivos(htmlAsignatura, nombreAsignatura, curso, categoria)
-          console.log(`  ✓ Extraídos ${objetivos.length} objetivos`)
+          
+          if (objetivos.length === 0) {
+            console.warn(`  ⚠️  NO se extrajeron objetivos - puede indicar cambio en estructura HTML`)
+          } else {
+            console.log(`  ✓ Extraídos ${objetivos.length} objetivos`)
+          }
 
           // 5. Para cada objetivo, extraer actividades
           // IMPORTANTE: Solo los objetivos de contenido (OA) tienen páginas de actividades
