@@ -22,7 +22,13 @@
 // - .field--name-field-recursos-relacionados li a: Actividades
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { crearClienteServicio, UnauthorizedError } from '../shared/service-auth.ts'
+import { crearClienteSupabase, autenticarUsuario } from '../shared/utils.ts'
+
+// CORS headers - ALLOWED_ORIGIN debe estar configurado en producción
+const corsHeaders = {
+  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || 'http://localhost:3000',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
 // ============================================
 // CONFIGURACIÓN
@@ -446,13 +452,52 @@ async function subirCSVaStorage(
  * Handler principal de la Edge Function
  */
 export async function handler(req: Request): Promise<Response> {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
   const startTime = Date.now()
   
   try {
     console.log('🚀 Iniciando extracción de Bases Curriculares...')
     
-    // Autenticación
-    const supabase = crearClienteServicio(req)
+    // Autenticación de usuario
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization header es requerido' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const supabase = crearClienteSupabase(authHeader)
+    const user = await autenticarUsuario(supabase)
+    
+    // Verificar que el usuario sea admin
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+    
+    if (profileError) {
+      console.error('[AUTH] Error obteniendo perfil:', profileError)
+      return new Response(
+        JSON.stringify({ error: 'Error verificando permisos' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    
+    if (!profile || profile.role !== 'admin') {
+      console.warn('[AUTH] Acceso denegado - usuario no admin:', user.id)
+      return new Response(
+        JSON.stringify({ error: 'No autorizado. Se requiere rol de administrador.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    
+    console.log(`✓ Usuario autenticado: ${user.id} (admin)`)
     
     // Obtener configuración del request
     const { force = false } = await req.json().catch(() => ({ force: false }))
@@ -464,6 +509,7 @@ export async function handler(req: Request): Promise<Response> {
         p_tipo_proceso: 'extraccion',
         p_descripcion: 'Extracción de Bases Curriculares 1° a 6° básico desde curriculumnacional.cl',
         p_configuracion: JSON.stringify({ force }),
+        p_ejecutado_por: user.id,
       })
     
     if (procesoError) {
@@ -649,7 +695,7 @@ export async function handler(req: Request): Promise<Response> {
         }),
         {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       )
       
@@ -673,16 +719,6 @@ export async function handler(req: Request): Promise<Response> {
     }
     
   } catch (error) {
-    if (error instanceof UnauthorizedError) {
-      return new Response(
-        JSON.stringify({ error: 'No autorizado' }),
-        {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      )
-    }
-    
     console.error('❌ Error en extracción:', error)
     const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
     
@@ -693,7 +729,7 @@ export async function handler(req: Request): Promise<Response> {
       }),
       {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     )
   }
