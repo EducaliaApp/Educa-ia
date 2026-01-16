@@ -5,7 +5,7 @@
 **Resultado de pruebas con datos reales del sitio:**
 - ✅ **74 asignaturas** extraídas correctamente
 - ✅ **Priorización detectada** correctamente (100%)
-- ⚠️ **Solo 2 de 5 OAs** extraídos (problema pendiente)
+- ✅ **5 de 5 OAs** extraídos correctamente (100%)
 
 ## 🔍 Análisis del Problema Restante
 
