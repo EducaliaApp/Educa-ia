@@ -215,10 +215,10 @@ function extraerObjetivos(html, asignatura, curso) {
       let i = inicioCnt
 
       while (i < html.length) {
-        if (html.substr(i, 4) === '<div') {
+        if (html.substring(i, i + 4) === '<div') {
           nivel++
           i += 4
-        } else if (html.substr(i, 6) === '</div>') {
+        } else if (html.substring(i, i + 6) === '</div>') {
           nivel--
           if (nivel === 0) {
             const bloqueOA = html.substring(inicioCnt, i + 6)
