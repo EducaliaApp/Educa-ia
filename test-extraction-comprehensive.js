@@ -11,7 +11,7 @@
  */
 
 console.log('🧪 TEST COMPREHENSIVO DE EXTRACCIÓN\n');
-console.log('=' .repeat(60));
+console.log('='.repeat(60));
 
 // Simular datos extraídos de una asignatura real
 const objetivosExtraidos = [
@@ -67,7 +67,7 @@ if (objetivosSinActividades > 0) {
   console.log(`  ⚠️  ${objetivosSinActividades} objetivos de contenido sin actividades disponibles`);
 }
 
-console.log('\n' + '=' .repeat(60));
+console.log('\n' + '='.repeat(60));
 console.log('✅ CONCLUSIÓN:\n');
 console.log('1. TODOS los objetivos se extraen (incluyendo OAH y OAA)');
 console.log('2. Los mensajes distinguen claramente:');
@@ -94,7 +94,7 @@ if (todosLosObjetivos.length === objetivosExtraidos.length) {
   console.log('\n❌ ERROR: Algunos objetivos no se están extrayendo');
 }
 
-console.log('\n' + '=' .repeat(60));
+console.log('\n' + '='.repeat(60));
 console.log('🎯 RESUMEN DE CAMBIOS IMPLEMENTADOS:\n');
 console.log('1. ✅ Logs más claros sobre objetivos de habilidades/actitudes');
 console.log('2. ✅ Errores 404 se manejan silenciosamente (son esperados)');

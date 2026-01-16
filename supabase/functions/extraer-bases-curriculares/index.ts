@@ -100,6 +100,17 @@ interface AsignaturaLink {
 function limpiarTexto(texto: string): string {
   return texto.replace(/\s+/g, ' ').trim()
 }
+
+/**
+ * Verifica si un error es un 404 (página no encontrada)
+ * Usado para detectar errores esperados vs errores reales
+ */
+function es404(error: unknown): boolean {
+  if (error instanceof Error) {
+    return error.message.includes('404') || error.message.includes('Not Found')
+  }
+  return false
+}
  
 /**
  * Valida que un código OA tenga formato correcto
@@ -588,8 +599,7 @@ async function extraerActividades(url: string): Promise<{ nombre: string; url: s
     return actividades
   } catch (error) {
     // Solo registrar como error si NO es un 404 (páginas que no existen son esperadas)
-    const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
-    if (!errorMessage.includes('404')) {
+    if (!es404(error)) {
       console.error(`Error extrayendo actividades de ${url}:`, error)
     }
     return []
@@ -986,8 +996,8 @@ export async function handler(req: Request): Promise<Response> {
               }
             } catch (error) {
               // Solo advertir si NO es un 404 (páginas inexistentes son esperadas)
-              const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
-              if (!errorMessage.includes('404')) {
+              if (!es404(error)) {
+                const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
                 console.warn(`  ⚠️  Error extrayendo actividades para ${obj.oa_codigo}: ${errorMessage}`)
               }
               objetivosSinActividades++
