@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { UserTable } from '@/components/admin/user-table'
 import { AjustarCreditosModal } from '@/components/admin/AjustarCreditosModal'
 import { EditUserModal } from '@/components/admin/EditUserModal'
@@ -38,14 +38,6 @@ export default function UsuariosPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
 
-  useEffect(() => {
-    fetchUsers()
-  }, [])
-
-  useEffect(() => {
-    filterUsers()
-  }, [searchTerm, planFilter, roleFilter, users])
-
   const fetchUsers = async () => {
     setIsLoading(true)
     try {
@@ -63,7 +55,7 @@ export default function UsuariosPage() {
     }
   }
 
-  const filterUsers = () => {
+  const filterUsers = useCallback(() => {
     let filtered = users
 
     // Filter by search term
@@ -86,7 +78,15 @@ export default function UsuariosPage() {
     }
 
     setFilteredUsers(filtered)
-  }
+  }, [users, searchTerm, planFilter, roleFilter])
+
+  useEffect(() => {
+    fetchUsers()
+  }, [])
+
+  useEffect(() => {
+    filterUsers()
+  }, [filterUsers])
 
   const handleEditUser = (user: User) => {
     setSelectedUser(user)
