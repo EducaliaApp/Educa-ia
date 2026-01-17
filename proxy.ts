@@ -5,7 +5,7 @@ import { getSupabaseConfig, isMissingSupabaseEnvError } from '@/lib/supabase/con
 import type { Database } from '@/lib/supabase/types'
 import { isUserAdmin } from '@/lib/supabase/admin'
 
-export async function middleware(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   })

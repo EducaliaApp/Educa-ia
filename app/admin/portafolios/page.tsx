@@ -120,6 +120,7 @@ export default function PortafoliosAdminPage() {
 
   useEffect(() => {
     fetchPortafolios()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {

@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Card } from '@/components/ui/Card'
 import { MetricsCard } from '@/components/admin/metrics-card'
 import { ETLStatsChart } from '@/components/admin/etl-stats-chart'
 import { ETLProcessTable } from '@/components/admin/etl-process-table'
 import { ETLLogsViewer } from '@/components/admin/etl-logs-viewer'
+import { AdminSurface } from '@/components/admin/AdminSurface'
 import {
   Database,
   Play,
@@ -213,8 +213,8 @@ export default function ETLPage() {
       </div>
 
       {/* Botón para ejecutar extracción */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between">
+      <AdminSurface className="space-y-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex-1">
             <h2 className="text-xl font-bold text-white mb-2">
               Extraer Bases Curriculares
@@ -227,10 +227,10 @@ export default function ETLPage() {
           <button
             onClick={ejecutarExtraccionBasesCurriculares}
             disabled={isExecuting}
-            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors ${
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all ${
               isExecuting
-                ? 'bg-gray-600 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                ? 'bg-slate-700 text-slate-300 cursor-wait'
+                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_15px_35px_rgba(37,99,235,0.35)]'
             }`}
           >
             {isExecuting ? (
@@ -248,22 +248,16 @@ export default function ETLPage() {
         </div>
         {executionMessage && (
           <div
-            className={`mt-4 p-4 rounded-lg ${
+            className={`p-4 rounded-xl border ${
               executionMessage.startsWith('✅')
-                ? 'bg-green-950/20 border border-green-900'
-                : 'bg-red-950/20 border border-red-900'
+                ? 'bg-green-950/30 border-green-600/40 text-green-300'
+                : 'bg-red-950/40 border-red-600/40 text-red-300'
             }`}
           >
-            <p
-              className={`${
-                executionMessage.startsWith('✅') ? 'text-green-400' : 'text-red-400'
-              }`}
-            >
-              {executionMessage}
-            </p>
+            {executionMessage}
           </div>
         )}
-      </Card>
+      </AdminSurface>
 
       {/* Estadísticas Principales */}
       {estadisticas && (
@@ -312,7 +306,7 @@ export default function ETLPage() {
 
       {/* Procesos con Errores (si existen) */}
       {estadisticas && estadisticas.procesos_error > 0 && (
-        <Card className="p-6 border-red-900/50 bg-red-950/10">
+        <AdminSurface variant="danger">
           <div className="flex items-center gap-3">
             <AlertCircle className="w-6 h-6 text-red-500" />
             <div>
@@ -324,12 +318,12 @@ export default function ETLPage() {
               </p>
             </div>
           </div>
-        </Card>
+        </AdminSurface>
       )}
 
       {/* Procesos En Progreso (si existen) */}
       {estadisticas && estadisticas.procesos_en_progreso > 0 && (
-        <Card className="p-6 border-yellow-900/50 bg-yellow-950/10">
+        <AdminSurface variant="warning">
           <div className="flex items-center gap-3">
             <RefreshCw className="w-6 h-6 text-yellow-500 animate-spin" />
             <div>
@@ -341,7 +335,7 @@ export default function ETLPage() {
               </p>
             </div>
           </div>
-        </Card>
+        </AdminSurface>
       )}
 
       {/* Gráficos de Estadísticas por Fecha */}

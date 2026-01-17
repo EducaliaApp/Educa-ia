@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/Badge'
 import { BookOpen, GraduationCap, School, TrendingUp } from 'lucide-react'
@@ -23,11 +23,7 @@ export default function MinEducPage() {
 
   const supabase = createClient()
 
-  useEffect(() => {
-    fetchStats()
-  }, [])
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     setIsLoading(true)
     try {
       // Planificaciones por asignatura
@@ -87,7 +83,11 @@ export default function MinEducPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    fetchStats()
+  }, [fetchStats])
 
   if (isLoading) {
     return (

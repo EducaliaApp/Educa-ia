@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/Badge'
 import { Cpu, DollarSign, Zap, TrendingUp, Activity } from 'lucide-react'
@@ -30,11 +30,7 @@ export default function MetricasIAPage() {
 
   const supabase = createClient()
 
-  useEffect(() => {
-    fetchMetrics()
-  }, [])
-
-  const fetchMetrics = async () => {
+  const fetchMetrics = useCallback(async () => {
     setIsLoading(true)
     try {
       // Get all AI analysis data
@@ -126,7 +122,11 @@ export default function MetricasIAPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    fetchMetrics()
+  }, [fetchMetrics])
 
   if (isLoading) {
     return (

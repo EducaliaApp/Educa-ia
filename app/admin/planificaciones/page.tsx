@@ -1,13 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import { Search, FileText, Eye } from 'lucide-react'
-import { formatDate } from '@/lib/utils'
-import { cn } from '@/lib/utils'
+import { formatDate, cn } from '@/lib/utils'
 
 interface Planificacion {
   id: string
@@ -33,15 +32,7 @@ export default function PlanificacionesPage() {
 
   const supabase = createClient()
 
-  useEffect(() => {
-    fetchPlanificaciones()
-  }, [])
-
-  useEffect(() => {
-    filterPlanificaciones()
-  }, [searchTerm, asignaturaFilter, planificaciones])
-
-  const fetchPlanificaciones = async () => {
+  const fetchPlanificaciones = useCallback(async () => {
     setIsLoading(true)
     try {
       // Get all planificaciones with user info
@@ -75,9 +66,9 @@ export default function PlanificacionesPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [supabase])
 
-  const filterPlanificaciones = () => {
+  const filterPlanificaciones = useCallback(() => {
     let filtered = planificaciones
 
     // Filter by search term (user name or unidad)
@@ -95,7 +86,15 @@ export default function PlanificacionesPage() {
     }
 
     setFilteredPlanificaciones(filtered)
-  }
+  }, [searchTerm, asignaturaFilter, planificaciones])
+
+  useEffect(() => {
+    fetchPlanificaciones()
+  }, [fetchPlanificaciones])
+
+  useEffect(() => {
+    filterPlanificaciones()
+  }, [filterPlanificaciones])
 
   const handleViewPlanificacion = (planificacion: Planificacion) => {
     setSelectedPlanificacion(planificacion)

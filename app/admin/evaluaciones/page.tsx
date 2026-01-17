@@ -1,13 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import { Search, ClipboardCheck, Eye } from 'lucide-react'
-import { formatDate } from '@/lib/utils'
-import { cn } from '@/lib/utils'
+import { formatDate, cn } from '@/lib/utils'
 
 interface Evaluacion {
   id: string
@@ -32,15 +31,7 @@ export default function EvaluacionesAdminPage() {
 
   const supabase = createClient()
 
-  useEffect(() => {
-    fetchEvaluaciones()
-  }, [])
-
-  useEffect(() => {
-    filterEvaluaciones()
-  }, [searchTerm, tipoFilter, evaluaciones])
-
-  const fetchEvaluaciones = async () => {
+  const fetchEvaluaciones = useCallback(async () => {
     setIsLoading(true)
     try {
       // Get all evaluaciones with user info
@@ -73,9 +64,9 @@ export default function EvaluacionesAdminPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [supabase])
 
-  const filterEvaluaciones = () => {
+  const filterEvaluaciones = useCallback(() => {
     let filtered = evaluaciones
 
     // Filter by search term (user name or tipo)
@@ -93,7 +84,15 @@ export default function EvaluacionesAdminPage() {
     }
 
     setFilteredEvaluaciones(filtered)
-  }
+  }, [searchTerm, tipoFilter, evaluaciones])
+
+  useEffect(() => {
+    fetchEvaluaciones()
+  }, [fetchEvaluaciones])
+
+  useEffect(() => {
+    filterEvaluaciones()
+  }, [filterEvaluaciones])
 
   const handleViewEvaluacion = (evaluacion: Evaluacion) => {
     setSelectedEvaluacion(evaluacion)

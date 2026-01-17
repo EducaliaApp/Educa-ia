@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
-import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { AdminSurface } from '@/components/admin/AdminSurface'
 import { 
   Database, 
   Server, 
@@ -54,6 +54,19 @@ export default async function SystemPage() {
     }
   }
 
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case 'healthy':
+        return { variant: 'success' as const, className: 'border border-green-500/40' }
+      case 'warning':
+        return { variant: 'warning' as const, className: 'border border-orange-500/40' }
+      case 'error':
+        return { variant: 'danger' as const, className: 'border border-red-500/40' }
+      default:
+        return { variant: 'default' as const, className: 'border border-slate-600/60' }
+    }
+  }
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'healthy': return CheckCircle
@@ -79,13 +92,17 @@ export default async function SystemPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {Object.entries(systemHealth).map(([service, status]) => {
             const StatusIcon = getStatusIcon(status)
+            const badgeVariant = getStatusBadgeVariant(status)
             return (
-              <Card key={service} className="p-4">
+              <AdminSurface key={service} padding="sm" interactive>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${
-                      status === 'healthy' ? 'bg-green-500/20' :
-                      status === 'warning' ? 'bg-yellow-500/20' : 'bg-red-500/20'
+                    <div className={`p-2 rounded-xl bg-slate-800/60 ${
+                      status === 'healthy'
+                        ? 'text-green-400'
+                        : status === 'warning'
+                        ? 'text-amber-400'
+                        : 'text-red-400'
                     }`}>
                       {service === 'database' && <Database className="w-5 h-5" />}
                       {service === 'auth' && <Shield className="w-5 h-5" />}
@@ -94,12 +111,25 @@ export default async function SystemPage() {
                     </div>
                     <div>
                       <h3 className="text-white font-medium capitalize">{service}</h3>
-                      <p className="text-slate-400 text-sm">Servicio</p>
+                      <p className="text-slate-500 text-xs uppercase tracking-wide">Servicio</p>
                     </div>
                   </div>
-                  <StatusIcon className={`w-5 h-5 ${getStatusColor(status)}`} />
+                  <Badge variant={badgeVariant.variant} className={badgeVariant.className}>
+                    {status === 'healthy'
+                      ? 'Operativo'
+                      : status === 'warning'
+                      ? 'Vigilancia'
+                      : 'Atención'}
+                  </Badge>
                 </div>
-              </Card>
+                <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+                  <span>Última revisión</span>
+                  <div className="flex items-center gap-1 text-slate-300">
+                    <StatusIcon className={`w-4 h-4 ${getStatusColor(status)}`} />
+                    <span>Hace 5 min</span>
+                  </div>
+                </div>
+              </AdminSurface>
             )
           })}
         </div>
@@ -109,7 +139,7 @@ export default async function SystemPage() {
       <div>
         <h2 className="text-xl font-bold text-white mb-4">Estadísticas del Sistema</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="p-6">
+          <AdminSurface padding="sm" className="space-y-3">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-blue-500/20 rounded-lg">
                 <Users className="w-6 h-6 text-blue-400" />
@@ -119,9 +149,9 @@ export default async function SystemPage() {
                 <p className="text-slate-400">Total Usuarios</p>
               </div>
             </div>
-          </Card>
+          </AdminSurface>
 
-          <Card className="p-6">
+          <AdminSurface padding="sm" className="space-y-3">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-green-500/20 rounded-lg">
                 <FileText className="w-6 h-6 text-green-400" />
@@ -131,9 +161,9 @@ export default async function SystemPage() {
                 <p className="text-slate-400">Planificaciones</p>
               </div>
             </div>
-          </Card>
+          </AdminSurface>
 
-          <Card className="p-6">
+          <AdminSurface padding="sm" className="space-y-3">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-purple-500/20 rounded-lg">
                 <Star className="w-6 h-6 text-purple-400" />
@@ -143,9 +173,9 @@ export default async function SystemPage() {
                 <p className="text-slate-400">Evaluaciones</p>
               </div>
             </div>
-          </Card>
+          </AdminSurface>
 
-          <Card className="p-6">
+          <AdminSurface padding="sm" className="space-y-3">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-orange-500/20 rounded-lg">
                 <Shield className="w-6 h-6 text-orange-400" />
@@ -155,7 +185,7 @@ export default async function SystemPage() {
                 <p className="text-slate-400">Administradores</p>
               </div>
             </div>
-          </Card>
+          </AdminSurface>
         </div>
       </div>
 
@@ -163,7 +193,7 @@ export default async function SystemPage() {
       <div>
         <h2 className="text-xl font-bold text-white mb-4">Configuración</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="p-6">
+          <AdminSurface>
             <h3 className="text-lg font-semibold text-white mb-4">Límites del Sistema</h3>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
@@ -183,9 +213,9 @@ export default async function SystemPage() {
                 <Badge variant="success">Ilimitado</Badge>
               </div>
             </div>
-          </Card>
+          </AdminSurface>
 
-          <Card className="p-6">
+          <AdminSurface>
             <h3 className="text-lg font-semibold text-white mb-4">Precios</h3>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
@@ -201,14 +231,14 @@ export default async function SystemPage() {
                 <Badge variant="warning">3%</Badge>
               </div>
             </div>
-          </Card>
+          </AdminSurface>
         </div>
       </div>
 
       {/* Recent Activity */}
       <div>
         <h2 className="text-xl font-bold text-white mb-4">Actividad Reciente</h2>
-        <Card className="p-6">
+        <AdminSurface>
           <div className="space-y-4">
             <div className="flex items-center gap-4 p-3 bg-slate-800/50 rounded-lg">
               <Activity className="w-5 h-5 text-green-400" />
@@ -232,7 +262,7 @@ export default async function SystemPage() {
               </div>
             </div>
           </div>
-        </Card>
+        </AdminSurface>
       </div>
     </div>
   )

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Card } from '@/components/ui/Card'
+import { AdminSurface } from '@/components/admin/AdminSurface'
 import { Badge } from '@/components/ui/Badge'
 import {
   BookOpen,
@@ -95,6 +95,7 @@ export default function ObjetivosAprendizajePage() {
 
   useEffect(() => {
     fetchObjetivos()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     currentPage,
     searchTerm,
@@ -345,7 +346,7 @@ export default function ObjetivosAprendizajePage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-4">
+        <AdminSurface padding="sm" interactive>
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-500/20 rounded-lg">
               <BookOpen className="w-5 h-5 text-blue-400" />
@@ -355,39 +356,39 @@ export default function ObjetivosAprendizajePage() {
               <p className="text-slate-400 text-sm">Total Objetivos</p>
             </div>
           </div>
-        </Card>
+        </AdminSurface>
 
-        <Card className="p-4">
+        <AdminSurface padding="sm" interactive>
           <div>
             <h3 className="text-2xl font-bold text-white">
               {objetivos.filter((o) => o.tipo_objetivo === 'contenido').length}
             </h3>
             <p className="text-slate-400 text-sm">Contenido</p>
           </div>
-        </Card>
+        </AdminSurface>
 
-        <Card className="p-4">
+        <AdminSurface padding="sm" interactive>
           <div>
             <h3 className="text-2xl font-bold text-white">
               {objetivos.filter((o) => o.tipo_objetivo === 'habilidad').length}
             </h3>
             <p className="text-slate-400 text-sm">Habilidades</p>
           </div>
-        </Card>
+        </AdminSurface>
 
-        <Card className="p-4">
+        <AdminSurface padding="sm" interactive>
           <div>
             <h3 className="text-2xl font-bold text-white">
               {objetivos.filter((o) => o.priorizado).length}
             </h3>
             <p className="text-slate-400 text-sm">Priorizados</p>
           </div>
-        </Card>
+        </AdminSurface>
       </div>
 
       {/* Filtros */}
-      <Card className="p-6">
-        <div className="flex items-center gap-2 mb-4">
+      <AdminSurface className="space-y-6">
+        <div className="flex items-center gap-2">
           <Filter className="w-5 h-5 text-slate-400" />
           <h2 className="text-lg font-semibold text-white">Filtros</h2>
         </div>
@@ -493,7 +494,7 @@ export default function ObjetivosAprendizajePage() {
         </div>
 
         {/* Filtros adicionales y botón limpiar */}
-        <div className="flex items-center gap-4 mt-4">
+        <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -526,10 +527,10 @@ export default function ObjetivosAprendizajePage() {
             Refrescar
           </button>
         </div>
-      </Card>
+      </AdminSurface>
 
       {/* Tabla */}
-      <Card className="p-6">
+      <AdminSurface className="space-y-6">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -597,7 +598,7 @@ export default function ObjetivosAprendizajePage() {
         </div>
 
         {/* Paginación */}
-        <div className="flex items-center justify-between mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <p className="text-slate-400 text-sm">
             Mostrando {(currentPage - 1) * pageSize + 1} a{' '}
             {Math.min(currentPage * pageSize, total)} de {total} resultados
@@ -625,7 +626,7 @@ export default function ObjetivosAprendizajePage() {
             </button>
           </div>
         </div>
-      </Card>
+      </AdminSurface>
 
       {/* Modal Crear/Editar */}
       {isModalOpen && (

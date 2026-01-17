@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Card } from '@/components/ui/Card'
+import { AdminSurface } from '@/components/admin/AdminSurface'
 import { TrendingUp, TrendingDown, Activity, Clock } from 'lucide-react'
 
 interface ETLStatsData {
@@ -71,7 +71,7 @@ export function ETLStatsChart({ data }: ETLStatsChartProps) {
     <div className="space-y-6">
       {/* Métricas de Resumen */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-4">
+        <AdminSurface padding="sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-slate-400 text-sm">Total Procesos (período)</p>
@@ -79,9 +79,9 @@ export function ETLStatsChart({ data }: ETLStatsChartProps) {
             </div>
             <Activity className="w-8 h-8 text-blue-500" />
           </div>
-        </Card>
+        </AdminSurface>
 
-        <Card className="p-4">
+        <AdminSurface padding="sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-slate-400 text-sm">Promedio Completados/día</p>
@@ -97,9 +97,9 @@ export function ETLStatsChart({ data }: ETLStatsChartProps) {
             </div>
             <Clock className="w-8 h-8 text-green-500" />
           </div>
-        </Card>
+        </AdminSurface>
 
-        <Card className="p-4">
+        <AdminSurface padding="sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-slate-400 text-sm">Promedio Registros/día</p>
@@ -109,11 +109,11 @@ export function ETLStatsChart({ data }: ETLStatsChartProps) {
             </div>
             <Activity className="w-8 h-8 text-purple-500" />
           </div>
-        </Card>
+        </AdminSurface>
       </div>
 
       {/* Gráfico de Barras: Procesos Completados vs Errores */}
-      <Card className="p-6">
+      <AdminSurface>
         <h3 className="text-white text-lg font-semibold mb-4">
           Procesos por Día (Últimos {data.length} días)
         </h3>
@@ -167,10 +167,10 @@ export function ETLStatsChart({ data }: ETLStatsChartProps) {
             <span className="text-slate-400">Errores</span>
           </div>
         </div>
-      </Card>
+      </AdminSurface>
 
       {/* Gráfico de Registros Procesados */}
-      <Card className="p-6">
+      <AdminSurface>
         <h3 className="text-white text-lg font-semibold mb-4">
           Registros Procesados por Día
         </h3>
@@ -192,7 +192,7 @@ export function ETLStatsChart({ data }: ETLStatsChartProps) {
             </div>
           ))}
         </div>
-      </Card>
+      </AdminSurface>
     </div>
   )
 }

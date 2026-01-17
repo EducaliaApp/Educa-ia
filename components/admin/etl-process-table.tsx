@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
-import { Card } from '@/components/ui/Card'
+import { AdminSurface } from '@/components/admin/AdminSurface'
 import {
   Eye,
   FileText,
@@ -154,7 +154,7 @@ export function ETLProcessTable({
   const tiposUnicos = Array.from(new Set(procesos.map(p => p.tipo_proceso)))
 
   return (
-    <Card className="p-6">
+    <AdminSurface>
       {/* Header con título y botón de refrescar */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-white">Historial de Ejecuciones</h2>
@@ -382,6 +382,6 @@ export function ETLProcessTable({
           </div>
         </div>
       )}
-    </Card>
+    </AdminSurface>
   )
 }

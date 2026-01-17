@@ -51,7 +51,7 @@ export async function signup(formData: FormData) {
     const { data: signUpData, error } = await supabase.auth.signUp({
       ...credentials,
       options: {
-        emailRedirectTo: getEmailRedirectTo(),
+        emailRedirectTo: await getEmailRedirectTo(),
         data: {
           nombre,
           asignatura,
@@ -87,7 +87,7 @@ export async function signup(formData: FormData) {
   }
 }
 
-function getEmailRedirectTo() {
+async function getEmailRedirectTo() {
   const explicitSiteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ??
     process.env.SITE_URL ??
@@ -97,7 +97,7 @@ function getEmailRedirectTo() {
     return new URL('/register/email-confirmed', explicitSiteUrl).toString()
   }
 
-  const headerList = headers()
+  const headerList = await headers()
   const origin = headerList.get('origin')
 
   if (origin) {
