@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
@@ -38,14 +38,6 @@ export default function PortafoliosAdminPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   const supabase = createClient()
-
-  useEffect(() => {
-    fetchPortafolios()
-  }, [])
-
-  useEffect(() => {
-    filterPortafolios()
-  }, [searchTerm, estadoFilter, añoFilter, portafolios])
 
   const fetchPortafolios = async () => {
     setIsLoading(true)
@@ -101,7 +93,7 @@ export default function PortafoliosAdminPage() {
     }
   }
 
-  const filterPortafolios = () => {
+  const filterPortafolios = useCallback(() => {
     let filtered = portafolios
 
     // Filter by search term (profesor name or asignatura)
@@ -124,7 +116,15 @@ export default function PortafoliosAdminPage() {
     }
 
     setFilteredPortafolios(filtered)
-  }
+  }, [portafolios, searchTerm, estadoFilter, añoFilter])
+
+  useEffect(() => {
+    fetchPortafolios()
+  }, [])
+
+  useEffect(() => {
+    filterPortafolios()
+  }, [filterPortafolios])
 
   const handleViewPortafolio = (portafolio: Portafolio) => {
     setSelectedPortafolio(portafolio)
