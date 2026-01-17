@@ -19,7 +19,7 @@ interface Portafolio {
   estado: string
   progreso_porcentaje: number
   puntaje_estimado_ia: number | null
-  categoria_logro: string | null
+  nivel_desempeño_estimado: string | null
   created_at: string
   profesor_nombre?: string
   profesor_email?: string
@@ -55,7 +55,7 @@ export default function PortafoliosAdminPage() {
           estado,
           progreso_porcentaje,
           puntaje_estimado_ia,
-          categoria_logro,
+          nivel_desempeño_estimado,
           created_at,
           profiles!profesor_id(nombre, email)
         `)
@@ -472,10 +472,10 @@ export default function PortafoliosAdminPage() {
                       {selectedPortafolio.puntaje_estimado_ia.toFixed(1)} / 4.0
                     </p>
                   </div>
-                  {selectedPortafolio.categoria_logro && (
+                  {selectedPortafolio.nivel_desempeño_estimado && (
                     <div>
-                      <p className="text-sm text-slate-400">Categoría Logro</p>
-                      <Badge variant="success">{selectedPortafolio.categoria_logro}</Badge>
+                      <p className="text-sm text-slate-400">Nivel de Desempeño</p>
+                      <Badge variant="success">{selectedPortafolio.nivel_desempeño_estimado}</Badge>
                     </div>
                   )}
                 </>
