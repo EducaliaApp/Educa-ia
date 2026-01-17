@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    if (!profile || !['admin', 'maintainer'].includes(profile.role)) {
+    if (!profile || !['admin', 'maintainer'].includes((profile as { role: string }).role)) {
       return NextResponse.json({ error: 'Permisos insuficientes' }, { status: 403 })
     }
 

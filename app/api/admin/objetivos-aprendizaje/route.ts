@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    if (!profile || !['admin', 'maintainer'].includes(profile.role)) {
+    if (!profile || !['admin', 'maintainer'].includes((profile as { role: string }).role)) {
       return NextResponse.json({ error: 'Permisos insuficientes' }, { status: 403 })
     }
 
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    if (!profile || !['admin', 'maintainer'].includes(profile.role)) {
+    if (!profile || !['admin', 'maintainer'].includes((profile as { role: string }).role)) {
       return NextResponse.json({ error: 'Permisos insuficientes' }, { status: 403 })
     }
 
@@ -231,7 +231,7 @@ export async function PATCH(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    if (!profile || !['admin', 'maintainer'].includes(profile.role)) {
+    if (!profile || !['admin', 'maintainer'].includes((profile as { role: string }).role)) {
       return NextResponse.json({ error: 'Permisos insuficientes' }, { status: 403 })
     }
 
@@ -328,7 +328,7 @@ export async function DELETE(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    if (!profile || profile.role !== 'admin') {
+    if (!profile || (profile as { role: string }).role !== 'admin') {
       return NextResponse.json(
         { error: 'Solo administradores pueden eliminar objetivos' },
         { status: 403 }
