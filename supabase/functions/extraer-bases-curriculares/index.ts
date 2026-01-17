@@ -32,18 +32,19 @@ const CONFIG = {
   BASE_URL: 'https://www.curriculumnacional.cl',
   // URLs de todas las categorías curriculares a extraer
   CATEGORY_URLS: [
-    'https://www.curriculumnacional.cl/curriculum/1o-6o-basico/',
-    'https://www.curriculumnacional.cl/curriculum/educacion-parvularia/',
-    'https://www.curriculumnacional.cl/curriculum/7o-basico-a-2o-medio/',
-    'https://www.curriculumnacional.cl/curriculum/formacion-diferenciada-tecnico-profesional/',
-    'https://www.curriculumnacional.cl/curriculum/formacion-diferenciada-artistica/',
-    'https://www.curriculumnacional.cl/curriculum/formacion-diferenciada-cientifico-humanista/',
-    'https://www.curriculumnacional.cl/curriculum/modalidad-educacion-de-personas-jovenes-y-adultas-epja/',
-    'https://www.curriculumnacional.cl/curriculum/lengua-y-cultura-de-los-pueblos-originarios-ancestrales/',
-    'https://www.curriculumnacional.cl/curriculum/marco-curricular-de-lengua-indigena/',
+    'https://www.curriculumnacional.cl/curriculum/educacion-parvularia',
+    'https://www.curriculumnacional.cl/curriculum/1o-6o-basico',
+    'https://www.curriculumnacional.cl/curriculum/7o-basico-2-medio',
+    'https://www.curriculumnacional.cl/curriculum/3o-4o-medio',
+    'https://www.curriculumnacional.cl/curriculum/3o-4o-medio-tecnico-profesional',
+    'https://www.curriculumnacional.cl/recursos/terminales-formacion-diferenciada-artistica-3-4-medio-0',
+    'https://www.curriculumnacional.cl/Curriculum/Bases_Curriculares/epja',
+    'https://www.curriculumnacional.cl/pueblos-originarios-ancestrales',
+    'https://www.curriculumnacional.cl/curriculum/7o-basico-2o-medio/lengua-indigena',
   ],
-  DELAY_BETWEEN_REQUESTS: 500, // ms para rate limiting
+  DELAY_BETWEEN_REQUESTS: 200, // ms para rate limiting (reducido para evitar timeouts)
   MAX_RETRIES: 3,
+  FETCH_TIMEOUT: 30000, // 30 segundos timeout para fetch
   USER_AGENT: 'Mozilla/5.0 (compatible; ProfeFlow-Bot/1.0; +https://profeflow.cl)',
   // Límite de asignaturas a procesar (0 = todas)
   // MODO PRODUCCIÓN: 0
@@ -161,31 +162,57 @@ function obtenerTipoObjetivo(codigo: string): 'contenido' | 'habilidad' | 'actit
 /**
  * Extrae la categoría curricular desde la URL
  * Ejemplos:
- * - /curriculum/1o-6o-basico/ -> "Educación Básica 1° a 6°"
- * - /curriculum/educacion-parvularia/ -> "Educación Parvularia"
- * - /curriculum/7o-basico-a-2o-medio/ -> "Educación Media 7° a 2° Medio"
+ * - /curriculum/1o-6o-basico -> "Educación Básica 1° a 6°"
+ * - /curriculum/educacion-parvularia -> "Educación Parvularia"
+ * - /curriculum/7o-basico-2-medio -> "Educación Media 7° a 2° Medio"
+ * - /curriculum/3o-4o-medio -> "Formación Diferenciada Científico-Humanista 3° a 4° Medio"
+ * - /recursos/terminales-formacion-diferenciada-artistica-3-4-medio-0 -> "Formación Diferenciada Artística 3° a 4° Medio"
+ * - /pueblos-originarios-ancestrales -> "Lengua y Cultura de los Pueblos Originarios Ancestrales"
+ * - /Curriculum/Bases_Curriculares/epja -> "Educación de Personas Jóvenes y Adultas (EPJA)"
  */
 function extraerCategoriaDesdeURL(url: string): string {
   const categoriaMap: Record<string, string> = {
     '1o-6o-basico': 'Educación Básica 1° a 6°',
     'educacion-parvularia': 'Educación Parvularia',
-    '7o-basico-a-2o-medio': 'Educación Media 7° a 2° Medio',
-    'formacion-diferenciada-tecnico-profesional': 'Formación Diferenciada Técnico Profesional',
-    'formacion-diferenciada-artistica': 'Formación Diferenciada Artística',
-    'formacion-diferenciada-cientifico-humanista': 'Formación Diferenciada Científico-Humanista',
-    'modalidad-educacion-de-personas-jovenes-y-adultas-epja': 'Modalidad Educación de Personas Jóvenes y Adultas (EPJA)',
-    'lengua-y-cultura-de-los-pueblos-originarios-ancestrales': 'Lengua y Cultura de los Pueblos Originarios Ancestrales',
-    'marco-curricular-de-lengua-indigena': 'Marco curricular de Lengua Indígena',
+    '7o-basico-2-medio': 'Educación Media 7° a 2° Medio',
+    '3o-4o-medio-tecnico-profesional': 'Formación Diferenciada Técnico Profesional 3° a 4° Medio',
+    '3o-4o-medio': 'Formación Diferenciada Científico-Humanista 3° a 4° Medio',
+    'terminales-formacion-diferenciada-artistica-3-4-medio-0': 'Formación Diferenciada Artística 3° a 4° Medio',
+    'pueblos-originarios-ancestrales': 'Lengua y Cultura de los Pueblos Originarios Ancestrales',
+    'epja': 'Educación de Personas Jóvenes y Adultas (EPJA)',
+    'lengua-indigena': 'Marco Curricular de Lengua Indígena 7° a 2° Medio',
   }
 
-  // Extraer el slug de la URL
-  const match = url.match(/\/curriculum\/([^/]+)/)
-  if (!match) {
-    return 'Educación Básica 1° a 6°' // Default
+  // Intentar varios patrones de extracción
+  // 1. /curriculum/[slug]
+  let match = url.match(/\/curriculum\/([^/]+)/)
+  if (match) {
+    const slug = match[1]
+    return categoriaMap[slug] || 'Desconocida'
   }
 
-  const slug = match[1]
-  return categoriaMap[slug] || 'Educación Básica 1° a 6°'
+  // 2. /recursos/[slug]
+  match = url.match(/\/recursos\/([^/]+)/)
+  if (match) {
+    const slug = match[1]
+    return categoriaMap[slug] || 'Desconocida'
+  }
+
+  // 3. /Curriculum/Bases_Curriculares/[slug]
+  match = url.match(/\/Bases_Curriculares\/([^/]+)/i)
+  if (match) {
+    const slug = match[1]
+    return categoriaMap[slug] || 'Desconocida'
+  }
+
+  // 4. /[slug] (para rutas directas)
+  match = url.match(/\/([^/]+)\/?$/)
+  if (match) {
+    const slug = match[1]
+    return categoriaMap[slug] || 'Desconocida'
+  }
+
+  return 'Desconocida' // Default
 }
 
 /**
@@ -201,11 +228,15 @@ function validarURL(url: string): boolean {
 }
  
 /**
- * Realiza fetch con retry y rate limiting
+ * Realiza fetch con retry, rate limiting y timeout
  * MEJORA: No reintenta en errores 404 (páginas que no existen)
+ * MEJORA: Usa AbortController para manejar timeouts
  */
 async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promise<string> {
   for (let attempt = 0; attempt < retries; attempt++) {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), CONFIG.FETCH_TIMEOUT)
+
     try {
       const response = await fetch(url, {
         headers: {
@@ -213,7 +244,10 @@ async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promis
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'es-CL,es;q=0.9',
         },
+        signal: controller.signal,
       })
+
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
         // No reintentar en 404 - el recurso no existe
@@ -232,7 +266,21 @@ async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promis
 
       return html
     } catch (error) {
+      clearTimeout(timeoutId)
+
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+
+      // Si es un abort por timeout
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.warn(`Timeout para ${url} después de ${CONFIG.FETCH_TIMEOUT}ms`)
+        if (attempt < retries - 1) {
+          console.warn(`Intento ${attempt + 1}/${retries} - Reintentando...`)
+          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
+          continue
+        } else {
+          throw new Error(`Timeout después de ${retries} intentos`)
+        }
+      }
 
       // Si es un 404, no reintentar - fallar inmediatamente
       if (errorMessage.includes('404')) {
@@ -242,13 +290,12 @@ async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promis
       // Para otros errores, mostrar intento y continuar
       if (attempt < retries - 1) {
         console.warn(`Intento ${attempt + 1}/${retries} falló para ${url}: ${errorMessage}. Reintentando...`)
+        // Backoff exponencial
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
       } else {
         console.error(`Todos los intentos fallaron para ${url}: ${errorMessage}`)
         throw new Error(`Falló después de ${retries} intentos: ${errorMessage}`)
       }
-
-      // Backoff exponencial
-      await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
     }
   }
 
