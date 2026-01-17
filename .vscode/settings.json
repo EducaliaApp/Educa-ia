@@ -1,6 +1,2 @@
 {
-    "yaml.schemas": {
-        "file:///Users/hugoherrera/.vscode/extensions/atlassian.atlascode-4.1.38/resources/schemas/pipelines-schema.json": "bitbucket-pipelines.yml",
-        "https://www.artillery.io/schema.json": []
-    }
 }
