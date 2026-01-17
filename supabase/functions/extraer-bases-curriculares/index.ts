@@ -38,7 +38,7 @@ const CONFIG = {
     'https://www.curriculumnacional.cl/curriculum/3o-4o-medio',
     'https://www.curriculumnacional.cl/curriculum/3o-4o-medio-tecnico-profesional',
     'https://www.curriculumnacional.cl/recursos/terminales-formacion-diferenciada-artistica-3-4-medio-0',
-    'https://www.curriculumnacional.cl/Curriculum/Bases_Curriculares/epja',
+    'https://www.curriculumnacional.cl/curriculum/bases-curriculares-educacion-personas-jovenes-adultas-epja',
     'https://www.curriculumnacional.cl/pueblos-originarios-ancestrales',
     'https://www.curriculumnacional.cl/curriculum/7o-basico-2o-medio/lengua-indigena',
   ],
@@ -168,7 +168,7 @@ function obtenerTipoObjetivo(codigo: string): 'contenido' | 'habilidad' | 'actit
  * - /curriculum/3o-4o-medio -> "Formación Diferenciada Científico-Humanista 3° a 4° Medio"
  * - /recursos/terminales-formacion-diferenciada-artistica-3-4-medio-0 -> "Formación Diferenciada Artística 3° a 4° Medio"
  * - /pueblos-originarios-ancestrales -> "Lengua y Cultura de los Pueblos Originarios Ancestrales"
- * - /Curriculum/Bases_Curriculares/epja -> "Educación de Personas Jóvenes y Adultas (EPJA)"
+ * - /curriculum/bases-curriculares-educacion-personas-jovenes-adultas-epja -> "Educación de Personas Jóvenes y Adultas (EPJA)"
  */
 function extraerCategoriaDesdeURL(url: string): string {
   const categoriaMap: Record<string, string> = {
@@ -179,7 +179,7 @@ function extraerCategoriaDesdeURL(url: string): string {
     '3o-4o-medio': 'Formación Diferenciada Científico-Humanista 3° a 4° Medio',
     'terminales-formacion-diferenciada-artistica-3-4-medio-0': 'Formación Diferenciada Artística 3° a 4° Medio',
     'pueblos-originarios-ancestrales': 'Lengua y Cultura de los Pueblos Originarios Ancestrales',
-    'epja': 'Educación de Personas Jóvenes y Adultas (EPJA)',
+    'bases-curriculares-educacion-personas-jovenes-adultas-epja': 'Educación de Personas Jóvenes y Adultas (EPJA)',
     'lengua-indigena': 'Marco Curricular de Lengua Indígena 7° a 2° Medio',
   }
 
@@ -198,14 +198,7 @@ function extraerCategoriaDesdeURL(url: string): string {
     return categoriaMap[slug] || 'Desconocida'
   }
 
-  // 3. /Curriculum/Bases_Curriculares/[slug]
-  match = url.match(/\/Bases_Curriculares\/([^/]+)/i)
-  if (match) {
-    const slug = match[1]
-    return categoriaMap[slug] || 'Desconocida'
-  }
-
-  // 4. /[slug] (para rutas directas)
+  // 3. /[slug] (para rutas directas)
   match = url.match(/\/([^/]+)\/?$/)
   if (match) {
     const slug = match[1]
@@ -304,54 +297,101 @@ async function fetchWithRetry(url: string, retries = CONFIG.MAX_RETRIES): Promis
  
 /**
  * Extrae links de asignaturas por curso de la página principal
- * Usa estructura real del sitio: .subject-title + .grades-wrapper
+ * Soporta múltiples estructuras HTML:
+ * - ESTRUCTURA 1: .subject-title + .grades-wrapper (1°-6° Básico)
+ * - ESTRUCTURA 2: Enlaces directos de asignatura+curso (otras categorías)
+ * - ESTRUCTURA 3: Fallback genérico buscando patrones de URL
  */
 function extraerAsignaturasYCursos(html: string): AsignaturaLink[] {
   const links: AsignaturaLink[] = []
- 
-  // Estructura real del sitio:
-  // <div class="subject subject-grades">
-  //   <a href="/curriculum/1o-6o-basico/artes-visuales">
-  //     <span class="subject-title">Artes Visuales</span>
-  //   </a>
-  //   <div class="grades-wrapper">
-  //     <a href=".../artes-visuales/1-basico" class="badge">1° Básico</a>
-  //     <a href=".../artes-visuales/2-basico" class="badge">2° Básico</a>
-  //   </div>
-  // </div>
- 
+
+  // ESTRUCTURA 1: .subject-grades + .grades-wrapper (Educación Básica 1°-6°)
   const patronAsignatura = /<div[^>]*class=[^>]*subject-grades[^>]*>[\s\S]*?<span[^>]*class=[^>]*subject-title[^>]*>([^<]*)<\/span>[\s\S]*?<div[^>]*class=[^>]*grades-wrapper[^>]*>([\s\S]*?)<\/div>/gi
- 
+
   let match
   while ((match = patronAsignatura.exec(html)) !== null) {
     const nombreAsignatura = limpiarTexto(match[1])
     const gradesWrapper = match[2]
- 
+
     // Extraer todos los links de cursos dentro del grades-wrapper
     const patronCurso = /<a[^>]*href=["']([^"']*)["'][^>]*>([^<]*)<\/a>/gi
     let matchCurso
- 
+
     while ((matchCurso = patronCurso.exec(gradesWrapper)) !== null) {
       const href = matchCurso[1]
       const curso = limpiarTexto(matchCurso[2])
- 
+
       // Construir nombre completo y URL
       const nombreCompleto = `${nombreAsignatura} ${curso}`
       const url = href.startsWith('http') ? href : CONFIG.BASE_URL + href
- 
+
       // Validar URL
       if (!validarURL(url)) {
         console.warn(`URL inválida ignorada: ${url}`)
         continue
       }
- 
+
       // Evitar duplicados
       if (!links.some(l => l.url === url) && nombreCompleto.length > 0) {
         links.push({ nombre: nombreCompleto, url })
       }
     }
   }
- 
+
+  // ESTRUCTURA 2: Fallback - Buscar todos los enlaces que apuntan a páginas de asignaturas
+  // Patrones típicos: /curriculum/[categoria]/[asignatura]/[curso]
+  // Ejemplo: /curriculum/7o-basico-2-medio/matematica/7-basico
+  if (links.length === 0) {
+    console.log('⚠️  No se encontró estructura .subject-grades, usando fallback de enlaces directos')
+
+    const patronEnlaceAsignatura = /<a[^>]*href=["']([^"']*\/curriculum\/[^"']+)["'][^>]*>([^<]+)<\/a>/gi
+
+    while ((match = patronEnlaceAsignatura.exec(html)) !== null) {
+      const href = match[1]
+      const texto = limpiarTexto(match[2])
+
+      // Filtrar solo enlaces que parezcan ser de asignaturas específicas
+      // Debe contener un nivel/curso en la URL o en el texto
+      const esAsignaturaConCurso =
+        /\/(1-basico|2-basico|3-basico|4-basico|5-basico|6-basico|7-basico|8-basico|1-medio|2-medio|3-medio|4-medio|sc|nm|nt)/i.test(href) ||
+        /(1°|2°|3°|4°|5°|6°|7°|8°|nivel\s*\d|sala\s*cuna|medio|transición)/i.test(texto)
+
+      if (esAsignaturaConCurso && texto.length > 3 && texto.length < 100) {
+        const url = href.startsWith('http') ? href : CONFIG.BASE_URL + href
+
+        if (validarURL(url) && !links.some(l => l.url === url)) {
+          links.push({ nombre: texto, url })
+        }
+      }
+    }
+  }
+
+  // ESTRUCTURA 3: Fallback final - Extraer TODOS los enlaces dentro de la página
+  // y filtrar los que parezcan ser de asignaturas
+  if (links.length === 0) {
+    console.log('⚠️  No se encontraron enlaces con patrón conocido, usando fallback genérico')
+
+    const patronTodosLosEnlaces = /<a[^>]*href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/gi
+
+    while ((match = patronTodosLosEnlaces.exec(html)) !== null) {
+      const href = match[1]
+      const texto = limpiarTexto(match[2])
+
+      // Debe ser una URL del currículum y tener un texto descriptivo
+      if (href.includes('/curriculum/') && texto.length > 5 && texto.length < 100) {
+        const url = href.startsWith('http') ? href : CONFIG.BASE_URL + href
+
+        // Evitar enlaces de navegación general
+        const esNavegacion = /(documentos|recursos|evaluación|inicio|mineduc|ayuda)/i.test(texto)
+
+        if (validarURL(url) && !esNavegacion && !links.some(l => l.url === url)) {
+          links.push({ nombre: texto, url })
+        }
+      }
+    }
+  }
+
+  console.log(`📋 Extraídos ${links.length} enlaces de asignaturas/cursos`)
   return links
 }
  

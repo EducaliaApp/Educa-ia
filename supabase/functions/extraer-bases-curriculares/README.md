@@ -22,7 +22,7 @@ La función extrae datos de las siguientes categorías curriculares:
 4. **Formación Diferenciada Científico-Humanista 3° a 4° Medio** (`/curriculum/3o-4o-medio`)
 5. **Formación Diferenciada Técnico Profesional 3° a 4° Medio** (`/curriculum/3o-4o-medio-tecnico-profesional`)
 6. **Formación Diferenciada Artística 3° a 4° Medio** (`/recursos/terminales-formacion-diferenciada-artistica-3-4-medio-0`)
-7. **Educación de Personas Jóvenes y Adultas (EPJA)** (`/Curriculum/Bases_Curriculares/epja`)
+7. **Educación de Personas Jóvenes y Adultas (EPJA)** (`/curriculum/bases-curriculares-educacion-personas-jovenes-adultas-epja`)
 8. **Lengua y Cultura de los Pueblos Originarios Ancestrales** (`/pueblos-originarios-ancestrales`)
 9. **Marco Curricular de Lengua Indígena 7° a 2° Medio** (`/curriculum/7o-basico-2o-medio/lengua-indigena`)
 
@@ -159,7 +159,7 @@ const CONFIG = {
     'https://www.curriculumnacional.cl/curriculum/3o-4o-medio',
     'https://www.curriculumnacional.cl/curriculum/3o-4o-medio-tecnico-profesional',
     'https://www.curriculumnacional.cl/recursos/terminales-formacion-diferenciada-artistica-3-4-medio-0',
-    'https://www.curriculumnacional.cl/Curriculum/Bases_Curriculares/epja',
+    'https://www.curriculumnacional.cl/curriculum/bases-curriculares-educacion-personas-jovenes-adultas-epja',
     'https://www.curriculumnacional.cl/pueblos-originarios-ancestrales',
     'https://www.curriculumnacional.cl/curriculum/7o-basico-2o-medio/lengua-indigena',
   ],

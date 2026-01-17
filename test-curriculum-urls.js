@@ -12,7 +12,7 @@ const CATEGORY_URLS = [
   'https://www.curriculumnacional.cl/curriculum/3o-4o-medio',
   'https://www.curriculumnacional.cl/curriculum/3o-4o-medio-tecnico-profesional',
   'https://www.curriculumnacional.cl/recursos/terminales-formacion-diferenciada-artistica-3-4-medio-0',
-  'https://www.curriculumnacional.cl/Curriculum/Bases_Curriculares/epja',
+  'https://www.curriculumnacional.cl/curriculum/bases-curriculares-educacion-personas-jovenes-adultas-epja',
   'https://www.curriculumnacional.cl/pueblos-originarios-ancestrales',
   'https://www.curriculumnacional.cl/curriculum/7o-basico-2o-medio/lengua-indigena',
 ];
