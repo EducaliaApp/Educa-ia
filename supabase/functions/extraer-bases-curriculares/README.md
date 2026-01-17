@@ -1,16 +1,30 @@
 # Edge Function: Extraer Bases Curriculares
 
-Esta Edge Function extrae las Bases Curriculares de 1° a 6° Básico desde el sitio oficial del Ministerio de Educación de Chile (curriculumnacional.cl).
+Esta Edge Function extrae las Bases Curriculares de **todas las categorías** del currículum chileno desde el sitio oficial del Ministerio de Educación de Chile (curriculumnacional.cl).
 
 ## 🎯 Objetivo
 
 Realizar scraping automatizado de:
-- Objetivos de Aprendizaje (OA)
+- Objetivos de Aprendizaje (OA, OAH, OAA)
 - Ejes curriculares
 - Actividades complementarias (hasta 4 por OA)
 - Indicadores de priorización
 
 Generando archivos en formato **CSV** y **JSON**.
+
+## 📚 Categorías Soportadas
+
+La función extrae datos de las siguientes categorías curriculares:
+
+1. **Educación Parvularia** (`/curriculum/educacion-parvularia`)
+2. **Educación Básica 1° a 6°** (`/curriculum/1o-6o-basico`)
+3. **Educación Media 7° a 2° Medio** (`/curriculum/7o-basico-2-medio`)
+4. **Formación Diferenciada Científico-Humanista 3° a 4° Medio** (`/curriculum/3o-4o-medio`)
+5. **Formación Diferenciada Técnico Profesional 3° a 4° Medio** (`/curriculum/3o-4o-medio-tecnico-profesional`)
+6. **Formación Diferenciada Artística 3° a 4° Medio** (`/recursos/terminales-formacion-diferenciada-artistica-3-4-medio-0`)
+7. **Educación de Personas Jóvenes y Adultas (EPJA)** (`/curriculum/bases-curriculares-educacion-personas-jovenes-adultas-epja`)
+8. **Lengua y Cultura de los Pueblos Originarios Ancestrales** (`/pueblos-originarios-ancestrales`)
+9. **Marco Curricular de Lengua Indígena 7° a 2° Medio** (`/curriculum/7o-basico-2o-medio/lengua-indigena`)
 
 ## 📁 Formatos de Salida
 
@@ -138,13 +152,25 @@ En `index.ts`, sección `CONFIG`:
 ```typescript
 const CONFIG = {
   BASE_URL: 'https://www.curriculumnacional.cl',
-  START_URL: 'https://www.curriculumnacional.cl/curriculum/1o-6o-basico/',
-  DELAY_BETWEEN_REQUESTS: 500, // Rate limiting (ms)
+  CATEGORY_URLS: [
+    'https://www.curriculumnacional.cl/curriculum/educacion-parvularia',
+    'https://www.curriculumnacional.cl/curriculum/1o-6o-basico',
+    'https://www.curriculumnacional.cl/curriculum/7o-basico-2-medio',
+    'https://www.curriculumnacional.cl/curriculum/3o-4o-medio',
+    'https://www.curriculumnacional.cl/curriculum/3o-4o-medio-tecnico-profesional',
+    'https://www.curriculumnacional.cl/recursos/terminales-formacion-diferenciada-artistica-3-4-medio-0',
+    'https://www.curriculumnacional.cl/curriculum/bases-curriculares-educacion-personas-jovenes-adultas-epja',
+    'https://www.curriculumnacional.cl/pueblos-originarios-ancestrales',
+    'https://www.curriculumnacional.cl/curriculum/7o-basico-2o-medio/lengua-indigena',
+  ],
+  DELAY_BETWEEN_REQUESTS: 200, // Rate limiting (ms) - reducido para evitar timeouts
   MAX_RETRIES: 3, // Reintentos en caso de error
+  FETCH_TIMEOUT: 30000, // 30 segundos timeout para fetch
   USER_AGENT: 'Mozilla/5.0 (compatible; ProfeFlow-Bot/1.0; +https://profeflow.cl)',
 
   // IMPORTANTE: Configurar según ambiente
   MAX_ASIGNATURAS: 0, // 0 = PRODUCCIÓN (todas), >0 = TEST (limitar cantidad)
+  MAX_CATEGORIAS: 0, // 0 = PRODUCCIÓN (todas las categorías), >0 = TEST (limitar cantidad)
 
   // Formatos de salida
   GENERAR_CSV: true,
@@ -156,12 +182,14 @@ const CONFIG = {
 
 **TEST (desarrollo):**
 ```typescript
-MAX_ASIGNATURAS: 10, // Solo procesar 10 asignaturas
+MAX_ASIGNATURAS: 10, // Solo procesar 10 asignaturas por categoría
+MAX_CATEGORIAS: 1, // Solo procesar 1 categoría
 ```
 
 **PRODUCCIÓN:**
 ```typescript
 MAX_ASIGNATURAS: 0, // Procesar todas las asignaturas
+MAX_CATEGORIAS: 0, // Procesar todas las categorías (9 categorías)
 ```
 
 ## 🔧 Características Técnicas
