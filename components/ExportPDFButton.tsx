@@ -10,7 +10,7 @@ interface ExportPDFButtonProps {
   isPro: boolean
 }
 
-export default function ExportPDFButton({ planificacion, isPro }: ExportPDFButtonProps) {
+export default function ExportPDFButton({ planificacion, isPro }: Readonly<ExportPDFButtonProps>) {
   const [loading, setLoading] = useState(false)
 
   const generatePDF = () => {

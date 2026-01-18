@@ -22,9 +22,10 @@ export async function createClient() {
               cookieStore.set(name, value, options)
             })
           } catch (error) {
-            // The `set` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
+            // El método `set` fue llamado desde un Server Component.
+            // Esto puede ser ignorado si tienes middleware refrescando
+            // las sesiones de usuario.
+            console.debug('Cookie set llamado desde Server Component:', error instanceof Error ? error.message : 'Error desconocido')
           }
         },
       },

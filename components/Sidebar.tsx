@@ -220,7 +220,7 @@ const buildNavigation = (
   return sections
 }
 
-export default function Sidebar({ profile, flags }: SidebarProps) {
+export default function Sidebar({ profile, flags }: Readonly<SidebarProps>) {
   const pathname = usePathname()
   const router = useRouter()
   const isAdmin = profile.role === 'admin'
@@ -247,13 +247,18 @@ export default function Sidebar({ profile, flags }: SidebarProps) {
       const hasChildren = Boolean(link.children?.length)
       const isInteractive = Boolean(link.href) && !link.disabled
       const paddingClasses = depth === 0 ? 'pl-11 pr-3' : 'pl-16 pr-3'
-      const stateClasses = link.disabled
-        ? 'text-gray-400 cursor-not-allowed'
-        : linkIsActive
-        ? 'bg-primary text-white'
-        : isInteractive
-        ? 'text-gray-600 hover:bg-gray-100'
-        : 'text-gray-500'
+      
+      let stateClasses: string
+      if (link.disabled) {
+        stateClasses = 'text-gray-400 cursor-not-allowed'
+      } else if (linkIsActive) {
+        stateClasses = 'bg-primary text-white'
+      } else if (isInteractive) {
+        stateClasses = 'text-gray-600 hover:bg-gray-100'
+      } else {
+        stateClasses = 'text-gray-500'
+      }
+      
       const interactiveClasses = isInteractive ? 'transition-colors' : ''
 
       const content = link.href && !link.disabled ? (
@@ -331,11 +336,15 @@ export default function Sidebar({ profile, flags }: SidebarProps) {
           }
 
           const hasItems = Boolean(section.items?.length)
-          const sectionIsActive = hasItems
-            ? section.items!.some(isLinkActive)
-            : section.href
-            ? matchesPath(section.href)
-            : false
+          
+          let sectionIsActive: boolean
+          if (hasItems) {
+            sectionIsActive = section.items!.some(isLinkActive)
+          } else if (section.href) {
+            sectionIsActive = matchesPath(section.href)
+          } else {
+            sectionIsActive = false
+          }
 
           if (!hasItems && section.href) {
             return (

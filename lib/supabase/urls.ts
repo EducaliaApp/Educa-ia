@@ -26,8 +26,8 @@ export function getAuthCallbackUrl(nextPath: string = DEFAULT_RETURN_PATH) {
     }
   }
 
-  if (typeof window !== 'undefined') {
-    return buildCallbackUrl(window.location.origin, normalizedNext)
+  if (globalThis.window !== undefined) {
+    return buildCallbackUrl(globalThis.window.location.origin, normalizedNext)
   }
 
   const relativeUrl = new URL('/callback', 'http://localhost')
