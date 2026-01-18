@@ -1857,7 +1857,7 @@ export async function handler(req: Request): Promise<Response> {
     console.log(`📦 Procesando batch de ${categoriasEnEsteBatch.length} categorías`)
 
     // Procesar categorías con límite de tiempo
-    const { extraccion, categoriasProcesadas, agotado } = await procesarCategoriasConTiempo(
+    const { extraccion, categoriasProcesadas } = await procesarCategoriasConTiempo(
       supabase,
       run.proceso_etl_id!,
       categoriasEnEsteBatch,
