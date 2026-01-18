@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { AdminSurface } from '@/components/admin/AdminSurface'
 import { Badge } from '@/components/ui/Badge'
+import Modal from '@/components/ui/Modal'
 import {
   BookOpen,
   Plus,
@@ -18,10 +19,12 @@ import {
   ChevronRight,
 } from 'lucide-react'
 
+type TipoObjetivo = 'contenido' | 'habilidad' | 'actitud'
+
 interface ObjetivoAprendizaje {
   id: string
   codigo: string
-  tipo_objetivo: 'contenido' | 'habilidad' | 'actitud'
+  tipo_objetivo: TipoObjetivo
   categoria: string
   asignatura: string
   eje: string | null
@@ -74,7 +77,7 @@ export default function ObjetivosAprendizajePage() {
   // Form data
   const [formData, setFormData] = useState({
     codigo: '',
-    tipo_objetivo: 'contenido' as 'contenido' | 'habilidad' | 'actitud',
+    tipo_objetivo: 'contenido' as TipoObjetivo,
     categoria: '',
     asignatura: '',
     eje: '',
@@ -629,20 +632,13 @@ export default function ObjetivosAprendizajePage() {
       </AdminSurface>
 
       {/* Modal Crear/Editar */}
-      {isModalOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => setIsModalOpen(false)}
-        >
-          <div
-            className="bg-slate-900 rounded-lg p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-2xl font-bold text-white mb-6">
-              {isCreating ? 'Crear Objetivo de Aprendizaje' : 'Editar Objetivo de Aprendizaje'}
-            </h3>
-
-            <div className="space-y-4">
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={isCreating ? 'Crear Objetivo de Aprendizaje' : 'Editar Objetivo de Aprendizaje'}
+        size="2xl"
+      >
+        <div className="space-y-4">
               {/* Código */}
               <div>
                 <label className="block text-slate-400 text-sm mb-2">
@@ -668,7 +664,7 @@ export default function ObjetivosAprendizajePage() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        tipo_objetivo: e.target.value as 'contenido' | 'habilidad' | 'actitud',
+                        tipo_objetivo: e.target.value as TipoObjetivo,
                       })
                     }
                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
@@ -804,58 +800,51 @@ export default function ObjetivosAprendizajePage() {
               </div>
             </div>
 
-            {/* Botones */}
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSave}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-              >
-                {isCreating ? 'Crear' : 'Guardar Cambios'}
-              </button>
-            </div>
-          </div>
+        {/* Botones */}
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            onClick={() => setIsModalOpen(false)}
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          >
+            {isCreating ? 'Crear' : 'Guardar Cambios'}
+          </button>
         </div>
-      )}
+      </Modal>
 
       {/* Modal Eliminar */}
-      {isDeleteModalOpen && selectedObjetivo && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => setIsDeleteModalOpen(false)}
-        >
-          <div
-            className="bg-slate-900 rounded-lg p-6 max-w-md w-full"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-xl font-bold text-white mb-4">Eliminar Objetivo</h3>
-            <p className="text-slate-300 mb-6">
-              ¿Estás seguro de que deseas eliminar el objetivo{' '}
-              <strong>{selectedObjetivo.codigo}</strong>? Esta acción no se puede deshacer.
-            </p>
+      <Modal
+        isOpen={isDeleteModalOpen && !!selectedObjetivo}
+        onClose={() => setIsDeleteModalOpen(false)}
+        title="Eliminar Objetivo"
+        size="sm"
+        variant="danger"
+      >
+        <p className="text-slate-300 mb-6">
+          ¿Estás seguro de que deseas eliminar el objetivo{' '}
+          <strong>{selectedObjetivo?.codigo}</strong>? Esta acción no se puede deshacer.
+        </p>
 
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={() => setIsDeleteModalOpen(false)}
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleDelete}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+          >
+            Eliminar
+          </button>
         </div>
-      )}
+      </Modal>
     </div>
   )
 }

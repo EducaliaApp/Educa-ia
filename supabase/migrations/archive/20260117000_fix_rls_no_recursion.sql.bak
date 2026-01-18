@@ -94,7 +94,12 @@ CREATE POLICY "Usuarios pueden ver sus propios analisis"
   USING (
     EXISTS (
       SELECT 1 FROM portafolios p 
-      WHERE p.id = analisis_ia_portafolio.portafolio_id 
+      WHERE p.id = (
+        SELECT m.portafolio_id 
+        FROM tareas_portafolio t
+        INNER JOIN modulos_portafolio m ON m.id = t.modulo_id
+        WHERE t.id = analisis_ia_portafolio.tarea_id
+      ) 
       AND p.profesor_id = auth.uid()
     )
   );

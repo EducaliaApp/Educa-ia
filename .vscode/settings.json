@@ -1,2 +1,13 @@
 {
+    "accessibility.openChatEditedFiles": true,
+    "terminal.explorerKind": "both",
+    "chat.checkpoints.showFileChanges": true,
+    "chat.customAgentInSubagent.enabled": true,
+    "chat.tools.terminal.autoReplyToPrompts": true,
+    "github.copilot.chat.agent.autoFix": true,
+    "github.copilot.chat.anthropic.tools.websearch.enabled": true,
+    "github.copilot.chat.anthropic.tools.websearch.maxUses": 10,
+    "github.copilot.chat.generateTests.codeLens": true,
+    "github.copilot.chat.newWorkspace.useContext7": true,
+    "github.copilot.chat.tools.memory.enabled": true
 }

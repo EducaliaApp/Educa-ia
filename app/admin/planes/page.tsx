@@ -7,6 +7,7 @@ import { UNLIMITED_CREDITS, formatCredits } from '@/lib/constants/plans'
 import type { Plan, PlanLimite } from '@/lib/supabase/types'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
+import Modal from '@/components/ui/Modal'
 
 interface PlanConLimites extends Plan {
   limites?: PlanLimite
@@ -358,15 +359,13 @@ export default function PlanesPage() {
         </div>
 
         {/* Modal */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <h2 className="text-2xl font-bold text-white mb-6">
-                  {editingPlan ? 'Editar Plan' : 'Crear Nuevo Plan'}
-                </h2>
-
-                <form onSubmit={handleSubmit} className="space-y-4">
+        <Modal
+          isOpen={showModal}
+          onClose={handleCloseModal}
+          title={editingPlan ? 'Editar Plan' : 'Crear Nuevo Plan'}
+          size="2xl"
+        >
+          <form onSubmit={handleSubmit} className="space-y-4">
                   {/* Información básica */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -568,10 +567,7 @@ export default function PlanesPage() {
                     </Button>
                   </div>
                 </form>
-              </div>
-            </div>
-          </div>
-        )}
+        </Modal>
       </div>
     </div>
   )

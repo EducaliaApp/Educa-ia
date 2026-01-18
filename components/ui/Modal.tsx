@@ -9,17 +9,26 @@ interface ModalProps {
   onClose: () => void
   title?: string
   children: ReactNode
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
+  variant?: 'default' | 'danger'
 }
 
 const sizes = {
   sm: 'max-w-md',
   md: 'max-w-lg',
   lg: 'max-w-2xl',
-  xl: 'max-w-4xl'
+  xl: 'max-w-4xl',
+  '2xl': 'max-w-6xl'
 }
 
-export default function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+export default function Modal({ 
+  isOpen, 
+  onClose, 
+  title, 
+  children, 
+  size = 'md',
+  variant = 'default'
+}: Readonly<ModalProps>) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
@@ -32,24 +41,52 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
     }
   }, [isOpen])
 
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose()
+      }
+    }
+    
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [isOpen, onClose])
+
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className={cn('relative bg-white rounded-lg shadow-xl w-full mx-4', sizes[size])}>
-        <div className="flex items-center justify-between p-4 border-b">
-          {title && <h2 className="text-xl font-semibold">{title}</h2>}
-          <button
-            onClick={onClose}
-            className="ml-auto p-1 rounded-lg hover:bg-gray-100 transition"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+      <div 
+        className={cn(
+          'relative bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full mx-4',
+          'max-h-[90vh] overflow-y-auto',
+          sizes[size]
+        )}
+      >
+        {title && (
+          <div className={cn(
+            'flex items-center justify-between p-6 border-b',
+            variant === 'danger' ? 'border-red-800/50' : 'border-slate-700'
+          )}>
+            <h2 className={cn(
+              'text-xl font-bold',
+              variant === 'danger' ? 'text-red-400' : 'text-white'
+            )}>
+              {title}
+            </h2>
+            <button
+              onClick={onClose}
+              className="ml-auto p-2 rounded-lg hover:bg-slate-800 transition-colors text-slate-400 hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        )}
         <div className="p-6">{children}</div>
       </div>
     </div>
