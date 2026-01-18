@@ -282,7 +282,7 @@ Similar al dashboard, con:
 
 ## Touch Targets
 
-Todos los elementos interactivos deben tener un tamaño mínimo de 44x44px (WCAG 2.1 Level AAA):
+Todos los elementos interactivos deben tener un tamaño mínimo de 44x44px (WCAG 2.1 Level AA):
 
 ```typescript
 // Usando clases de Tailwind

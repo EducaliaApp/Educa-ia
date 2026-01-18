@@ -19,9 +19,7 @@ export function useMediaQuery(query: string): boolean {
     const media = window.matchMedia(query)
     
     // Actualizar estado inicial
-    if (media.matches !== matches) {
-      setMatches(media.matches)
-    }
+    setMatches(media.matches)
 
     // Listener para cambios
     const listener = (event: MediaQueryListEvent) => {
@@ -44,7 +42,7 @@ export function useMediaQuery(query: string): boolean {
         media.removeListener(listener)
       }
     }
-  }, [matches, query])
+  }, [query]) // Solo depende de query
 
   return matches
 }

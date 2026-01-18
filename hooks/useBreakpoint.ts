@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { useMediaQuery } from './useMediaQuery'
 
 /**
@@ -32,8 +33,8 @@ export function useBreakpoint() {
   const is3xl = useMediaQuery(`(min-width: ${breakpoints['3xl']}px)`)
   const is4xl = useMediaQuery(`(min-width: ${breakpoints['4xl']}px)`)
 
-  // Determinar el breakpoint actual (el más grande que coincida)
-  const getCurrentBreakpoint = (): Breakpoint => {
+  // Memoizar el cálculo del breakpoint actual
+  const currentBreakpoint = useMemo((): Breakpoint => {
     if (is4xl) return '4xl'
     if (is3xl) return '3xl'
     if (is2xl) return '2xl'
@@ -43,11 +44,9 @@ export function useBreakpoint() {
     if (isSm) return 'sm'
     if (isXs) return 'xs'
     return 'xs' // Default para pantallas muy pequeñas
-  }
+  }, [is4xl, is3xl, is2xl, isXl, isLg, isMd, isSm, isXs])
 
-  const currentBreakpoint = getCurrentBreakpoint()
-
-  return {
+  return useMemo(() => ({
     // Flags individuales
     isXs,
     isSm,
@@ -69,7 +68,7 @@ export function useBreakpoint() {
     
     // Width numérico del breakpoint actual
     currentWidth: breakpoints[currentBreakpoint],
-  }
+  }), [isXs, isSm, isMd, isLg, isXl, is2xl, is3xl, is4xl, currentBreakpoint])
 }
 
 /**

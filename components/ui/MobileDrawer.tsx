@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { DRAWER_CONTENT_HEIGHT } from '@/lib/constants/design'
 
 interface MobileDrawerProps {
   isOpen: boolean
@@ -27,13 +28,14 @@ export function MobileDrawer({
   // Prevenir scroll del body cuando el drawer está abierto
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden'
+      // Usar clase CSS en lugar de manipular style directamente
+      document.body.classList.add('overflow-hidden')
     } else {
-      document.body.style.overflow = ''
+      document.body.classList.remove('overflow-hidden')
     }
 
     return () => {
-      document.body.style.overflow = ''
+      document.body.classList.remove('overflow-hidden')
     }
   }, [isOpen])
 
@@ -106,7 +108,10 @@ export function MobileDrawer({
         </div>
 
         {/* Contenido */}
-        <div className="overflow-y-auto h-[calc(100vh-73px)]">
+        <div 
+          className="overflow-y-auto"
+          style={{ height: DRAWER_CONTENT_HEIGHT }}
+        >
           {children}
         </div>
       </div>
