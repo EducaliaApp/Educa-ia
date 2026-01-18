@@ -1786,33 +1786,131 @@ function manejarErrorHandler(error: unknown): Response {
 }
  
 /**
- * Handler principal de la Edge Function
+ * Handler principal de la Edge Function con soporte para reintentos
  */
 export async function handler(req: Request): Promise<Response> {
   const startTime = Date.now()
- 
+
   try {
     console.log('🚀 Iniciando extracción de Bases Curriculares...')
 
     const supabase = crearClienteServicio(req)
-    const { force, persist_db, generate_files } = await obtenerConfiguracion(req)
+    const { force, persist_db, generate_files, batch_categorias, continue_run_id } = await obtenerConfiguracion(req)
 
-    const procesoId = await iniciarProcesoEtl(supabase, force)
+    // Determinar si es continuación o nuevo run
+    let run: ExtraccionRun
+    let categoriasAProcesar: string[]
 
-    const categoriasAProcesar = obtenerCategoriasAProcesar()
-    const extraccion = await procesarCategorias(supabase, procesoId, categoriasAProcesar)
+    if (continue_run_id) {
+      // CONTINUACIÓN: Obtener run existente
+      console.log(`🔄 Continuando run existente: ${continue_run_id}`)
+      run = await obtenerRunExtraccion(supabase, continue_run_id)
 
+      if (run.estado === 'completed') {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Run ya completado anteriormente',
+            run_id: run.id,
+            estado: run.estado
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Quitar las categorías ya procesadas
+      categoriasAProcesar = quitarProcesadas(run.categorias_pendientes, run.categorias_procesadas)
+
+      if (categoriasAProcesar.length === 0) {
+        // No hay más categorías pendientes, marcar como completado
+        await actualizarRunExtraccion(supabase, run.id, {
+          estado: 'completed',
+          finished_at: new Date().toISOString()
+        })
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Todas las categorías ya fueron procesadas',
+            run_id: run.id,
+            estado: 'completed'
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log(`📋 Categorías pendientes: ${categoriasAProcesar.length}`)
+      console.log(`✅ Categorías ya procesadas: ${run.categorias_procesadas.length}`)
+
+    } else {
+      // NUEVO RUN: Crear run de extracción
+      const todasLasCategorias = obtenerCategoriasAProcesar()
+      run = await crearRunExtraccion(supabase, force, todasLasCategorias)
+      categoriasAProcesar = todasLasCategorias
+
+      console.log(`🆕 Nuevo run creado: ${run.id}`)
+      console.log(`📋 Total categorías a procesar: ${categoriasAProcesar.length}`)
+    }
+
+    // Limitar a batch de categorías para evitar timeout
+    const categoriasEnEsteBatch = categoriasAProcesar.slice(0, batch_categorias)
+    console.log(`📦 Procesando batch de ${categoriasEnEsteBatch.length} categorías`)
+
+    // Procesar categorías con límite de tiempo
+    const { extraccion, categoriasProcesadas, agotado } = await procesarCategoriasConTiempo(
+      supabase,
+      run.proceso_etl_id!,
+      categoriasEnEsteBatch,
+      startTime,
+      MAX_RUN_MS
+    )
+
+    // Persistir objetivos en BD si está habilitado
     const persistencia = await persistirObjetivosEnBD(
       supabase,
-      procesoId,
+      run.proceso_etl_id!,
       extraccion.todosLosObjetivos,
       persist_db
     )
 
-    const categoriaPrincipal = extraccion.todosLosObjetivos[0]?.categoria || 'Educación Básica 1° a 6°'
+    // Actualizar run con progreso
+    const categoriasYaProcesadas = [...run.categorias_procesadas, ...categoriasProcesadas]
+    const categoriasPendientes = quitarProcesadas(run.categorias_pendientes, categoriasProcesadas)
+
+    await actualizarRunExtraccion(supabase, run.id, {
+      categorias_procesadas: categoriasYaProcesadas,
+      categorias_pendientes: categoriasPendientes,
+      asignaturas_procesadas: run.asignaturas_procesadas + extraccion.asignaturasProcesadas,
+      objetivos_extraidos: run.objetivos_extraidos + extraccion.todosLosObjetivos.length,
+      estado: categoriasPendientes.length === 0 ? 'completed' : 'partial',
+      finished_at: categoriasPendientes.length === 0 ? new Date().toISOString() : undefined,
+    })
+
+    // Si quedan categorías pendientes, retornar 202 Accepted
+    if (categoriasPendientes.length > 0) {
+      console.log(`\n⏸️  EJECUCIÓN PARCIAL`)
+      console.log(`   ✅ Procesadas en este batch: ${categoriasProcesadas.length}`)
+      console.log(`   ⏳ Categorías pendientes: ${categoriasPendientes.length}`)
+      console.log(`   🔄 Para continuar, usar run_id: ${run.id}`)
+
+      return construirRespuestaParcial(
+        run.id,
+        'partial',
+        categoriasPendientes,
+        categoriasYaProcesadas,
+        extraccion,
+        persistencia,
+        startTime
+      )
+    }
+
+    // Todas las categorías completadas - generar archivos y finalizar
+    console.log(`\n✅ TODAS LAS CATEGORÍAS COMPLETADAS`)
+
+    const categoriaPrincipal = extraccion.todosLosObjetivos[0]?.categoria || 'Todas las Categorías'
     const archivosGenerados = await generarYSubirArchivos(
       supabase,
-      procesoId,
+      run.proceso_etl_id!,
       extraccion.todosLosObjetivos,
       categoriaPrincipal,
       generate_files,
@@ -1821,7 +1919,7 @@ export async function handler(req: Request): Promise<Response> {
 
     await finalizarProcesoExitoso(
       supabase,
-      procesoId,
+      run.proceso_etl_id!,
       {
         totalObjetivos: extraccion.todosLosObjetivos.length,
         archivosGenerados,
@@ -1834,7 +1932,7 @@ export async function handler(req: Request): Promise<Response> {
     )
 
     return construirRespuestaOk(
-      procesoId,
+      run.proceso_etl_id!,
       archivosGenerados,
       persist_db,
       generate_files,
