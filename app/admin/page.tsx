@@ -88,17 +88,17 @@ export default async function AdminDashboard() {
     .limit(10)
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Dashboard Admin</h1>
-        <p className="text-slate-400">
+        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Dashboard Admin</h1>
+        <p className="text-sm sm:text-base text-slate-400">
           Resumen general de ProfeFlow - {new Date().toLocaleDateString('es-CL')}
         </p>
       </div>
 
       {/* Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
         <MetricsCard
           title="Total Usuarios"
           value={stats.total_users}
@@ -130,7 +130,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Secondary Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6">
         <MetricsCard
           title="Total Planificaciones"
           value={totalPlanificaciones?.length || 0}
@@ -169,7 +169,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
         <DashboardCharts
           chartData={chartData}
           freeUsers={stats.free_users}
@@ -180,40 +180,40 @@ export default async function AdminDashboard() {
 
       {/* Top Users Table */}
       <div>
-        <h2 className="text-xl font-bold text-white mb-4">Top 10 Usuarios Más Activos</h2>
+        <h2 className="text-lg sm:text-xl font-bold text-white mb-4">Top 10 Usuarios Más Activos</h2>
         {topUsers && topUsers.length > 0 ? (
           <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[640px]">
                 <thead className="bg-slate-800 border-b border-slate-700">
                   <tr>
-                    <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
+                    <th className="text-left px-3 sm:px-6 py-3 sm:py-4 text-slate-400 text-xs sm:text-sm font-medium">
                       #
                     </th>
-                    <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
+                    <th className="text-left px-3 sm:px-6 py-3 sm:py-4 text-slate-400 text-xs sm:text-sm font-medium">
                       Usuario
                     </th>
-                    <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
+                    <th className="text-left px-3 sm:px-6 py-3 sm:py-4 text-slate-400 text-xs sm:text-sm font-medium hidden md:table-cell">
                       Email
                     </th>
-                    <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
+                    <th className="text-left px-3 sm:px-6 py-3 sm:py-4 text-slate-400 text-xs sm:text-sm font-medium">
                       Plan
                     </th>
-                    <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
+                    <th className="text-left px-3 sm:px-6 py-3 sm:py-4 text-slate-400 text-xs sm:text-sm font-medium hidden lg:table-cell">
                       Asignatura
                     </th>
-                    <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
-                      Planificaciones
+                    <th className="text-left px-3 sm:px-6 py-3 sm:py-4 text-slate-400 text-xs sm:text-sm font-medium">
+                      Planif.
                     </th>
-                    <th className="text-left px-6 py-4 text-slate-400 text-sm font-medium">
-                      Evaluaciones
+                    <th className="text-left px-3 sm:px-6 py-3 sm:py-4 text-slate-400 text-xs sm:text-sm font-medium hidden sm:table-cell">
+                      Eval.
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
                   {topUsers.map((user: TopUser, index: number) => (
                     <tr key={user.user_id} className="hover:bg-slate-800/50 transition-colors">
-                      <td className="px-6 py-4">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <div className="flex items-center gap-2">
                           {index < 3 && (
                             <div className={`w-2 h-2 rounded-full ${
@@ -221,25 +221,25 @@ export default async function AdminDashboard() {
                               index === 1 ? 'bg-gray-400' : 'bg-amber-600'
                             }`} />
                           )}
-                          <span className="text-slate-400 font-medium">#{index + 1}</span>
+                          <span className="text-slate-400 font-medium text-xs sm:text-sm">#{index + 1}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="text-white font-medium">{user.nombre}</span>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <span className="text-white font-medium text-xs sm:text-sm">{user.nombre}</span>
                       </td>
-                      <td className="px-6 py-4 text-slate-400 text-sm">{user.email}</td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-400 text-xs sm:text-sm hidden md:table-cell">{user.email}</td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <Badge variant={user.plan === 'pro' ? 'success' : 'default'}>
                           {user.plan.toUpperCase()}
                         </Badge>
                       </td>
-                      <td className="px-6 py-4 text-slate-400 text-sm">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-400 text-xs sm:text-sm hidden lg:table-cell">
                         {user.asignatura || '-'}
                       </td>
-                      <td className="px-6 py-4 text-white font-semibold">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-white font-semibold text-xs sm:text-sm">
                         {user.total_planificaciones}
                       </td>
-                      <td className="px-6 py-4 text-slate-300 font-medium">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-300 font-medium text-xs sm:text-sm hidden sm:table-cell">
                         {user.total_evaluaciones}
                       </td>
                     </tr>
@@ -257,56 +257,56 @@ export default async function AdminDashboard() {
 
       {/* Recent Users */}
       <div>
-        <h2 className="text-xl font-bold text-white mb-4">Últimos 10 Usuarios Registrados</h2>
+        <h2 className="text-lg sm:text-xl font-bold text-white mb-4">Últimos 10 Usuarios Registrados</h2>
         <RecentUsersTable users={recentUsers || []} />
       </div>
 
       {/* Quick Actions */}
       <div>
-        <h2 className="text-xl font-bold text-white mb-4">Acciones Rápidas</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <a href="/admin/usuarios" className="bg-slate-900 border border-slate-800 rounded-lg p-6 hover:bg-slate-800 transition-colors">
+        <h2 className="text-lg sm:text-xl font-bold text-white mb-4">Acciones Rápidas</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
+          <a href="/admin/usuarios" className="bg-slate-900 border border-slate-800 rounded-lg p-4 sm:p-6 hover:bg-slate-800 transition-colors">
             <div className="flex items-center gap-3">
-              <Users className="w-8 h-8 text-blue-400" />
-              <div>
-                <h3 className="text-white font-semibold">Gestionar Usuarios</h3>
-                <p className="text-slate-400 text-sm">Ver y administrar usuarios</p>
+              <Users className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400 flex-shrink-0" />
+              <div className="min-w-0">
+                <h3 className="text-white font-semibold text-sm sm:text-base">Gestionar Usuarios</h3>
+                <p className="text-slate-400 text-xs sm:text-sm truncate">Ver y administrar usuarios</p>
               </div>
             </div>
           </a>
-          <a href="/admin/planificaciones" className="bg-slate-900 border border-slate-800 rounded-lg p-6 hover:bg-slate-800 transition-colors">
+          <a href="/admin/planificaciones" className="bg-slate-900 border border-slate-800 rounded-lg p-4 sm:p-6 hover:bg-slate-800 transition-colors">
             <div className="flex items-center gap-3">
               <FileText className="w-8 h-8 text-green-400" />
               <div>
-                <h3 className="text-white font-semibold">Ver Planificaciones</h3>
-                <p className="text-slate-400 text-sm">Revisar planificaciones</p>
+                <h3 className="text-white font-semibold text-sm sm:text-base">Ver Planificaciones</h3>
+                <p className="text-slate-400 text-xs sm:text-sm truncate">Revisar planificaciones</p>
               </div>
             </div>
           </a>
-          <a href="/admin/evaluaciones" className="bg-slate-900 border border-slate-800 rounded-lg p-6 hover:bg-slate-800 transition-colors">
+          <a href="/admin/evaluaciones" className="bg-slate-900 border border-slate-800 rounded-lg p-4 sm:p-6 hover:bg-slate-800 transition-colors">
             <div className="flex items-center gap-3">
               <ClipboardCheck className="w-8 h-8 text-orange-400" />
               <div>
-                <h3 className="text-white font-semibold">Ver Evaluaciones</h3>
-                <p className="text-slate-400 text-sm">Revisar evaluaciones</p>
+                <h3 className="text-white font-semibold text-sm sm:text-base">Ver Evaluaciones</h3>
+                <p className="text-slate-400 text-xs sm:text-sm truncate">Revisar evaluaciones</p>
               </div>
             </div>
           </a>
-          <a href="/admin/portafolios" className="bg-slate-900 border border-slate-800 rounded-lg p-6 hover:bg-slate-800 transition-colors">
+          <a href="/admin/portafolios" className="bg-slate-900 border border-slate-800 rounded-lg p-4 sm:p-6 hover:bg-slate-800 transition-colors">
             <div className="flex items-center gap-3">
               <Briefcase className="w-8 h-8 text-indigo-400" />
               <div>
-                <h3 className="text-white font-semibold">Ver Portafolios</h3>
-                <p className="text-slate-400 text-sm">Portafolios MBE</p>
+                <h3 className="text-white font-semibold text-sm sm:text-base">Ver Portafolios</h3>
+                <p className="text-slate-400 text-xs sm:text-sm truncate">Portafolios MBE</p>
               </div>
             </div>
           </a>
-          <a href="/admin/analytics" className="bg-slate-900 border border-slate-800 rounded-lg p-6 hover:bg-slate-800 transition-colors">
+          <a href="/admin/analytics" className="bg-slate-900 border border-slate-800 rounded-lg p-4 sm:p-6 hover:bg-slate-800 transition-colors">
             <div className="flex items-center gap-3">
               <TrendingUp className="w-8 h-8 text-purple-400" />
               <div>
-                <h3 className="text-white font-semibold">Analytics</h3>
-                <p className="text-slate-400 text-sm">Métricas y reportes</p>
+                <h3 className="text-white font-semibold text-sm sm:text-base">Analytics</h3>
+                <p className="text-slate-400 text-xs sm:text-sm truncate">Métricas y reportes</p>
               </div>
             </div>
           </a>

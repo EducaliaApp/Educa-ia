@@ -21,6 +21,11 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
+/* Utility class for preventing body scroll (used by modals/drawers) */
+body.overflow-hidden {
+  overflow: hidden;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
