@@ -78,8 +78,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50 p-4">
-      <div className="relative bg-white rounded-lg shadow-xl p-8 w-full max-w-md overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50 p-4 sm:p-6 lg:p-8">
+      <div className="relative bg-white rounded-lg shadow-xl p-6 sm:p-8 w-full max-w-md overflow-hidden">
         {googleLoading && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-white/90 backdrop-blur-sm">
             <div className="relative flex items-center justify-center">
@@ -89,11 +89,11 @@ export default function LoginPage() {
             <p className="text-primary font-medium animate-pulse">Validando tus credenciales…</p>
           </div>
         )}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
+        <div className="text-center mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             Profe<span className="text-primary">Flow</span>
           </h1>
-          <p className="text-gray-600 mt-2">Inicia sesión en tu cuenta</p>
+          <p className="text-sm sm:text-base text-gray-600 mt-2">Inicia sesión en tu cuenta</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4" aria-busy={loading || googleLoading}>
@@ -128,12 +128,12 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <div className="mt-6 space-y-4">
+        <div className="mt-4 sm:mt-6 space-y-3 sm:space-y-4">
           <div className="relative">
             <div className="absolute inset-0 flex items-center" aria-hidden="true">
               <span className="w-full border-t border-gray-200" />
             </div>
-            <div className="relative flex justify-center text-sm">
+            <div className="relative flex justify-center text-xs sm:text-sm">
               <span className="bg-white px-2 text-gray-500">O continúa con</span>
             </div>
           </div>
@@ -150,7 +150,7 @@ export default function LoginPage() {
           </Button>
         </div>
 
-        <div className="mt-6 space-y-3 text-center text-sm text-gray-600">
+        <div className="mt-4 sm:mt-6 space-y-2 sm:space-y-3 text-center text-xs sm:text-sm text-gray-600">
           <p>
             ¿Olvidaste tu contraseña?{' '}
             <Link href="/forgot-password" className="text-primary hover:underline font-medium">

@@ -5,6 +5,7 @@ import type { Profile } from '@/lib/supabase/types'
 import Sidebar from '@/components/Sidebar'
 import { ToastProvider } from '@/components/ui/Toast'
 import { getRoadmapCategoryFlags } from '@/flags'
+import DashboardLayoutClient from '@/components/DashboardLayoutClient'
 
 export default async function DashboardLayout({
   children,
@@ -41,19 +42,19 @@ export default async function DashboardLayout({
 
   return (
     <ToastProvider>
-      <div className="flex h-screen overflow-hidden bg-gray-50">
-        {/* Sidebar */}
+      <DashboardLayoutClient profile={resolvedProfile} flags={roadmapFlags}>
+        {/* Desktop Sidebar */}
         <aside className="hidden md:flex md:flex-col md:w-64 lg:w-72">
           <Sidebar profile={resolvedProfile} flags={roadmapFlags} />
         </aside>
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="container mx-auto px-4 py-8 max-w-7xl">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 max-w-7xl">
             {children}
           </div>
         </main>
-      </div>
+      </DashboardLayoutClient>
     </ToastProvider>
   )
 }

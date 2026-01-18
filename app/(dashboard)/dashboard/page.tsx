@@ -55,16 +55,16 @@ export default async function DashboardPage() {
     .limit(5)
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-sm sm:text-base text-gray-600 mt-2">
           Bienvenido a ProfeFlow - Tu asistente de planificación con LIA
         </p>
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">{/* ... rest of the component ... */}
         <Card hover>
           <Link href="/dashboard/planificaciones/nueva">
             <CardHeader>
@@ -122,8 +122,8 @@ export default async function DashboardPage() {
 
       {/* Recent Portafolios */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
             Portafolios Recientes
           </h2>
           <Link href="/dashboard/portafolio">
@@ -141,23 +141,23 @@ export default async function DashboardPage() {
               return (
                 <Card key={portafolio.id} hover>
                   <Link href={`/dashboard/portafolio/${portafolio.id}`}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900">
+                    <CardContent className="p-3 sm:p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-gray-900 text-sm sm:text-base">
                             Portafolio {portafolio.año_evaluacion}
                           </h3>
-                          <p className="text-sm text-gray-600 mt-1">
+                          <p className="text-xs sm:text-sm text-gray-600 mt-1 truncate">
                             {portafolio.asignatura} • {portafolio.nivel_educativo}
                           </p>
-                          <div className="mt-3 flex items-center gap-3">
-                            <div className="w-28 h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div className="mt-3 flex items-center gap-2 sm:gap-3">
+                            <div className="w-20 sm:w-28 h-2 bg-gray-200 rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-primary rounded-full"
                                 style={{ width: `${portafolio.progreso_porcentaje}%` }}
                               />
                             </div>
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-gray-500 flex-shrink-0">
                               {portafolio.progreso_porcentaje}% completado
                             </span>
                           </div>
@@ -177,7 +177,7 @@ export default async function DashboardPage() {
                             </div>
                           )}
                         </div>
-                        <div className="flex flex-col items-end gap-2">
+                        <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 justify-between sm:justify-start">
                           <Badge className={estadoClass}>{estadoLabel}</Badge>
                           <span className="text-xs text-gray-500">
                             {new Date(portafolio.created_at).toLocaleDateString('es-CL')}
@@ -210,8 +210,8 @@ export default async function DashboardPage() {
 
       {/* Recent Planificaciones */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
             Planificaciones Recientes
           </h2>
           <Link href="/dashboard/planificaciones">
@@ -263,8 +263,8 @@ export default async function DashboardPage() {
 
       {/* Recent Evaluaciones */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
             Evaluaciones Recientes
           </h2>
           <Link href="/dashboard/evaluaciones">
