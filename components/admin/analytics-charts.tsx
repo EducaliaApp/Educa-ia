@@ -8,7 +8,7 @@ interface AnalyticsChartsProps {
   nivelData: Array<{ name: string; value: number }>
 }
 
-export function AnalyticsCharts({ userGrowthData, subjectData, nivelData }: AnalyticsChartsProps) {
+export function AnalyticsCharts({ userGrowthData, subjectData, nivelData }: Readonly<AnalyticsChartsProps>) {
   return (
     <>
       {/* User Growth Chart */}

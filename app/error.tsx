@@ -2,14 +2,14 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
-import { SUPABASE_ENV_GROUPS, SUPABASE_ENV_HINT, isMissingSupabaseEnvError } from '@/lib/supabase/config'
+import { SUPABASE_ENV_GROUPS, isMissingSupabaseEnvError } from '@/lib/supabase/config'
 
 type ErrorProps = {
   error: Error & { digest?: string }
   reset: () => void
 }
 
-export default function GlobalError({ error }: ErrorProps) {
+export default function GlobalError({ error }: Readonly<ErrorProps>) {
   useEffect(() => {
     console.error(error)
   }, [error])

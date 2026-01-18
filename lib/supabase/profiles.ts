@@ -15,8 +15,8 @@ function buildProfilePayload(user: User): ProfileInsert {
 
   const primaryEmail = typeof user.email === 'string' && user.email.length > 0 ? user.email : undefined
   const metadataEmail =
-    typeof metadata.email === 'string' && (metadata.email as string).length > 0
-      ? (metadata.email as string)
+    typeof metadata.email === 'string' && metadata.email.length > 0
+      ? metadata.email
       : undefined
 
   return {
@@ -52,77 +52,102 @@ async function fetchProfileById(adminClient: AdminClient, userId: string): Promi
   return (data as ProfileRow | null) ?? null
 }
 
-export async function ensureProfileForUser(user: User): Promise<Profile> {
-  const adminClient = createAdminClient()
-  const profilePayload = buildProfilePayload(user)
+function buildUpdatePayload(
+  profilePayload: ProfileInsert,
+  existingProfile: ProfileRow
+): ProfileUpdate {
+  const updatePayload: ProfileUpdate = {}
 
-  const existingProfile = await fetchProfileById(adminClient, user.id)
-
-  if (existingProfile) {
-    const updatePayload: ProfileUpdate = {}
-
-    if (
-      profilePayload.email !== undefined &&
-      profilePayload.email !== existingProfile.email
-    ) {
-      updatePayload.email = profilePayload.email
-    }
-
-    if (
-      profilePayload.nombre !== undefined &&
-      profilePayload.nombre !== existingProfile.nombre
-    ) {
-      updatePayload.nombre = profilePayload.nombre
-    }
-
-    if (
-      profilePayload.asignatura !== undefined &&
-      profilePayload.asignatura !== existingProfile.asignatura
-    ) {
-      updatePayload.asignatura = profilePayload.asignatura
-    }
-
-    if (
-      profilePayload.nivel !== undefined &&
-      profilePayload.nivel !== existingProfile.nivel
-    ) {
-      updatePayload.nivel = profilePayload.nivel
-    }
-
-    if (Object.keys(updatePayload).length > 0) {
-      const { error: updateError } = await (adminClient.from('profiles') as any)
-        .update(updatePayload)
-        .eq('id', user.id)
-
-      if (updateError) {
-        throw updateError
-      }
-
-      const refreshedProfile = await fetchProfileById(adminClient, user.id)
-
-      if (!refreshedProfile) {
-        throw new Error('Profile was not found after update')
-      }
-
-      return mergeProfile(refreshedProfile, profilePayload)
-    }
-
-    return mergeProfile(existingProfile, profilePayload)
+  if (
+    profilePayload.email !== undefined &&
+    profilePayload.email !== existingProfile.email
+  ) {
+    updatePayload.email = profilePayload.email
   }
 
+  if (
+    profilePayload.nombre !== undefined &&
+    profilePayload.nombre !== existingProfile.nombre
+  ) {
+    updatePayload.nombre = profilePayload.nombre
+  }
+
+  if (
+    profilePayload.asignatura !== undefined &&
+    profilePayload.asignatura !== existingProfile.asignatura
+  ) {
+    updatePayload.asignatura = profilePayload.asignatura
+  }
+
+  if (
+    profilePayload.nivel !== undefined &&
+    profilePayload.nivel !== existingProfile.nivel
+  ) {
+    updatePayload.nivel = profilePayload.nivel
+  }
+
+  return updatePayload
+}
+
+async function updateExistingProfile(
+  adminClient: AdminClient,
+  userId: string,
+  updatePayload: ProfileUpdate,
+  profilePayload: ProfileInsert
+): Promise<Profile> {
+  const { error: updateError } = await (adminClient.from('profiles') as any)
+    .update(updatePayload)
+    .eq('id', userId)
+
+  if (updateError) {
+    throw updateError
+  }
+
+  const refreshedProfile = await fetchProfileById(adminClient, userId)
+
+  if (!refreshedProfile) {
+    throw new Error('Profile was not found after update')
+  }
+
+  return mergeProfile(refreshedProfile, profilePayload)
+}
+
+async function createNewProfile(
+  adminClient: AdminClient,
+  userId: string,
+  profilePayload: ProfileInsert
+): Promise<Profile> {
   const { error: insertError } = await (adminClient.from('profiles') as any).insert(profilePayload)
 
   if (insertError) {
     throw insertError
   }
 
-  const createdProfile = await fetchProfileById(adminClient, user.id)
+  const createdProfile = await fetchProfileById(adminClient, userId)
 
   if (!createdProfile) {
     throw new Error('Profile was not found after creation')
   }
 
   return mergeProfile(createdProfile, profilePayload)
+}
+
+export async function ensureProfileForUser(user: User): Promise<Profile> {
+  const adminClient = createAdminClient()
+  const profilePayload = buildProfilePayload(user)
+  const existingProfile = await fetchProfileById(adminClient, user.id)
+
+  if (existingProfile) {
+    const updatePayload = buildUpdatePayload(profilePayload, existingProfile)
+
+    if (Object.keys(updatePayload).length > 0) {
+      return updateExistingProfile(adminClient, user.id, updatePayload, profilePayload)
+    }
+
+    return mergeProfile(existingProfile, profilePayload)
+  }
+
+  return createNewProfile(adminClient, user.id, profilePayload)
 }
 
 export async function getProfileById(userId: string): Promise<Profile | null> {
@@ -133,5 +158,5 @@ export async function getProfileById(userId: string): Promise<Profile | null> {
     return null
   }
 
-  return profile as Profile
+  return profile
 }

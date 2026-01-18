@@ -3,12 +3,36 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient, isUserAdmin } from '@/lib/supabase/admin'
 import type { Database } from '@/lib/supabase/types'
 
-type Profile = Database['public']['Tables']['profiles']['Row']
-type ProfileUpdate = Database['public']['Tables']['profiles']['Update']
-type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
+type RoleRow = Database['public']['Tables']['roles']['Row']
+
+interface ProfileWithRole {
+  id: string
+  nombre: string | null
+  email: string | null
+  plan: string | null
+  role_legacy: string | null
+  role_id: string | null
+  role_codigo: string | null
+  role_nombre: string | null
+  asignatura: string | null
+  nivel: string | null
+  created_at: string
+  creditos_planificaciones: number | null
+  creditos_evaluaciones: number | null
+  creditos_usados_planificaciones: number | null
+  creditos_usados_evaluaciones: number | null
+}
+
+interface PlanificacionCount {
+  user_id: string
+}
+
+type ProfileUpdateRequest = Database['public']['Tables']['profiles']['Update'] & {
+  roleId?: string
+}
 
 // GET: Fetch all users with their data
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const supabase = await createClient()
     const {
@@ -30,10 +54,10 @@ export async function GET(request: NextRequest) {
     const adminClient = createAdminClient()
 
     // Get all users with their role information from profiles_with_roles view
-    const { data: profiles, error: profilesError } = await (adminClient
-      .from('profiles_with_roles') as any)
+    const { data: profiles, error: profilesError } = await adminClient
+      .from('profiles_with_roles')
       .select('id, nombre, email, plan, role_legacy, role_id, role_codigo, role_nombre, asignatura, nivel, created_at, creditos_planificaciones, creditos_evaluaciones, creditos_usados_planificaciones, creditos_usados_evaluaciones')
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false }) as { data: ProfileWithRole[] | null; error: any }
 
     if (profilesError) {
       console.error('Error fetching profiles:', profilesError)
@@ -41,9 +65,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all planificaciones counts in a single query
-    const { data: planificacionesCounts, error: countsError } = await (adminClient
-      .from('planificaciones') as any)
-      .select('user_id')
+    const { data: planificacionesCounts, error: countsError } = await adminClient
+      .from('planificaciones')
+      .select('user_id') as { data: PlanificacionCount[] | null; error: any }
 
     if (countsError) {
       console.error('Error fetching planificaciones counts:', countsError)
@@ -53,13 +77,13 @@ export async function GET(request: NextRequest) {
     // Create a map of user_id to count
     const countsMap = new Map<string, number>()
     if (planificacionesCounts) {
-      planificacionesCounts.forEach((p: any) => {
+      planificacionesCounts.forEach((p) => {
         countsMap.set(p.user_id, (countsMap.get(p.user_id) || 0) + 1)
       })
     }
 
     // Combine profiles with their counts
-    const usersWithCounts = (profiles || []).map((profile: any) => ({
+    const usersWithCounts = (profiles || []).map((profile) => ({
       ...profile,
       role: profile.role_codigo || profile.role_legacy, // Use new role system, fallback to legacy
       role_name: profile.role_nombre,
@@ -124,25 +148,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Get role information
-    let finalRoleId = roleId
+    let finalRoleId: string | null = roleId
     let finalRole = 'user'
 
     if (roleId) {
-      const { data: roleData } = await (adminClient.from('roles') as any)
+      const { data: roleData } = await adminClient.from('roles')
         .select('codigo')
         .eq('id', roleId)
-        .single()
+        .single() as { data: Pick<RoleRow, 'codigo'> | null; error: any }
       
       if (roleData) {
         finalRole = roleData.codigo
       }
     } else {
       // Get default user role
-      const { data: defaultRole } = await (adminClient.from('roles') as any)
+      const { data: defaultRole } = await adminClient.from('roles')
         .select('id, codigo')
         .eq('codigo', 'user')
         .eq('activo', true)
-        .single()
+        .single() as { data: Pick<RoleRow, 'id' | 'codigo'> | null; error: any }
       
       if (defaultRole) {
         finalRoleId = defaultRole.id
@@ -150,16 +174,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Update the profile that was auto-created by the trigger
-    const { error: updateError } = await (adminClient.from('profiles') as any)
-      .update({
-        nombre: nombre || null,
-        email: email,
-        asignatura: asignatura || null,
-        nivel: nivel || null,
-        plan: plan || 'free',
-        role: finalRole,
-        role_id: finalRoleId,
-      })
+    const profileUpdate: Database['public']['Tables']['profiles']['Update'] = {
+      nombre: nombre || null,
+      email: email,
+      asignatura: asignatura || null,
+      nivel: nivel || null,
+      plan: plan || 'free',
+      role: finalRole,
+      role_id: finalRoleId,
+    }
+
+    const { error: updateError } = await (adminClient
+      .from('profiles') as any)
+      .update(profileUpdate)
       .eq('id', newUser.user.id)
 
     if (updateError) {
@@ -190,6 +217,63 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Helper: Process role updates
+async function processRoleUpdate(adminClient: ReturnType<typeof createAdminClient>, updates: ProfileUpdateRequest) {
+  if (!updates.roleId) return
+
+  const { data: roleData } = await adminClient.from('roles')
+    .select('codigo')
+    .eq('id', updates.roleId)
+    .single() as { data: Pick<RoleRow, 'codigo'> | null; error: any }
+  
+  if (roleData) {
+    updates.role = roleData.codigo
+    updates.role_id = updates.roleId
+  }
+  delete updates.roleId
+}
+
+// Helper: Process plan updates
+async function processPlanUpdate(adminClient: ReturnType<typeof createAdminClient>, userId: string, updates: ProfileUpdateRequest) {
+  if (!updates.plan) return null
+
+  const { error: rpcError } = await (adminClient.rpc as any)('actualizar_plan_usuario', {
+    usuario_id: userId,
+    nuevo_plan_codigo: updates.plan,
+  })
+
+  if (rpcError) {
+    console.error('Error updating user plan:', rpcError)
+    if (rpcError.message?.includes('no existe') || rpcError.message?.includes('not exist')) {
+      return NextResponse.json({ error: `El plan '${updates.plan}' no existe o no está activo` }, { status: 400 })
+    }
+    return NextResponse.json({ error: 'Error al actualizar el plan del usuario' }, { status: 500 })
+  }
+
+  delete updates.plan
+  return null
+}
+
+// Helper: Update remaining profile fields
+async function updateProfileFields(adminClient: ReturnType<typeof createAdminClient>, userId: string, updates: ProfileUpdateRequest) {
+  if (Object.keys(updates).length === 0) return null
+
+  const { roleId, plan, ...profileFields } = updates
+  const profileUpdates: Database['public']['Tables']['profiles']['Update'] = profileFields
+
+  const { error: updateError } = await (adminClient
+    .from('profiles') as any)
+    .update(profileUpdates)
+    .eq('id', userId)
+
+  if (updateError) {
+    console.error('Error updating user:', updateError)
+    return NextResponse.json({ error: 'Error al actualizar el usuario' }, { status: 500 })
+  }
+
+  return null
+}
+
 // PUT: Update user
 export async function PUT(request: NextRequest) {
   try {
@@ -203,7 +287,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
-    // Check if user is admin using admin client to bypass RLS
     const userIsAdmin = await isUserAdmin(user.id)
     if (!userIsAdmin) {
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
@@ -216,55 +299,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 })
     }
 
-    // Use admin client to bypass RLS
     const adminClient = createAdminClient()
 
-    // If roleId is being updated, update both role and role_id
-    if (updates.roleId) {
-      const { data: roleData } = await (adminClient.from('roles') as any)
-        .select('codigo')
-        .eq('id', updates.roleId)
-        .single()
-      
-      if (roleData) {
-        updates.role = roleData.codigo
-        updates.role_id = updates.roleId
-      }
-      delete updates.roleId
-    }
+    await processRoleUpdate(adminClient, updates)
+    
+    const planError = await processPlanUpdate(adminClient, userId, updates)
+    if (planError) return planError
 
-    // If plan is being updated, use the RPC function to update credits automatically
-    if (updates.plan) {
-      const { error: rpcError } = await (adminClient.rpc as any)('actualizar_plan_usuario', {
-        usuario_id: userId,
-        nuevo_plan_codigo: updates.plan,
-      })
-
-      if (rpcError) {
-        console.error('Error updating user plan:', rpcError)
-        // Check for specific error messages
-        if (rpcError.message?.includes('no existe') || rpcError.message?.includes('not exist')) {
-          return NextResponse.json({ error: `El plan '${updates.plan}' no existe o no está activo` }, { status: 400 })
-        }
-        return NextResponse.json({ error: 'Error al actualizar el plan del usuario' }, { status: 500 })
-      }
-
-      // Remove plan from updates as it was handled by RPC
-      delete updates.plan
-    }
-
-    // Update remaining fields
-    if (Object.keys(updates).length > 0) {
-      const { error: updateError } = await (adminClient
-        .from('profiles') as any)
-        .update(updates)
-        .eq('id', userId)
-
-      if (updateError) {
-        console.error('Error updating user:', updateError)
-        return NextResponse.json({ error: 'Error al actualizar el usuario' }, { status: 500 })
-      }
-    }
+    const profileError = await updateProfileFields(adminClient, userId, updates)
+    if (profileError) return profileError
 
     return NextResponse.json({ success: true })
   } catch (error) {

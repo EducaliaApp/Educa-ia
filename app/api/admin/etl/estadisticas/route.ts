@@ -37,7 +37,7 @@ export async function GET(request: Request) {
 
     // 3. Obtener parámetros de query
     const { searchParams } = new URL(request.url)
-    const dias = parseInt(searchParams.get('dias') || '30', 10)
+    const dias = Number.parseInt(searchParams.get('dias') || '30', 10)
 
     // 4. Obtener estadísticas generales
     const { data: estadisticasGenerales, error: errorEstadisticas } = await supabase

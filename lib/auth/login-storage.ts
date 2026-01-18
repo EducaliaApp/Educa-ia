@@ -8,7 +8,7 @@ type LoginPayload = {
 const STORAGE_KEY = 'profeFlow:loginPayload'
 
 export function storeLoginPayload(payload: LoginPayload) {
-  if (typeof window === 'undefined') {
+  if (globalThis.window === undefined) {
     return false
   }
 
@@ -22,7 +22,7 @@ export function storeLoginPayload(payload: LoginPayload) {
 }
 
 export function consumeLoginPayload(): LoginPayload | null {
-  if (typeof window === 'undefined') {
+  if (globalThis.window === undefined) {
     return null
   }
 

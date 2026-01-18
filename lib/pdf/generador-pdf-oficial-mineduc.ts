@@ -40,12 +40,12 @@ interface PortafolioCompleto {
 }
 
 export class GeneradorPDFOficialMINEDUC {
-  private doc: jsPDF
-  private pageWidth: number
-  private pageHeight: number
-  private margin: number = 20
+  private readonly doc: jsPDF
+  private readonly pageWidth: number
+  private readonly pageHeight: number
+  private readonly margin: number = 20
   private yPosition: number = 20
-  private lineHeight: number = 7
+  private readonly lineHeight: number = 7
   private readonly PRIMARY_COLOR: [number, number, number] = [37, 99, 235] // Blue-600
   private readonly SECONDARY_COLOR: [number, number, number] = [107, 114, 128] // Gray-500
 
@@ -436,7 +436,7 @@ export async function generarYDescargarPDFOficial(datos: PortafolioCompleto) {
   const generador = new GeneradorPDFOficialMINEDUC()
   await generador.generar(datos)
 
-  const nombreArchivo = `Portafolio_${datos.portafolio.año_evaluacion}_${datos.portafolio.asignatura.replace(
+  const nombreArchivo = `Portafolio_${datos.portafolio.año_evaluacion}_${datos.portafolio.asignatura.replaceAll(
     /\s+/g,
     '_'
   )}.pdf`

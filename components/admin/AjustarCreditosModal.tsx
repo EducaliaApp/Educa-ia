@@ -7,17 +7,17 @@ import Button from '@/components/ui/Button'
 import { createClient } from '@/lib/supabase/client'
 
 interface AjustarCreditosModalProps {
-  isOpen: boolean
-  onClose: () => void
-  userId: string
-  userName: string
-  currentCreditos: {
-    planificaciones: number
-    evaluaciones: number
-    usados_planificaciones: number
-    usados_evaluaciones: number
+  readonly isOpen: boolean
+  readonly onClose: () => void
+  readonly userId: string
+  readonly userName: string
+  readonly currentCreditos: {
+    readonly planificaciones: number
+    readonly evaluaciones: number
+    readonly usados_planificaciones: number
+    readonly usados_evaluaciones: number
   }
-  onSuccess: () => void
+  readonly onSuccess: () => void
 }
 
 export function AjustarCreditosModal({
@@ -27,7 +27,7 @@ export function AjustarCreditosModal({
   userName,
   currentCreditos,
   onSuccess,
-}: AjustarCreditosModalProps) {
+}: Readonly<AjustarCreditosModalProps>) {
   const [creditosPlanificaciones, setCreditosPlanificaciones] = useState(
     currentCreditos.planificaciones.toString()
   )
@@ -45,10 +45,10 @@ export function AjustarCreditosModal({
     setIsSubmitting(true)
 
     try {
-      const newCreditosPlan = parseInt(creditosPlanificaciones)
-      const newCreditosEval = parseInt(creditosEvaluaciones)
+      const newCreditosPlan = Number.parseInt(creditosPlanificaciones)
+      const newCreditosEval = Number.parseInt(creditosEvaluaciones)
 
-      if (isNaN(newCreditosPlan) || isNaN(newCreditosEval)) {
+      if (Number.isNaN(newCreditosPlan) || Number.isNaN(newCreditosEval)) {
         setError('Los créditos deben ser números válidos')
         setIsSubmitting(false)
         return

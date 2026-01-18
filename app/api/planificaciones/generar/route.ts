@@ -135,7 +135,7 @@ Responde en formato JSON con esta estructura exacta:
         asignatura,
         nivel,
         unidad,
-        duracion_clases: parseInt(duracion_clases),
+        duracion_clases: Number.parseInt(duracion_clases),
         contenido,
       })
       .select()
