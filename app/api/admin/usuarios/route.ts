@@ -190,6 +190,60 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Helper: Process role updates
+async function processRoleUpdate(adminClient: any, updates: any) {
+  if (!updates.roleId) return
+
+  const { data: roleData } = await adminClient.from('roles')
+    .select('codigo')
+    .eq('id', updates.roleId)
+    .single()
+  
+  if (roleData) {
+    updates.role = roleData.codigo
+    updates.role_id = updates.roleId
+  }
+  delete updates.roleId
+}
+
+// Helper: Process plan updates
+async function processPlanUpdate(adminClient: any, userId: string, updates: any) {
+  if (!updates.plan) return null
+
+  const { error: rpcError } = await adminClient.rpc('actualizar_plan_usuario', {
+    usuario_id: userId,
+    nuevo_plan_codigo: updates.plan,
+  })
+
+  if (rpcError) {
+    console.error('Error updating user plan:', rpcError)
+    if (rpcError.message?.includes('no existe') || rpcError.message?.includes('not exist')) {
+      return NextResponse.json({ error: `El plan '${updates.plan}' no existe o no está activo` }, { status: 400 })
+    }
+    return NextResponse.json({ error: 'Error al actualizar el plan del usuario' }, { status: 500 })
+  }
+
+  delete updates.plan
+  return null
+}
+
+// Helper: Update remaining profile fields
+async function updateProfileFields(adminClient: any, userId: string, updates: any) {
+  if (Object.keys(updates).length === 0) return null
+
+  const { error: updateError } = await adminClient
+    .from('profiles')
+    .update(updates)
+    .eq('id', userId)
+
+  if (updateError) {
+    console.error('Error updating user:', updateError)
+    return NextResponse.json({ error: 'Error al actualizar el usuario' }, { status: 500 })
+  }
+
+  return null
+}
+
 // PUT: Update user
 export async function PUT(request: NextRequest) {
   try {
@@ -203,7 +257,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
-    // Check if user is admin using admin client to bypass RLS
     const userIsAdmin = await isUserAdmin(user.id)
     if (!userIsAdmin) {
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
@@ -216,55 +269,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 })
     }
 
-    // Use admin client to bypass RLS
     const adminClient = createAdminClient()
 
-    // If roleId is being updated, update both role and role_id
-    if (updates.roleId) {
-      const { data: roleData } = await (adminClient.from('roles') as any)
-        .select('codigo')
-        .eq('id', updates.roleId)
-        .single()
-      
-      if (roleData) {
-        updates.role = roleData.codigo
-        updates.role_id = updates.roleId
-      }
-      delete updates.roleId
-    }
+    await processRoleUpdate(adminClient, updates)
+    
+    const planError = await processPlanUpdate(adminClient, userId, updates)
+    if (planError) return planError
 
-    // If plan is being updated, use the RPC function to update credits automatically
-    if (updates.plan) {
-      const { error: rpcError } = await (adminClient.rpc as any)('actualizar_plan_usuario', {
-        usuario_id: userId,
-        nuevo_plan_codigo: updates.plan,
-      })
-
-      if (rpcError) {
-        console.error('Error updating user plan:', rpcError)
-        // Check for specific error messages
-        if (rpcError.message?.includes('no existe') || rpcError.message?.includes('not exist')) {
-          return NextResponse.json({ error: `El plan '${updates.plan}' no existe o no está activo` }, { status: 400 })
-        }
-        return NextResponse.json({ error: 'Error al actualizar el plan del usuario' }, { status: 500 })
-      }
-
-      // Remove plan from updates as it was handled by RPC
-      delete updates.plan
-    }
-
-    // Update remaining fields
-    if (Object.keys(updates).length > 0) {
-      const { error: updateError } = await (adminClient
-        .from('profiles') as any)
-        .update(updates)
-        .eq('id', userId)
-
-      if (updateError) {
-        console.error('Error updating user:', updateError)
-        return NextResponse.json({ error: 'Error al actualizar el usuario' }, { status: 500 })
-      }
-    }
+    const profileError = await updateProfileFields(adminClient, userId, updates)
+    if (profileError) return profileError
 
     return NextResponse.json({ success: true })
   } catch (error) {

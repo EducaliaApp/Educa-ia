@@ -38,7 +38,7 @@ export function AdminSurface({
   interactive = false,
   className,
   ...props
-}: AdminSurfaceProps) {
+}: Readonly<AdminSurfaceProps>) {
   return (
     <div
       className={cn(

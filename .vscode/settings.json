@@ -9,5 +9,9 @@
     "github.copilot.chat.anthropic.tools.websearch.maxUses": 10,
     "github.copilot.chat.generateTests.codeLens": true,
     "github.copilot.chat.newWorkspace.useContext7": true,
-    "github.copilot.chat.tools.memory.enabled": true
+    "github.copilot.chat.tools.memory.enabled": true,
+    "yaml.schemas": {
+        "file:///Users/hugoherrera/.vscode/extensions/atlassian.atlascode-4.1.100/resources/schemas/pipelines-schema.json": "bitbucket-pipelines.yml",
+        "https://www.artillery.io/schema.json": []
+    }
 }

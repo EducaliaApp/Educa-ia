@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
         codigo,
         descripcion: descripcion || null,
         precio_mensual_clp: precio_mensual_clp || 0,
-        activo: activo !== undefined ? activo : true,
+        activo: activo === undefined ? true : activo,
         caracteristicas: caracteristicas || [],
       })
       .select()

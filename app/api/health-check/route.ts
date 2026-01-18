@@ -22,10 +22,12 @@ export async function GET() {
     })
     
   } catch (error) {
+    console.error('Error en health check:', error)
     return NextResponse.json(
       { 
         status: 'unhealthy', 
-        error: 'Failed to check system health',
+        error: 'Error al verificar el estado del sistema',
+        message: error instanceof Error ? error.message : 'Error desconocido',
         timestamp: new Date().toISOString()
       },
       { status: 503 }

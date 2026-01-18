@@ -86,8 +86,8 @@ const navItems: NavItem[] = [
 ]
 
 interface AdminSidebarProps {
-  userName?: string
-  userEmail?: string
+  readonly userName?: string
+  readonly userEmail?: string
 }
 
 export function AdminSidebar({ userName, userEmail }: AdminSidebarProps) {

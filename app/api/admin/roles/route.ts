@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
         codigo,
         descripcion: descripcion || null,
         permisos: permisos || [],
-        activo: activo !== undefined ? activo : true,
+        activo: activo === undefined ? true : activo,
       })
       .select()
       .single()

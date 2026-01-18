@@ -16,7 +16,7 @@ export function CreateUserModal({
   isOpen,
   onClose,
   onSuccess,
-}: CreateUserModalProps) {
+}: Readonly<CreateUserModalProps>) {
   const [planes, setPlanes] = useState<Plan[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -131,10 +131,11 @@ export function CreateUserModal({
             {/* Email y Password */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="user-email" className="block text-sm font-medium text-slate-300 mb-2">
                   Email *
                 </label>
                 <Input
+                  id="user-email"
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -143,10 +144,11 @@ export function CreateUserModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="user-password" className="block text-sm font-medium text-slate-300 mb-2">
                   Contraseña *
                 </label>
                 <Input
+                  id="user-password"
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -159,10 +161,11 @@ export function CreateUserModal({
 
             {/* Nombre */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label htmlFor="user-nombre" className="block text-sm font-medium text-slate-300 mb-2">
                 Nombre Completo
               </label>
               <Input
+                id="user-nombre"
                 type="text"
                 value={formData.nombre}
                 onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
@@ -173,10 +176,11 @@ export function CreateUserModal({
             {/* Plan y Role */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="user-plan" className="block text-sm font-medium text-slate-300 mb-2">
                   Plan *
                 </label>
                 <select
+                  id="user-plan"
                   value={formData.plan}
                   onChange={(e) => setFormData({ ...formData, plan: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -190,10 +194,11 @@ export function CreateUserModal({
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="user-role" className="block text-sm font-medium text-slate-300 mb-2">
                   Rol *
                 </label>
                 <select
+                  id="user-role"
                   value={formData.roleId}
                   onChange={(e) => setFormData({ ...formData, roleId: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -212,10 +217,11 @@ export function CreateUserModal({
             {/* Asignatura y Nivel */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="user-asignatura" className="block text-sm font-medium text-slate-300 mb-2">
                   Asignatura
                 </label>
                 <Input
+                  id="user-asignatura"
                   type="text"
                   value={formData.asignatura}
                   onChange={(e) => setFormData({ ...formData, asignatura: e.target.value })}
@@ -223,10 +229,11 @@ export function CreateUserModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="user-nivel" className="block text-sm font-medium text-slate-300 mb-2">
                   Nivel
                 </label>
                 <Input
+                  id="user-nivel"
                   type="text"
                   value={formData.nivel}
                   onChange={(e) => setFormData({ ...formData, nivel: e.target.value })}

@@ -9,7 +9,7 @@ interface DashboardChartsProps {
   totalUsers: number
 }
 
-export function DashboardCharts({ chartData, freeUsers, proUsers, totalUsers }: DashboardChartsProps) {
+export function DashboardCharts({ chartData, freeUsers, proUsers, totalUsers }: Readonly<DashboardChartsProps>) {
   return (
     <>
       {/* Planificaciones Chart */}
