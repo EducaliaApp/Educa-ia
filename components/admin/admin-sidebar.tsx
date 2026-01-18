@@ -88,9 +88,10 @@ const navItems: NavItem[] = [
 interface AdminSidebarProps {
   readonly userName?: string
   readonly userEmail?: string
+  readonly onClose?: () => void
 }
 
-export function AdminSidebar({ userName, userEmail }: AdminSidebarProps) {
+export function AdminSidebar({ userName, userEmail, onClose }: AdminSidebarProps) {
   const pathname = usePathname()
 
   // Group navigation items
@@ -109,36 +110,38 @@ export function AdminSidebar({ userName, userEmail }: AdminSidebarProps) {
       <Link
         key={item.href}
         href={item.href}
+        onClick={onClose}
         className={cn(
           'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+          'min-h-touch', // Touch target
           isActive
             ? 'bg-blue-600 text-white'
             : 'text-slate-400 hover:text-white hover:bg-slate-800'
         )}
       >
-        <Icon className="w-5 h-5" />
+        <Icon className="w-5 h-5 flex-shrink-0" />
         <span className="font-medium">{item.name}</span>
       </Link>
     )
   }
 
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 min-h-screen flex flex-col">
+    <aside className="w-full h-full bg-slate-900 flex flex-col">
       {/* Header */}
-      <div className="p-6 border-b border-slate-800">
+      <div className="p-4 sm:p-6 border-b border-slate-800">
         <div className="flex items-center gap-2 mb-2">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-sm">PF</span>
           </div>
           <div>
-            <h1 className="text-white font-bold text-lg">ProfeFlow</h1>
+            <h1 className="text-white font-bold text-base sm:text-lg">ProfeFlow</h1>
             <p className="text-slate-400 text-xs">Panel Admin</p>
           </div>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 p-3 sm:p-4 space-y-1 overflow-y-auto">
         {/* Main items (no group) */}
         {groupedItems.main?.map(renderNavItem)}
         
@@ -168,10 +171,10 @@ export function AdminSidebar({ userName, userEmail }: AdminSidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-slate-800 space-y-2">
+      <div className="p-3 sm:p-4 border-t border-slate-800 space-y-2">
         {/* User info */}
         {userName && (
-          <div className="px-4 py-2 bg-slate-800 rounded-lg mb-2">
+          <div className="px-3 sm:px-4 py-2 bg-slate-800 rounded-lg mb-2">
             <p className="text-white text-sm font-medium truncate">{userName}</p>
             <p className="text-slate-400 text-xs truncate">{userEmail}</p>
             <span className="inline-block mt-1 px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full">
@@ -183,7 +186,8 @@ export function AdminSidebar({ userName, userEmail }: AdminSidebarProps) {
         {/* Back to app button */}
         <Link
           href="/dashboard"
-          className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors w-full"
+          onClick={onClose}
+          className="flex items-center gap-2 px-3 sm:px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors w-full min-h-touch"
         >
           <ArrowLeft className="w-4 h-4" />
           <span className="text-sm">Volver a app</span>

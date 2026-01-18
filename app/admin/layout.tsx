@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { isUserAdmin } from '@/lib/supabase/admin'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { Breadcrumbs } from '@/components/admin/Breadcrumbs'
+import AdminLayoutClient from '@/components/admin/AdminLayoutClient'
 
 export const metadata = {
   title: 'Panel Admin - ProfeFlow',
@@ -49,14 +50,19 @@ export default async function AdminLayout({
   const userEmail = profile?.email || user.email || ''
 
   return (
-    <div className="min-h-screen bg-slate-950 flex">
-      <AdminSidebar userName={userName} userEmail={userEmail} />
+    <AdminLayoutClient userName={userName} userEmail={userEmail}>
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:block lg:w-64 bg-slate-900 border-r border-slate-800 min-h-screen flex-shrink-0">
+        <AdminSidebar userName={userName} userEmail={userEmail} />
+      </aside>
+      
+      {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        <div className="p-8">
+        <div className="p-4 sm:p-6 lg:p-8">
           <Breadcrumbs />
           {children}
         </div>
       </main>
-    </div>
+    </AdminLayoutClient>
   )
 }
