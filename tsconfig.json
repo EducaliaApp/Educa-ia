@@ -40,6 +40,10 @@
     "supabase/functions",
     "scripts/**/*.ts",
     "test-*.ts",
-    "test-*.js"
+    "test-*.js",
+    "diagnostico-*.ts",
+    "diagnostico-*.js",
+    "diagnostico-*.mjs",
+    "validar-*.js"
   ]
 }
