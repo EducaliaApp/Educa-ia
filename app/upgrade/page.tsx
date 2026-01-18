@@ -58,8 +58,8 @@ export default function UpgradePage() {
             </CardHeader>
             <CardContent>
               <ul className="space-y-3 mb-6">
-                {features.free.map((feature) => (
-                  <li key={feature.text} className="flex items-center gap-3">
+                {features.free.map((feature, index) => (
+                  <li key={`${feature.text}-${index}`} className="flex items-center gap-3">
                     {feature.included ? (
                       <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
                     ) : (
@@ -101,8 +101,8 @@ export default function UpgradePage() {
             </CardHeader>
             <CardContent>
               <ul className="space-y-3 mb-6">
-                {features.pro.map((feature) => (
-                  <li key={feature.text} className="flex items-center gap-3">
+                {features.pro.map((feature, index) => (
+                  <li key={`${feature.text}-${index}`} className="flex items-center gap-3">
                     <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
                     <span className="text-gray-900 font-medium">
                       {feature.text}
