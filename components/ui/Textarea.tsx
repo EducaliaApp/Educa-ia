@@ -15,7 +15,7 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         {label && (
           <label
             htmlFor={textareaId}
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="block text-sm font-medium text-gray-700 mb-1.5"
           >
             {label}
           </label>
@@ -24,17 +24,24 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           id={textareaId}
           ref={ref}
           className={cn(
-            'w-full px-3 py-2 border rounded-lg text-gray-900 placeholder-gray-400',
+            'w-full px-3 sm:px-4 py-2 sm:py-2.5',
+            'text-sm sm:text-base',
+            'border rounded-lg text-gray-900 placeholder-gray-400',
             'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent',
             'disabled:bg-gray-100 disabled:cursor-not-allowed',
             'min-h-[100px] resize-y',
-            error ? 'border-red-500' : 'border-gray-300',
+            'transition-colors',
+            error ? 'border-red-500 focus:ring-red-500' : 'border-gray-300',
             className
           )}
+          aria-invalid={error ? 'true' : 'false'}
+          aria-describedby={error ? `${textareaId}-error` : undefined}
           {...props}
         />
         {error && (
-          <p className="mt-1 text-sm text-red-600">{error}</p>
+          <p id={`${textareaId}-error`} className="mt-1 text-xs sm:text-sm text-red-600">
+            {error}
+          </p>
         )}
       </div>
     )
