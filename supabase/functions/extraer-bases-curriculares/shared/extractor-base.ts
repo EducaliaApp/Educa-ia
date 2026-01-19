@@ -3,7 +3,10 @@
  * Este módulo es utilizado por todas las funciones específicas de categoría
  */
 
-import { PATRON_VALIDACION_OA, PATRON_EXTRACCION_OA } from '../constants.ts'
+import {
+  PATRON_VALIDACION_OA_UNIVERSAL,
+  PATRON_EXTRACCION_OA_UNIVERSAL,
+} from '../constants.ts'
 
 // ============================================
 // CONFIGURACIÓN
@@ -86,7 +89,7 @@ export function es404(error: unknown): boolean {
 }
 
 export function validarCodigoOA(codigo: string): boolean {
-  return PATRON_VALIDACION_OA.test(codigo.trim())
+  return PATRON_VALIDACION_OA_UNIVERSAL.test(codigo.trim())
 }
 
 export function obtenerTipoObjetivo(codigo: string): TipoObjetivo {
@@ -396,7 +399,7 @@ function construirObjetivoTipoB(
   nivelExtraido: string
 ): ObjetivoAprendizaje | null {
   const codigoTexto = extraerTexto(itemHtml, /<span[^>]*class=[^>]*oa-title[^>]*>([^<]*)<\/span>/i)
-  const codigoExtraido = codigoTexto.match(PATRON_EXTRACCION_OA)
+  const codigoExtraido = codigoTexto.match(PATRON_EXTRACCION_OA_UNIVERSAL)
   const codigo = codigoExtraido ? codigoExtraido[1] : ''
   if (!codigo || !validarCodigoOA(codigo)) {
     if (codigo) console.warn(`Código OA inválido ignorado: ${codigo}`)
